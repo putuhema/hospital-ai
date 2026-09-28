@@ -10,6 +10,8 @@
     } from "$lib/wayfinding/routing";
     import FloorPlan from "$lib/components/shared/FloorPlan.svelte";
     import RouteFinder from "$lib/components/shared/RouteFinder.svelte";
+    import PlaceInfoEditor from "./PlaceInfoEditor.svelte";
+    import type { PlaceInfo } from "$lib/model/place-info";
     let {
         pieces,
         network,
@@ -62,6 +64,9 @@
             ...network,
             nodes: network.nodes.map((n) => (n.id === id ? { ...n, name: name.trim().slice(0, 100) } : n)),
         });
+    }
+    function setInfo(id: string, info: PlaceInfo | undefined) {
+        onchange({ ...network, nodes: network.nodes.map((n) => (n.id === id ? { ...n, info } : n)) });
     }
     function remove(id: string) {
         onchange({
@@ -127,7 +132,10 @@
                         onfocus={() => (selected = n.id)}
                         onchange={(e) => rename(n.id, e.currentTarget.value)}
                     /><button aria-label={`Remove ${n.name}`} onclick={() => remove(n.id)}>×</button>
-                </div>{/each}
+                </div>
+                {#if n.id === selected}<div class="landmark-info">
+                        <PlaceInfoEditor info={n.info} onchange={(info) => setInfo(n.id, info)} />
+                    </div>{/if}{/each}
         </section>
     </div>
     <div class="map">
@@ -253,6 +261,13 @@
     }
     .check li span {
         text-decoration: underline;
+    }
+    .landmark-info {
+        margin: 4px 0 10px;
+        padding: 10px;
+        border: 1px solid #dfe6d8;
+        border-radius: 8px;
+        background: #fbfcf8;
     }
     .landmark {
         display: flex;

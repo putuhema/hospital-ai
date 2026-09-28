@@ -1,4 +1,5 @@
 import type { Piece } from "./layout.ts";
+import type { PlaceInfo } from "./place-info.ts";
 export type Side = "north" | "south" | "east" | "west";
 export type RoomType =
   | "patient"
@@ -25,6 +26,8 @@ export type RoomAsset = {
   door?: Side;
   /** Floor colour override. */
   color?: string;
+  /** Description, phone and hours shown to visitors. */
+  info?: PlaceInfo;
 };
 export type Door = {
   side: Side;

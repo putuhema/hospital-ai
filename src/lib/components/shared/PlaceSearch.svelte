@@ -1,5 +1,6 @@
 <script lang="ts">
     import { searchPlaces, type Place } from "$lib/wayfinding/routing";
+    import { hoursStatus } from "$lib/model/place-info";
     let {
         places,
         value,
@@ -22,6 +23,8 @@
         input: HTMLInputElement;
     const id = `place-${Math.random().toString(36).slice(2)}`;
     let results = $derived(searchPlaces(places, query).slice(0, 40));
+    // The list only opens in the browser, so this is the visitor's own clock.
+    const status = (p: Place) => (p.info ? hoursStatus(p.info, new Date()) : null);
     function choose(p: Place) {
         onselect(p);
         query = "";
@@ -93,7 +96,11 @@
                         ><b>{p.name}</b><small
                             >{p.detail}{p.building ? ` · ${p.building}` : ""}</small
                         ></span
-                    >
+                    >{#if status(p)}<em class:open={status(p)!.open}
+                            >{status(p)!.open
+                                ? p.info?.visiting ? "Visiting" : "Open"
+                                : p.info?.visiting ? "No visits" : "Closed"}</em
+                        >{/if}
                 </li>{:else}<li class="none">
                     {places.length
                         ? "No matching places"
@@ -189,6 +196,31 @@
     small {
         font-size: 11px;
         color: #7b8c70;
+    }
+    em {
+        margin-left: auto;
+        flex-shrink: 0;
+        padding: 2px 7px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-style: normal;
+        font-weight: 600;
+        background: #fbe6e3;
+        color: #9a3b2e;
+    }
+    em.open {
+        background: #dff0dc;
+        color: #2f6b3a;
+    }
+    @media (max-width: 700px) {
+        /* Smaller text makes iOS zoom the page when the field is focused. */
+        input {
+            font-size: 16px;
+            padding: 10px 12px 10px 34px;
+        }
+        li {
+            padding: 11px 10px;
+        }
     }
     .none {
         font-size: 12px;

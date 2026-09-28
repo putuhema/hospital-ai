@@ -1,5 +1,6 @@
 import { parseNetwork } from "../wayfinding/navigation.ts";
 import { doorFits, fitsRoom, isBuilding, roomTypes, type RoomAsset } from "./interiors.ts";
+import { parseInfo, type PlaceInfo } from "./place-info.ts";
 export type Piece = {
   id: number;
   name: string;
@@ -23,6 +24,8 @@ export type Piece = {
   floors?: number;
   /** Buildings only: "L" cuts away one quarter, turning with `rotation`. */
   shape?: "L";
+  /** Buildings only: description, phone and hours shown to visitors. */
+  info?: PlaceInfo;
 };
 export type Asset = {
   name: string;
@@ -402,6 +405,8 @@ export function parseLayout(text: string) {
         ))
     )
       throw Error("Invalid interior rooms");
+    p.info = isBuilding(p) ? parseInfo(p.info) : undefined;
+    for (const r of p.roomAssets ?? []) r.info = parseInfo(r.info);
   }
   const network = parseNetwork(d.network, width, height);
   return {

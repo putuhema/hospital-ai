@@ -20,6 +20,8 @@
         destination = null,
         selectedLandmark = "",
         picking = false,
+        here = null,
+        controls = true,
         onpick,
     }: {
         pieces: Piece[];
@@ -32,6 +34,10 @@
         selectedLandmark?: string;
         /** Crosshair cursor while the parent waits for a point. */
         picking?: boolean;
+        /** A "You are here" marker, e.g. on a printed sign. */
+        here?: Point | null;
+        /** Show the zoom buttons. */
+        controls?: boolean;
         /** A click on the plan: the tile point and the place under it, if any. */
         onpick?: (point: Point, place: Place | null) => void;
     } = $props();
@@ -265,11 +271,14 @@
                     >{n.name || "Unnamed landmark"}</text
                 ></g
             >{/each}
+        {#if here}<g transform={`translate(${here.x * S} ${here.y * S})`} class="here"
+                ><circle r="46" class="halo" /><circle r="18" /><text y="-62">You are here</text></g
+            >{/if}
         <g transform={`translate(${width * S - 30} 34)`} class="north"
             ><path d="M0 -20 L9 8 L0 2 L-9 8Z" /><text y="24">N</text></g
         >
     </svg>
-    <div class="zoom">
+    {#if controls}<div class="zoom">
         <button aria-label="Zoom in" onclick={() => zoom(1 / 1.3)}>+</button
         ><button aria-label="Zoom out" onclick={() => zoom(1.3)}>−</button
         ><button
@@ -278,7 +287,7 @@
             onclick={() => (view = { x: -1, y: -1, w: width + 2, h: height + 2 })}
             >⛶</button
         >
-    </div>
+    </div>{/if}
 </div>
 
 <style>
@@ -355,6 +364,22 @@
         .highlight {
             animation: none;
         }
+    }
+    .here circle {
+        fill: #2f7fc4;
+        stroke: white;
+        stroke-width: 6;
+    }
+    .here .halo {
+        fill: #2f7fc42e;
+        stroke: none;
+    }
+    .here text {
+        font-size: 26px;
+        font-weight: 700;
+        fill: #1d5a8f;
+        stroke: #fff;
+        stroke-width: 7px;
     }
     .north path {
         fill: #586b59;

@@ -11,6 +11,7 @@
         type Side,
     } from "$lib/model/interiors";
     import ColorField from "$lib/components/shared/ColorField.svelte";
+    import PlaceInfoEditor from "./PlaceInfoEditor.svelte";
     let {
         building,
         onchange,
@@ -235,6 +236,10 @@
                                 : color,
                     })}
             />
+            <details class="info">
+                <summary>Visitor info — hours, phone, description</summary>
+                <PlaceInfoEditor info={current.info} onchange={(info) => editRoom({ info })} />
+            </details>
             <p class="size">
                 {current.w * 2} × {current.h * 2} m · {current.w *
                     current.h *
@@ -435,6 +440,15 @@
         margin: 5px 0 9px;
         background: white;
         font-size: 12px;
+    }
+    .info {
+        margin: 4px 0 10px;
+        font-size: 11px;
+    }
+    .info summary {
+        cursor: pointer;
+        color: #3f5a45;
+        margin-bottom: 8px;
     }
     .remove {
         width: 100%;

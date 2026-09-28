@@ -2,12 +2,15 @@
     import { roomTypes, walkwayAt } from "$lib/model/interiors";
     import type { Point } from "$lib/wayfinding/navigation";
     import {
-        planRoute,
+        nearestOfType,
+        stepGlyph,
+        walkMinutes,
         type NavGrid,
         type Place,
         type Route,
     } from "$lib/wayfinding/routing";
     import PlaceSearch from "$lib/components/shared/PlaceSearch.svelte";
+    import PlaceDetails from "$lib/components/shared/PlaceDetails.svelte";
     let {
         places,
         grid,
@@ -41,37 +44,8 @@
         ),
     );
     function nearest(detail: string) {
-        const options = places.filter(
-            (p) => p.kind === "room" && p.detail === detail,
-        );
-        if (!from) return (to = options[0]);
-        let best: Place | null = null,
-            bestMeters = Infinity;
-        for (const p of options) {
-            const r = planRoute(grid, from, p);
-            if (r && r.meters < bestMeters) {
-                best = p;
-                bestMeters = r.meters;
-            }
-        }
-        to = best ?? options[0];
+        to = nearestOfType(grid, places, detail, from);
     }
-    const glyph = (text: string) =>
-        text.startsWith("From")
-            ? "●"
-            : text.startsWith("Arrive")
-              ? "⚑"
-              : /Turn left/.test(text)
-                ? "↰"
-                : /Turn right/.test(text)
-                  ? "↱"
-                  : /Bear left/.test(text)
-                    ? "↖"
-                    : /Bear right/.test(text)
-                      ? "↗"
-                      : /around/.test(text)
-                        ? "↩"
-                        : "↑";
 </script>
 
 <div class="route-finder">
@@ -119,10 +93,11 @@
                 ><i style={`background:${t.color}`}></i>{from ? "Nearest " : ""}{t.name.toLowerCase()}</button
             >{/each}
     </div>
+    {#if to?.info}<PlaceDetails info={to.info} />{/if}
     {#if from && to}
         {#if route}<section class="result" aria-live="polite">
                 <div class="summary">
-                    <b>{Math.max(1, Math.round(route.meters / 72))} min</b>
+                    <b>{walkMinutes(route.meters)} min</b>
                     <span>{route.meters} m walk</span>
                     <button
                         class="clear"
@@ -133,7 +108,7 @@
                 </div>
                 <ol>
                     {#each route.steps as step}<li>
-                            <span class="glyph">{glyph(step.text)}</span>
+                            <span class="glyph">{stepGlyph(step.text)}</span>
                             <span class="step"
                                 >{step.text}{#if step.meters}<small
                                         >{step.meters} m</small

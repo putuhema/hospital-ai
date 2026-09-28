@@ -1,5 +1,6 @@
 import type { Piece } from "../model/layout.ts";
 import { center as centerPoint, footprint, inPolygon, isBuilding, isCorridor, isPath, roomTypes } from "../model/interiors.ts";
+import type { PlaceInfo } from "../model/place-info.ts";
 import {
   crosses,
   distance,
@@ -21,6 +22,7 @@ export type Place = {
   pieceId?: number;
   roomId?: number;
   point: Point;
+  info?: PlaceInfo;
 };
 export type Step = { text: string; meters: number };
 export type Route = { points: Point[]; meters: number; steps: Step[] };
@@ -47,6 +49,7 @@ export function places(pieces: Piece[], network?: WalkingNetwork): Place[] {
       detail: "Building",
       pieceId: p.id,
       point: center,
+      info: p.info,
     });
     for (const r of p.roomAssets ?? [])
       out.push({
@@ -58,6 +61,7 @@ export function places(pieces: Piece[], network?: WalkingNetwork): Place[] {
         pieceId: p.id,
         roomId: r.id,
         point: { x: p.x + r.x + r.w / 2, y: p.y + r.y + r.h / 2 },
+        info: r.info,
       });
     (p.rooms ?? []).forEach((name, i) =>
       out.push({
@@ -79,6 +83,7 @@ export function places(pieces: Piece[], network?: WalkingNetwork): Place[] {
         kind: "landmark",
         detail: "Landmark",
         point: { x: n.x, y: n.y },
+        info: n.info,
       });
   return out;
 }
@@ -87,7 +92,7 @@ export function places(pieces: Piece[], network?: WalkingNetwork): Place[] {
 export function searchPlaces(list: Place[], query: string): Place[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const haystack = (p: Place) =>
-    `${p.name} ${p.building ?? ""} ${p.detail}`.toLowerCase();
+    `${p.name} ${p.building ?? ""} ${p.detail} ${p.info?.description ?? ""}`.toLowerCase();
   return list
     .filter((p) => words.every((w) => haystack(p).includes(w)))
     .sort(
@@ -445,6 +450,45 @@ export function planRoute(
     meters: Math.round(meters),
     steps: describe(g.pieces, route, fromPlace?.name ?? "your position", to),
   };
+}
+
+/**
+ * The room of a type (its `detail`, e.g. "Toilet") with the shortest walk from
+ * `from`; without a start, the first one.
+ */
+export function nearestOfType(
+  g: NavGrid,
+  list: Place[],
+  detail: string,
+  from: Place | Point | null,
+): Place | null {
+  const options = list.filter((p) => p.kind === "room" && p.detail === detail);
+  if (!from) return options[0] ?? null;
+  let best: Place | null = null,
+    bestMeters = Infinity;
+  for (const p of options) {
+    const r = planRoute(g, from, p);
+    if (r && r.meters < bestMeters) {
+      best = p;
+      bestMeters = r.meters;
+    }
+  }
+  return best ?? options[0] ?? null;
+}
+
+/** Walking time at about 72 m a minute, never under a minute. */
+export const walkMinutes = (meters: number) => Math.max(1, Math.round(meters / 72));
+
+/** An arrow for a direction step, from its wording. */
+export function stepGlyph(text: string): string {
+  if (text.startsWith("From")) return "●";
+  if (text.startsWith("Arrive")) return "⚑";
+  if (/Turn left/.test(text)) return "↰";
+  if (/Turn right/.test(text)) return "↱";
+  if (/Bear left/.test(text)) return "↖";
+  if (/Bear right/.test(text)) return "↗";
+  if (/around/.test(text)) return "↩";
+  return "↑";
 }
 
 /** Places that can't be reached from outside, e.g. a room whose door faces a wall. */

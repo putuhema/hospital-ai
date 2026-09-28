@@ -41,11 +41,34 @@ export function checkCanvasSize(pieces: Piece[], network: WalkingNetwork, w: num
     h > MAX_CANVAS
   )
     return `Use whole numbers between ${MIN_CANVAS} and ${MAX_CANVAS} tiles`;
-  if (pieces.some((p) => p.x + p.w > w || p.y + p.h > h))
+  if (pieces.some((p) => p.x < 0 || p.y < 0 || p.x + p.w > w || p.y + p.h > h))
     return "Move buildings inside the new bounds before shrinking";
-  if (network.nodes.some((p) => p.x > w || p.y > h))
+  if (network.nodes.some((p) => p.x < 0 || p.y < 0 || p.x > w || p.y > h))
     return "Remove paths outside the new bounds before shrinking";
   return null;
+}
+
+/** Where the existing layout stays when the canvas changes size: 0 = left/top, 0.5 = centre, 1 = right/bottom. */
+export type Anchor = { x: 0 | 0.5 | 1; y: 0 | 0.5 | 1 };
+
+/**
+ * Shift the layout for a canvas resize so the space is added or removed on
+ * the sides away from the anchor. Check the result with checkCanvasSize.
+ */
+export function anchoredLayout(
+  pieces: Piece[],
+  network: WalkingNetwork,
+  from: Canvas,
+  w: number,
+  h: number,
+  anchor: Anchor,
+) {
+  const dx = Math.floor((w - from.width) * anchor.x),
+    dy = Math.floor((h - from.height) * anchor.y);
+  return {
+    pieces: pieces.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })),
+    network: { ...network, nodes: network.nodes.map((n) => ({ ...n, x: n.x + dx, y: n.y + dy })) },
+  };
 }
 
 /** Changing a building's width, depth or shape must keep its doors and rooms on it. */

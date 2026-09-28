@@ -30,23 +30,43 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   const orbit = new THREE.Spherical(),
     offset = new THREE.Vector3();
 
+  // Pixels covered by overlays: where the frame is heading and where it is now.
+  // The bottom inset (a sheet sliding up) glides there over a few frames.
+  let size = { width: 0, height: 0 },
+    target = { left: 0, bottom: 0 },
+    shown = { left: 0, bottom: 0 };
+
+  function project() {
+    const { width, height } = size;
+    if (presentation) {
+      // Frame the campus in the part of the view the overlays leave clear,
+      // then extend the view down behind the bottom overlay.
+      const inset = Math.min(shown.left, width / 2),
+        clear = height - Math.min(shown.bottom, height * 0.7),
+        // Looking straight down there is no sky to leave room for.
+        tall = overhead ? 1 : SKY_FRAME;
+      camera.aspect = (width + inset) / (clear * tall);
+      camera.setViewOffset(width + inset, clear * tall, 0, 0, width, height);
+    } else camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+
   /**
    * Match the viewport. On the map, render the top-right part of a larger
    * frame: the campus sits lower (sky above it) and clear of a panel of
-   * `inset` pixels on the left. Returns false when nothing changed.
+   * `insetLeft` pixels on the left and a sheet of `insetBottom` pixels at the
+   * bottom. Returns false when nothing changed.
    */
-  function frame(width: number, height: number, insetLeft = 0) {
-    const inset = Math.min(insetLeft, width / 2),
-      key = `${width}:${height}:${inset}:${overhead}`;
+  function frame(width: number, height: number, insetLeft = 0, insetBottom = 0) {
+    const key = `${width}:${height}:${insetLeft}:${insetBottom}:${overhead}`;
     if (!width || !height || key === framedAs) return false;
+    const first = !framedAs;
     framedAs = key;
-    if (presentation) {
-      // Looking straight down there is no sky to leave room for.
-      const tall = overhead ? 1 : SKY_FRAME;
-      camera.aspect = (width + inset) / (height * tall);
-      camera.setViewOffset(width + inset, height * tall, 0, 0, width, height);
-    } else camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    size = { width, height };
+    target = { left: insetLeft, bottom: insetBottom };
+    shown.left = insetLeft;
+    if (first || matchMedia("(prefers-reduced-motion: reduce)").matches) shown.bottom = insetBottom;
+    project();
     return true;
   }
 
@@ -105,8 +125,13 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     return true;
   }
 
-  /** Advance the glide to or from the bird's-eye view; call once per frame. */
+  /** Advance the glides (bird's-eye view, bottom inset); call once per frame. */
   function tick(step = 0.14) {
+    if (shown.bottom !== target.bottom) {
+      const gap = target.bottom - shown.bottom;
+      shown.bottom = Math.abs(gap) < 0.5 ? target.bottom : shown.bottom + gap * 0.16;
+      project();
+    }
     if (goal === null) return;
     orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
     // Turn the short way round.

@@ -34,6 +34,7 @@
         route = null,
         labels = true,
         insetLeft = 0,
+        insetBottom = 0,
     }: {
         presentation?: boolean;
         pan?: boolean;
@@ -55,6 +56,8 @@
         labels?: boolean;
         /** Pixels on the left covered by an overlay panel; the view centres in the rest. */
         insetLeft?: number;
+        /** Pixels at the bottom covered by a sheet; the campus rises clear of it. */
+        insetBottom?: number;
     } = $props();
     let cutaway = $state(false),
         overhead = $state(false);
@@ -83,6 +86,7 @@
         buildingNames;
         roomNames;
         insetLeft;
+        insetBottom;
         prefs.greenery;
         canvasWidth;
         canvasHeight;
@@ -182,7 +186,7 @@
             }
             stage.grid.visible = grid;
             rig.setOverhead(overhead);
-            rig.frame(host.clientWidth, host.clientHeight, insetLeft);
+            rig.frame(host.clientWidth, host.clientHeight, insetLeft, insetBottom);
             scenery?.update(pieces, canvasWidth * 2, canvasHeight * 2, prefs.greenery, camera);
             if (lastZoom !== zoom) {
                 rig.zoomBy(lastZoom / zoom);
@@ -242,7 +246,7 @@
                 h = host.clientHeight;
             if (!w || !h) return;
             renderer.setSize(w, h);
-            rig.frame(w, h, insetLeft);
+            rig.frame(w, h, insetLeft, insetBottom);
             rig.fit(canvasWidth, canvasHeight, zoom);
         });
         resize.observe(host);

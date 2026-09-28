@@ -6,10 +6,11 @@ Build a hospital campus map, then give visitors walking directions on it. A Svel
 
 ```sh
 pnpm install
+npx convex dev   # in a second terminal: creates/uses the Convex dev deployment and writes .env.local
 pnpm dev
 ```
 
-Open `/editor` to build the campus and `/` for the wayfinding map. Changes save automatically in this browser. The quick guide (`?` or the header button) walks through the four steps: place buildings, connect them with corridors, add rooms, check wayfinding.
+Open `/editor` to build the campus and `/` for the wayfinding map. Changes save automatically in this browser; **Publish** puts the map online for visitors. The quick guide (`?` or the header button) walks through the four steps: place buildings, connect them with corridors, add rooms, check wayfinding.
 
 ## Building the map
 
@@ -28,7 +29,19 @@ Directions are generated from the layout — there are no paths to draw. Every b
 - The editor's **Wayfinding** tab tests routes, lists anything that can't be reached (usually a room door facing a wall — click it to jump to the building), and adds **landmarks** such as entrances, cafés or lifts.
 - **Open wayfinding map** opens the map at `/`: search *from* and *to*, use shortcuts like *Nearest toilets*, or click a room in 3D or on the plan. *Pick start on map* takes a room, a building, or any spot on a corridor or path. Routes are drawn on both views.
 - The 3D map sits in a calm landscape — gradient sky, drifting clouds, woodland and a pond, with the campus set straight into the meadow — sized to the canvas and fading into haze a short way past the campus (`src/lib/scene/scenery.ts`). The display bar has *Top view* (a north-up bird's-eye view, also in the editor's 3D view), toggles *Buildings* and *Rooms* name labels separately, plus *Hover info*, and has a *Trees* slider (none → lush); these preferences are remembered. The editor keeps a plain background.
-- Links are shareable: `/?from=b:9&to=r:2:25&view=plan` (old `/map` links redirect). Use this for QR codes at entrances or kiosks. The map reads the layout saved in *this browser* — it isn't a hosted public link.
+- Links are shareable: `/?from=b:9&to=r:2:25&view=plan` (old `/map` links redirect). `/` reads the layout saved in *this browser*, so it's a preview for the editor.
+
+## Publishing
+
+The editor's **Publish** menu stores the layout in [Convex](https://convex.dev) and gives the map a public address, `/m/<slug>`, that opens on any phone. Publishing is deliberate: editing only autosaves locally, the menu shows *Unpublished changes* until you press **Publish changes**, and open public maps update live when you do. **Share route** on either map copies the public link with the route (`/m/<slug>?from=…&to=…`), which is what QR codes should point to.
+
+The device that first publishes keeps the slug and a secret key in `localStorage`; the server stores only the key's hash, so only that browser can update or take the map offline (*Take the map offline*). The backend is `src/convex/` (a `maps` table; `maps.get`, `maps.publish`, `maps.unpublish`), and it validates layouts with the same `parseLayout` the app uses.
+
+### "You are here" QR signs
+
+**Publish → Print "You are here" QR signs** opens `/editor/signs`: one A4 sign per spot, with the spot's name, a plan with a *You are here* marker, and a QR code to `/m/<slug>?from=<spot>`, so visitors who scan it only choose where they're going. Landmarks, reception desks, waiting areas and stairs are suggested (every building when there are none); tick any other room or building. Signs are built from the *published* layout, which is what phones open, and the chosen spots are remembered per map (`src/lib/signs.ts`).
+
+To deploy, run `npx convex deploy` and set `PUBLIC_CONVEX_URL` to the production deployment URL in the hosting environment.
 
 Use **Canvas size** to set 8–100 tiles per side (2 m per tile). Layouts export and import as JSON.
 
@@ -51,7 +64,8 @@ The corridor GLBs now only supply materials: corridors, garden paths and L-shape
 ## Code layout
 
 - `src/routes/editor/+page.svelte` — the editor (`/editor`): project state, autosave, undo and keyboard shortcuts. Its panels live in `src/lib/components/editor/` (asset library, toolbar, plan view, properties panel and its sub-editors, guide).
-- `src/routes/+page.svelte` — the wayfinding map, the home page, with deep links (`/?from=b:9&to=r:2:25`). `src/routes/map/` redirects old `/map` links.
+- `src/routes/+page.svelte` — the wayfinding map for the layout in this browser, the home page, with deep links (`/?from=b:9&to=r:2:25`). `src/routes/m/[slug]/` is the published map. Both render `src/lib/components/map/MapViewer.svelte`. `src/routes/map/` redirects old `/map` links.
+- `src/convex/` — the Convex backend for published maps; `src/lib/publish.ts` keeps this device's publish key.
 - `src/lib/editor/` — editing rules (`operations.ts`), JSON/OBJ export (`export.ts`) and undo history.
 - `src/lib/model/` — the layout data, assets and templates, and room/door geometry.
 - `src/lib/wayfinding/` — walls and doors (`navigation.ts`) and grid routing with turn-by-turn steps (`routing.ts`).

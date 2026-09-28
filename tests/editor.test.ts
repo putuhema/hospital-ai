@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { starterPieces, type Piece } from '../src/lib/model/layout.ts';
 import { emptyNetwork } from '../src/lib/wayfinding/navigation.ts';
 import {
+  anchoredLayout,
   checkCanvasSize,
   checkMove,
   checkPlacement,
@@ -39,6 +40,16 @@ test('canvas size must be whole, in range and keep everything inside', () => {
   assert.match(checkCanvasSize([], network, 8.5, 20)!, /whole numbers/);
   assert.match(checkCanvasSize([], network, 101, 20)!, /whole numbers/);
   assert.match(checkCanvasSize([box({ x: 10 })], network, 12, 12)!, /Move buildings/);
+});
+
+test('resizing keeps the layout at the anchor and grows away from it', () => {
+  const network = { nodes: [{ id: 'a', name: 'A', x: 3, y: 4 }], edges: [] };
+  const right = anchoredLayout([box()], network, canvas, 30, 20, { x: 1, y: 0 });
+  assert.deepEqual([right.pieces[0].x, right.pieces[0].y, right.network.nodes[0].x], [8, 2, 9]);
+  const centre = anchoredLayout([box()], network, canvas, 28, 24, { x: 0.5, y: 0.5 });
+  assert.deepEqual([centre.pieces[0].x, centre.pieces[0].y], [4, 4]);
+  const shrunk = anchoredLayout([box()], network, canvas, 20, 20, { x: 1, y: 0 });
+  assert.match(checkCanvasSize(shrunk.pieces, shrunk.network, 20, 20)!, /Move buildings/);
 });
 
 test('rotating turns the piece about its centre and carries rooms and doors', () => {

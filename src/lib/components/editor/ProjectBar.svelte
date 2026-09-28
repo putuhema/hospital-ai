@@ -1,9 +1,12 @@
 <script lang="ts">
     import Icon from "./Icon.svelte";
+    import PublishMenu from "./PublishMenu.svelte";
     let {
         title = $bindable(),
         exportOpen = $bindable(false),
         saved,
+        layout,
+        onnotify,
         onedit,
         onguide,
         oncanvassize,
@@ -14,6 +17,9 @@
         title: string;
         exportOpen?: boolean;
         saved: boolean;
+        /** The current layout, as autosave stores it; published on request. */
+        layout: string;
+        onnotify: (message: string) => void;
         /** The title is being typed. */
         onedit: () => void;
         onguide: () => void;
@@ -22,6 +28,14 @@
         ondownload: (format: "json" | "obj") => void;
         onexportmodel: () => void;
     } = $props();
+    let publishOpen = $state(false);
+    // Only one menu open at a time.
+    $effect(() => {
+        if (exportOpen) publishOpen = false;
+    });
+    $effect(() => {
+        if (publishOpen) exportOpen = false;
+    });
     /** Menu items close the menu, then act. */
     const choose = (action: () => void) => () => {
         exportOpen = false;
@@ -55,7 +69,7 @@
             onclick={onopenmap}>Open wayfinding map ↗</button
         >
         <div class="export-wrap">
-            <button class="btn primary" onclick={() => (exportOpen = !exportOpen)}
+            <button class="btn" onclick={() => (exportOpen = !exportOpen)}
                 ><Icon name="export" size={16} /> Export
                 <span>⌄</span></button
             >{#if exportOpen}<div class="export-menu">
@@ -67,5 +81,6 @@
                     >
                 </div>{/if}
         </div>
+        <PublishMenu {layout} bind:open={publishOpen} {onnotify} />
     </div>
 </div>

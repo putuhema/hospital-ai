@@ -4,6 +4,7 @@
     import { assets, starterPieces, parseLayout, pieceFrom, STORAGE_KEY, type Piece } from "$lib/model/layout";
     import { emptyNetwork, type WalkingNetwork } from "$lib/wayfinding/navigation";
     import {
+        anchoredLayout,
         checkCanvasSize,
         checkMove,
         checkPlacement,
@@ -12,6 +13,7 @@
         duplicated,
         placedFrom,
         rotated,
+        type Anchor,
     } from "$lib/editor/operations";
     import { downloadFile, fileName, layoutJson, layoutObj, layoutSnapshot } from "$lib/editor/export";
     import { History } from "$lib/editor/history.svelte";
@@ -197,9 +199,12 @@
         propertiesOpen = true;
         notify(piece.name + " placed — press Esc to stop placing");
     }
-    function resizeCanvas(w: number, h: number) {
-        const problem = checkCanvasSize(pieces, network, w, h);
+    function resizeCanvas(w: number, h: number, anchor: Anchor) {
+        const next = anchoredLayout($state.snapshot(pieces), $state.snapshot(network), canvas, w, h, anchor);
+        const problem = checkCanvasSize(next.pieces, next.network, w, h);
         if (problem) return notify(problem);
+        pieces = next.pieces;
+        network = next.network;
         canvasWidth = w;
         canvasHeight = h;
         saved = false;
@@ -283,6 +288,8 @@
             bind:title
             bind:exportOpen
             {saved}
+            layout={snapshot()}
+            onnotify={notify}
             onedit={() => (saved = false)}
             onguide={() => (guideOpen = true)}
             oncanvassize={() => (canvasSettings = !canvasSettings)}

@@ -1,8 +1,9 @@
 import type { Piece } from "../model/layout.ts";
 import { corridorDoors, outline, roomDoor, type Door } from "../model/interiors.ts";
+import { parseInfo, type PlaceInfo } from "../model/place-info.ts";
 
 export type Point = { x: number; y: number };
-export type Waypoint = Point & { id: string; name: string };
+export type Waypoint = Point & { id: string; name: string; info?: PlaceInfo };
 export type WalkingNetwork = {
   nodes: Waypoint[];
   edges: { from: string; to: string }[];
@@ -64,7 +65,10 @@ export function parseNetwork(
     edges.add(key);
   }
   return {
-    nodes: n.nodes.map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y })),
+    nodes: n.nodes.map((p) => {
+      const info = parseInfo(p.info);
+      return { id: p.id, name: p.name, x: p.x, y: p.y, ...(info && { info }) };
+    }),
     edges: n.edges.map((e) => ({ from: e.from, to: e.to })),
   };
 }

@@ -5,6 +5,7 @@
     import InteriorEditor from "./InteriorEditor.svelte";
     import DestinationsEditor from "./DestinationsEditor.svelte";
     import EntranceEditor from "./EntranceEditor.svelte";
+    import PlaceInfoEditor from "./PlaceInfoEditor.svelte";
     import PositionFields from "./PositionFields.svelte";
     import ProjectOverview from "./ProjectOverview.svelte";
     import Icon from "./Icon.svelte";
@@ -163,6 +164,10 @@
                 </details>
             </details>
             {#if !placing}<details class="section">
+                <summary>Visitor info</summary>
+                <PlaceInfoEditor info={piece.info} onchange={(info) => edit({ info })} />
+            </details>
+            <details class="section">
                 <summary>Doors & entrances</summary>
                 <EntranceEditor
                     building={piece}
