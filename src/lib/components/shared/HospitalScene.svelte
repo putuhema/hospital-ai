@@ -45,7 +45,8 @@
         active: { kind: string; w: number; h: number } | null;
         grid: boolean;
         zoom: number;
-        onselect: (id: number | null, roomId?: number) => void;
+        /** A click: the piece and room under it, and the point it landed on, in tiles. */
+        onselect: (id: number | null, roomId?: number, point?: Point) => void;
         onplace: (p: { x: number; y: number }) => void;
         onerror: (s: string) => void;
         registerExport: (fn: () => Promise<void>) => void;

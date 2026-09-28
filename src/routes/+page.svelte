@@ -1,403 +1,442 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { goto } from "$app/navigation";
-    import { assets, starterPieces, parseLayout, pieceFrom, STORAGE_KEY, type Piece } from "$lib/model/layout";
-    import { emptyNetwork, type WalkingNetwork } from "$lib/wayfinding/navigation";
-    import {
-        checkCanvasSize,
-        checkMove,
-        checkPlacement,
-        checkReshape,
-        checkRotation,
-        duplicated,
-        placedFrom,
-        rotated,
-    } from "$lib/editor/operations";
-    import { downloadFile, fileName, layoutJson, layoutObj, layoutSnapshot } from "$lib/editor/export";
-    import { History } from "$lib/editor/history.svelte";
+    import { replaceState } from "$app/navigation";
     import HospitalScene from "$lib/components/shared/HospitalScene.svelte";
-    import WayfindingPanel from "$lib/components/editor/WayfindingPanel.svelte";
-    import EditorRail from "$lib/components/editor/EditorRail.svelte";
-    import ProjectBar from "$lib/components/editor/ProjectBar.svelte";
-    import CanvasSettings from "$lib/components/editor/CanvasSettings.svelte";
-    import AssetLibrary from "$lib/components/editor/AssetLibrary.svelte";
-    import CanvasToolbar, { type EditorView } from "$lib/components/editor/CanvasToolbar.svelte";
-    import PlanView from "$lib/components/editor/PlanView.svelte";
-    import CanvasControls from "$lib/components/editor/CanvasControls.svelte";
-    import PropertiesPanel from "$lib/components/editor/PropertiesPanel.svelte";
-    import GuideDialog from "$lib/components/editor/GuideDialog.svelte";
-
-    const GUIDE_SEEN = "forma-guide-seen";
-
-    // The project.
+    import Logo from "$lib/components/shared/Logo.svelte";
+    import FloorPlan from "$lib/components/shared/FloorPlan.svelte";
+    import RouteFinder from "$lib/components/shared/RouteFinder.svelte";
+    import {
+        starterPieces,
+        parseLayout,
+        STORAGE_KEY,
+        type Piece,
+    } from "$lib/model/layout";
+    import { walkwayAt } from "$lib/model/interiors";
+    import {
+        emptyNetwork,
+        type Point,
+        type WalkingNetwork,
+    } from "$lib/wayfinding/navigation";
+    import {
+        buildGrid,
+        places,
+        planRoute,
+        type Place,
+    } from "$lib/wayfinding/routing";
     let pieces: Piece[] = $state(structuredClone(starterPieces));
     let network: WalkingNetwork = $state(emptyNetwork());
     let title = $state("Greenfield Hospital"),
         canvasWidth = $state(24),
-        canvasHeight = $state(20);
-    let canvas = $derived({ width: canvasWidth, height: canvasHeight });
-
-    // Editor state.
-    let selected = $state<number | null>(1),
-        /** Index into `assets` of the asset being placed. */
-        active = $state<number | null>(null),
-        view = $state<EditorView>("3D"),
-        zoom = $state(100),
-        grid = $state(true),
-        pan = $state(false),
-        panX = $state(0),
-        panY = $state(0);
-    /**
-     * The asset being placed, as a piece that can be turned and edited before
-     * it goes on the canvas. Each click places a copy of it.
-     */
-    let draft = $state<Piece | null>(null);
-    $effect(() => {
-        draft = active === null ? null : pieceFrom(assets[active], { id: 0, x: 0, y: 0 });
-    });
-    let assetsOpen = $state(true),
-        propertiesOpen = $state(true),
-        canvasSettings = $state(false),
-        exportOpen = $state(false),
-        guideOpen = $state(false),
+        canvasHeight = $state(20),
+        view = $state<"3D" | "Plan">("3D"),
+        error = $state(""),
         toast = $state(""),
-        saved = $state(true);
-    let current = $derived(pieces.find((p) => p.id === selected));
-    let exportScene: (() => Promise<void>) | null = null;
+        ready = $state(false),
+        panelOpen = $state(true),
+        wide = $state(true);
+    let from = $state.raw<Place | Point | null>(null),
+        to = $state.raw<Place | null>(null),
+        picking = $state(false);
+    let exporter: (() => Promise<void>) | null = null;
+    let grid = $derived(buildGrid(pieces, canvasWidth, canvasHeight));
+    let placeList = $derived(places(pieces, network));
+    let route = $derived(from && to ? planRoute(grid, from, to) : null);
+    let landmarks = $derived(network.nodes.filter((n) => n.name.trim()));
 
-    function notify(message: string) {
-        toast = message;
-        setTimeout(() => (toast = ""), 2800);
-    }
-
-    // Undo/redo covers the pieces and the walking network.
-    const history = new History();
-    const serialised = () => JSON.stringify({ pieces, network });
-    function restore(json: string | null) {
-        if (json === null) return;
-        ({ pieces, network } = JSON.parse(json));
-        saved = false;
-    }
-    /** Call before every change, so it can be undone. */
-    function checkpoint() {
-        history.record(serialised());
-        saved = false;
-    }
-    const undo = () => restore(history.undo(serialised()));
-    const redo = () => restore(history.redo(serialised()));
-
-    // Persistence: autosave shortly after every change, so work is never lost.
-    let loaded = false,
-        saveTimer: ReturnType<typeof setTimeout> | undefined;
-    const snapshot = () => layoutSnapshot({ title, pieces, network, width: canvasWidth, height: canvasHeight });
-    function save(announce = true) {
-        clearTimeout(saveTimer);
-        localStorage.setItem(STORAGE_KEY, snapshot());
-        saved = true;
-        if (announce) notify("Saved on this device");
-    }
-    $effect(() => {
-        snapshot();
-        if (!loaded) return;
-        saved = false;
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => save(false), 600);
-    });
-    $effect(() => {
-        if (!guideOpen && loaded) localStorage.setItem(GUIDE_SEEN, "1");
-    });
-    function load(json: string) {
-        const d = parseLayout(json);
-        pieces = d.pieces;
-        network = d.network;
-        title = d.title;
-        canvasWidth = d.grid.width;
-        canvasHeight = d.grid.height;
+    const encode = (p: Place | Point) =>
+        "id" in p ? p.id : `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+    function decode(value: string | null): Place | Point | null {
+        if (!value) return null;
+        const place = placeList.find((p) => p.id === value);
+        if (place) return place;
+        const [x, y] = value.split(",").map(Number);
+        return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
     }
     onMount(() => {
-        if (!localStorage.getItem(GUIDE_SEEN)) guideOpen = true;
-        if (window.matchMedia("(max-width: 900px)").matches) assetsOpen = propertiesOpen = false;
-        try {
-            const data = localStorage.getItem(STORAGE_KEY);
-            if (data) load(data);
-        } catch {
-            notify("Could not restore the saved project");
-        }
-        loaded = true;
-    });
-
-    // Editing the selected piece, or the draft while placing.
-    function edit(changes: Partial<Piece>) {
-        if (draft) {
-            draft = { ...draft, ...changes };
-            return;
-        }
-        checkpoint();
-        pieces = pieces.map((p) => (p.id === selected ? { ...p, ...changes } : p));
-    }
-    function update(key: keyof Piece, value: string | number | undefined) {
-        const piece = draft ?? current;
-        if (!piece) return;
-        if (typeof value === "number") value = Math.round(value);
-        if (key === "w" || key === "h" || key === "shape") {
-            // A draft isn't on the canvas yet, so only its own rooms and doors matter.
-            const problem = checkReshape(draft ? [] : pieces, { ...piece, [key]: value });
-            if (problem) return notify(problem);
-        }
-        edit({ [key]: value });
-    }
-    function rotate() {
-        if (draft) {
-            const turned = rotated(draft, canvas);
-            if (turned.w > canvasWidth || turned.h > canvasHeight)
-                return notify("Too large for the canvas when turned");
-            draft = turned;
-            return;
-        }
-        if (!current) return;
-        const turned = rotated(current, canvas);
-        const problem = checkRotation(pieces, turned, canvas);
-        if (problem) return notify(problem);
-        edit(turned);
-    }
-    function duplicate() {
-        if (!current || draft) return;
-        const copy = duplicated(current, Date.now(), canvas);
-        checkpoint();
-        selected = copy.id;
-        pieces = [...pieces, copy];
-    }
-    function remove() {
-        if (!current || draft) return;
-        checkpoint();
-        pieces = pieces.filter((p) => p.id !== selected);
-        selected = null;
-    }
-    function moveBuilding(id: number, x: number, y: number) {
-        const p = pieces.find((p) => p.id === id);
-        if (!p || (p.x === x && p.y === y)) return;
-        const problem = checkMove(pieces, p, x, y, canvas);
-        if (problem) return notify(problem);
-        checkpoint();
-        pieces = pieces.map((o) => (o.id === id ? { ...o, x, y } : o));
-    }
-    /** Place the active asset at a tile; without one, a click deselects. */
-    function placeAt(tile: { x: number; y: number }) {
-        if (active === null) {
-            selected = null;
-            return;
-        }
-        if (!draft) return;
-        const piece = placedFrom($state.snapshot(draft), Date.now(), tile);
-        const problem = checkPlacement(pieces, piece, canvas);
-        if (problem) return notify(problem);
-        checkpoint();
-        selected = piece.id;
-        pieces = [...pieces, piece];
-        propertiesOpen = true;
-        notify(piece.name + " placed — press Esc to stop placing");
-    }
-    function resizeCanvas(w: number, h: number) {
-        const problem = checkCanvasSize(pieces, network, w, h);
-        if (problem) return notify(problem);
-        canvasWidth = w;
-        canvasHeight = h;
-        saved = false;
-        canvasSettings = false;
-        history.clear();
-        notify("Canvas resized");
-    }
-
-    // Import and export.
-    function download(format: "json" | "obj") {
-        const project = { title, pieces, network, width: canvasWidth, height: canvasHeight };
-        if (format === "json") {
-            downloadFile(layoutJson(project), "application/json", fileName(title, "json"));
-            notify("Layout exported");
-        } else {
-            downloadFile(layoutObj(pieces), "text/plain", fileName(title, "obj"));
-            notify("Blender-compatible OBJ exported");
-        }
-    }
-    async function exportModel() {
-        exportOpen = false;
-        if (!exportScene || view !== "3D") return notify("Switch to 3D before exporting the detailed model");
-        try {
-            await exportScene();
-            notify("Detailed Blender model exported");
-        } catch {
-            notify("Models are still loading. Try again shortly.");
-        }
-    }
-    function importFile(e: Event) {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        file?.text().then((text) => {
+        function load() {
             try {
-                parseLayout(text);
-                checkpoint();
-                load(text);
-                selected = null;
-                notify("Layout imported");
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const d = parseLayout(saved);
+                    pieces = d.pieces;
+                    network = d.network;
+                    title = d.title;
+                    canvasWidth = d.grid.width;
+                    canvasHeight = d.grid.height;
+                }
+                error = "";
             } catch {
-                notify("Invalid layout file");
+                error =
+                    "The saved layout could not be loaded. Open the editor to save it again.";
             }
-        });
+            ready = true;
+        }
+        load();
+        const desktop = window.matchMedia("(min-width: 701px)");
+        wide = desktop.matches;
+        desktop.onchange = () => (wide = desktop.matches);
+        // Deep links, e.g. a QR code at an entrance: /?from=b:9&to=r:2:25
+        const params = new URLSearchParams(location.search);
+        from = decode(params.get("from"));
+        const target = decode(params.get("to"));
+        to = target && "id" in target ? target : null;
+        if (params.get("view") === "plan") view = "Plan";
+        if (window.matchMedia("(max-width: 700px)").matches && to)
+            panelOpen = true;
+        function changed(e: StorageEvent) {
+            if (e.key === STORAGE_KEY) load();
+        }
+        window.addEventListener("storage", changed);
+        return () => window.removeEventListener("storage", changed);
+    });
+    $effect(() => {
+        if (!ready) return;
+        const params = new URLSearchParams();
+        if (from) params.set("from", encode(from));
+        if (to) params.set("to", to.id);
+        if (view === "Plan") params.set("view", "plan");
+        const query = params.toString();
+        try {
+            replaceState(query ? `?${query}` : location.pathname, {});
+        } catch {
+            // Before the router is ready (first render) the URL already matches.
+        }
+    });
+    function notify(s: string) {
+        toast = s;
+        setTimeout(() => (toast = ""), 2400);
     }
-
-    function key(e: KeyboardEvent) {
-        if ((e.target as HTMLElement).matches("input,select,textarea")) return;
-        const command = e.metaKey || e.ctrlKey;
-        if (e.key === "Escape") {
-            if (guideOpen) guideOpen = false;
-            else if (active !== null) active = null;
-            else if (view !== "Paths") selected = null;
+    function choose(place: Place | null, point?: Point) {
+        if (picking) {
+            // A room or building, or any spot on a corridor or path; not the open grounds.
+            if (place) from = place;
+            else if (point && walkwayAt(pieces, point)) from = point;
+            else return notify("Pick a room, a building, or a spot on a corridor or path");
+            picking = false;
+        } else if (place) to = place;
+    }
+    async function share() {
+        try {
+            await navigator.clipboard.writeText(location.href);
+            notify(
+                "Link copied — it opens this route on devices that have this layout",
+            );
+        } catch {
+            notify("Copy the address bar to share this route");
         }
-        // The wayfinding view has its own tools; only save and undo apply.
-        if (view === "Paths" && !command) return;
-        if (e.key === "?") guideOpen = true;
-        if (e.key.toLowerCase() === "d" && !command) duplicate();
-        if (e.key === "Delete" || e.key === "Backspace") remove();
-        if (e.key.toLowerCase() === "r") rotate();
-        if (command && e.key === "s") {
-            e.preventDefault();
-            save();
-        }
-        if (command && e.key === "z") {
-            e.preventDefault();
-            e.shiftKey ? redo() : undo();
+    }
+    async function download() {
+        try {
+            await exporter?.();
+        } catch {
+            error = "The 3D models are still loading. Try again shortly.";
         }
     }
 </script>
 
 <svelte:head
-    ><title>Forma — Hospital map builder</title><meta
+    ><title>{title} — P-Map</title><meta
         name="description"
-        content="Design hospital layouts with modular buildings and corridors on a grid."
+        content="Find rooms and get walking directions around the hospital."
     /></svelte:head
 >
-<svelte:window onkeydown={key} />
-<div class="app-shell">
-    <EditorRail onimport={() => document.getElementById("import")?.click()} onnotify={notify} />
-    <div class="workspace">
-        <ProjectBar
-            bind:title
-            bind:exportOpen
-            {saved}
-            onedit={() => (saved = false)}
-            onguide={() => (guideOpen = true)}
-            oncanvassize={() => (canvasSettings = !canvasSettings)}
-            onopenmap={() => {
-                save(false);
-                goto("/map");
-            }}
-            ondownload={download}
-            onexportmodel={exportModel}
-        />
-        {#if canvasSettings}<CanvasSettings
-                width={canvasWidth}
-                height={canvasHeight}
-                onapply={resizeCanvas}
-                oncancel={() => (canvasSettings = false)}
-            />{/if}
-        <main>
-            <AssetLibrary bind:active hidden={!assetsOpen} onnotify={notify} />
-            <section class="canvas-section">
-                <CanvasToolbar
-                    bind:active
-                    bind:pan
-                    bind:view
-                    bind:assetsOpen
-                    bind:propertiesOpen
-                    canUndo={history.past.length > 0}
-                    canRedo={history.future.length > 0}
-                    onundo={undo}
-                    onredo={redo}
-                />
-                <div class="canvas" class:placing={active !== null}>
-                    <div class="canvas-title">
-                        <span class="live-dot"></span>
-                        {active === null ? "Layout editor" : "Place " + assets[active].name}<small
-                            >{canvasWidth} × {canvasHeight} grid</small
-                        >
-                    </div>
-                    {#if view === "Paths"}<WayfindingPanel
-                            {pieces}
-                            {network}
-                            width={canvasWidth}
-                            height={canvasHeight}
-                            onchange={(n) => {
-                                checkpoint();
-                                network = n;
-                            }}
-                            onselectpiece={(id) => {
-                                view = "3D";
-                                selected = id;
-                                propertiesOpen = true;
-                            }}
-                        />{:else if view === "3D"}<HospitalScene
-                            {canvasWidth}
-                            {canvasHeight}
-                            {pieces}
-                            {selected}
-                            active={draft}
-                            {grid}
-                            {zoom}
-                            onselect={(id) => (selected = id)}
-                            {pan}
-                            onmove={moveBuilding}
-                            onplace={placeAt}
-                            onerror={notify}
-                            registerExport={(fn) => (exportScene = fn)}
-                        />{:else}<PlanView
-                            {pieces}
-                            bind:selected
-                            asset={draft}
-                            width={canvasWidth}
-                            height={canvasHeight}
-                            {grid}
-                            {zoom}
-                            {pan}
-                            bind:panX
-                            bind:panY
-                            onplace={placeAt}
-                            onmove={moveBuilding}
-                            oncancel={() => (active = null)}
-                        />{/if}
-                    <CanvasControls
-                        bind:grid
-                        bind:zoom
-                        onfit={() => {
-                            panX = 0;
-                            panY = 0;
-                        }}
+<svelte:window
+    onkeydown={(e) => {
+        if (e.key === "Escape") picking = false;
+    }}
+/>
+<div class="map-viewer" class:picking class:sheet-open={panelOpen}>
+    <section class="stage" aria-label="Hospital map">
+        {#if ready}{#if view === "3D"}<HospitalScene
+                    presentation={true}
+                    {pieces}
+                    selected={null}
+                    active={null}
+                    grid={false}
+                    zoom={100}
+                    {canvasWidth}
+                    {canvasHeight}
+                    route={route?.points ?? null}
+                    insetLeft={panelOpen && wide ? 400 : 0}
+                    onselect={(id, roomId, point) => {
+                        const key = roomId ? `r:${id}:${roomId}` : `b:${id}`;
+                        choose(placeList.find((p) => p.id === key) ?? null, point);
+                    }}
+                    onplace={() => {}}
+                    onerror={(s) => (error = s)}
+                    registerExport={(fn) => (exporter = fn)}
+                />{:else}<div class="plan">
+                    <FloorPlan
+                        {pieces}
+                        places={placeList}
+                        width={canvasWidth}
+                        height={canvasHeight}
+                        route={route?.points ?? null}
+                        {landmarks}
+                        destination={to}
+                        {picking}
+                        onpick={(point, place) => choose(place, point)}
                     />
-                </div>
-                <div class="canvas-status">
-                    <span><i></i> Snap to grid <b>ON</b></span><span>1 tile = 2 × 2 m</span><span
-                        class="right-status"
-                        >{pieces.length} objects <span>•</span> Ground floor</span
-                    >
-                </div>
-            </section>
-            <PropertiesPanel
-                piece={draft ?? current}
-                placing={!!draft}
-                {pieces}
-                {canvasWidth}
-                {canvasHeight}
-                hidden={!propertiesOpen}
-                {update}
-                {edit}
-                onrotate={rotate}
-                onduplicate={duplicate}
-                onremove={remove}
-                onguide={() => (guideOpen = true)}
-                onexportmodel={exportModel}
-                onnotify={notify}
-            />
-        </main>
+                </div>{/if}{/if}
+    </section>
+    <aside class="panel" class:collapsed={!panelOpen}>
+        <header>
+            <div>
+                <small class="product"><Logo size={16} title="" /> P-Map · Wayfinding</small>
+                <h1>{title}</h1>
+            </div>
+            <button
+                class="collapse"
+                aria-expanded={panelOpen}
+                aria-label={panelOpen ? "Hide directions" : "Show directions"}
+                onclick={() => (panelOpen = !panelOpen)}
+                >{panelOpen ? "−" : "+"}</button
+            >
+        </header>
+        {#if panelOpen}<RouteFinder
+                places={placeList}
+                {grid}
+                {route}
+                bind:from
+                bind:to
+                bind:picking
+            />{/if}
+    </aside>
+    <div class="top-actions">
+        <div class="segmented" role="group" aria-label="Map view">
+            {#each ["3D", "Plan"] as const as v}<button
+                    class:active={view === v}
+                    aria-pressed={view === v}
+                    onclick={() => (view = v)}>{v}</button
+                >{/each}
+        </div>
+        <button class="btn" disabled={!to} onclick={share}>Share route</button>
+        <details class="more">
+            <summary class="btn" aria-label="More options">•••</summary>
+            <div class="menu">
+                <a href="/editor">Open editor</a>
+                <button onclick={download}>Export 3D model (.glb)</button>
+            </div>
+        </details>
     </div>
+    {#if picking}<div class="pick-banner" role="status">
+            Click your room or building, or where you are on a corridor or path · <button
+                onclick={() => (picking = false)}>Cancel</button
+            >
+        </div>{/if}
+    {#if error}<p class="viewer-error" role="alert">{error}</p>{/if}
+    {#if toast}<div class="toast" role="status"><span>✓</span>{toast}</div>{/if}
 </div>
-<input id="import" type="file" accept=".json" hidden onchange={importFile} />
-{#if guideOpen}<GuideDialog onclose={() => (guideOpen = false)} />{/if}
-{#if toast}<div class="toast" role="status"><span>✓</span>{toast}</div>{/if}
+
+<style>
+    .map-viewer {
+        position: relative;
+        height: 100dvh;
+        overflow: hidden;
+        background: #edf0e7;
+    }
+    .stage {
+        position: absolute;
+        inset: 0;
+    }
+    .plan {
+        position: absolute;
+        inset: 0;
+        padding: 16px 16px 16px 400px;
+    }
+    .panel {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        bottom: 16px;
+        width: 368px;
+        z-index: 6;
+        padding: 20px;
+        overflow: auto;
+        background: #fffffff5;
+        border: 1px solid #fff;
+        border-radius: 18px;
+        box-shadow: 0 12px 50px #243d241c;
+    }
+    .panel.collapsed {
+        bottom: auto;
+    }
+    .panel small.product {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        text-transform: uppercase;
+    }
+    .panel header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .panel small {
+        font-size: 9px;
+        letter-spacing: 1.4px;
+        color: #7b8c70;
+    }
+    .panel h1 {
+        font:
+            24px Georgia,
+            serif;
+        margin: 4px 0 0;
+        color: #1f3a2b;
+    }
+    .collapse {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #eef2e9;
+        font-size: 17px;
+        color: #3f6b4e;
+        flex-shrink: 0;
+    }
+    .top-actions {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 6;
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+    }
+    .segmented {
+        display: flex;
+        padding: 3px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 3px 16px #243d2414;
+    }
+    .segmented button {
+        padding: 8px 14px;
+        border-radius: 7px;
+        font-size: 12px;
+        color: #52664a;
+    }
+    .segmented .active {
+        background: #2d4a38;
+        color: white;
+    }
+    .top-actions .btn {
+        box-shadow: 0 3px 16px #243d2414;
+    }
+    .more {
+        position: relative;
+    }
+    .more summary {
+        list-style: none;
+        cursor: pointer;
+    }
+    .more summary::-webkit-details-marker {
+        display: none;
+    }
+    .menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        min-width: 200px;
+        padding: 6px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 12px 34px #1f35261f;
+        display: flex;
+        flex-direction: column;
+    }
+    .menu a,
+    .menu button {
+        padding: 10px 12px;
+        border-radius: 7px;
+        font-size: 12px;
+        color: #2f4336;
+        text-decoration: none;
+        text-align: left;
+    }
+    .menu a:hover,
+    .menu button:hover {
+        background: #eef3e8;
+    }
+    .pick-banner {
+        position: absolute;
+        top: 72px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 7;
+        padding: 10px 16px;
+        border-radius: 30px;
+        background: #2f7fc4;
+        color: white;
+        font-size: 12px;
+        box-shadow: 0 6px 24px #2f7fc440;
+    }
+    .pick-banner button {
+        color: white;
+        text-decoration: underline;
+        font-size: 12px;
+    }
+    .map-viewer.picking .stage :global(canvas) {
+        cursor: crosshair;
+    }
+    .map-viewer :global(.scene-options) {
+        top: 70px;
+        right: 16px;
+    }
+    .map-viewer :global(.orbit-help) {
+        left: 400px;
+        bottom: 18px;
+    }
+    .viewer-error {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        max-width: 420px;
+        z-index: 8;
+        background: #fff2dd;
+        color: #785e33;
+        padding: 14px 16px;
+        border-radius: 10px;
+    }
+    @media (max-width: 700px) {
+        .panel {
+            top: auto;
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            width: auto;
+            max-height: 50dvh;
+            padding: 16px;
+            border-radius: 16px;
+        }
+        .panel.collapsed {
+            bottom: 8px;
+        }
+        .panel h1 {
+            font-size: 19px;
+        }
+        .plan {
+            padding: 64px 8px 8px;
+        }
+        /* Keep the map (and the route) above the directions sheet. */
+        .sheet-open .stage {
+            bottom: calc(50dvh - 8px);
+        }
+        .top-actions {
+            top: 10px;
+            right: 10px;
+            left: 10px;
+        }
+        .top-actions .segmented {
+            margin-right: auto;
+        }
+        .map-viewer :global(.orbit-help) {
+            display: none;
+        }
+        .map-viewer :global(.scene-options) {
+            top: 60px;
+            right: 10px;
+        }
+    }
+</style>

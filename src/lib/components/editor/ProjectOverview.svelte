@@ -42,8 +42,8 @@
 <div class="blender-note">
     <span class="blender-logo">◉</span>
     <div>
-        <b>Ready for your next dimension</b>
-        <p>Export your layout to Blender.</p>
+        <b>Take it into Blender</b>
+        <p>Download the campus as a detailed 3D model (.glb).</p>
     </div>
     <button aria-label="Export Blender model" onclick={onexportmodel}>↗</button>
 </div>

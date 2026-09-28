@@ -15,16 +15,14 @@
     background: #fff;
 }
 .brand {
-    font-family: Georgia, serif;
-    font-size: 43px;
-    font-weight: bold;
-    line-height: 40px;
-    color: #334c36;
-    text-decoration: none;
-    margin-bottom: 35px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 30px;
+    border-radius: 10px;
+    transition: transform 0.2s ease;
 }
-.brand span {
-    color: #90a378;
+.brand:hover {
+    transform: translateY(-1px);
 }
 .rail button {
     height: 38px;
@@ -78,9 +76,15 @@
     font-weight: 500;
     color: #4c584a;
 }
+.breadcrumb .product {
+    font-weight: 650;
+    color: #2d4a38;
+    letter-spacing: 0.2px;
+}
 .tag {
     font-size: 9px;
     letter-spacing: 0.8px;
+    text-transform: uppercase;
     background: #f0f2eb;
     padding: 5px 7px;
     border-radius: 4px;

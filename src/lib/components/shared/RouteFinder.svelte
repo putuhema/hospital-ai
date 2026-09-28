@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { roomTypes } from "$lib/model/interiors";
+    import { roomTypes, walkwayAt } from "$lib/model/interiors";
     import type { Point } from "$lib/wayfinding/navigation";
     import {
         planRoute,
@@ -24,8 +24,13 @@
         /** True while the user is choosing a start point on the map. */
         picking?: boolean;
     } = $props();
+    // A picked spot is named after the corridor or path it is on.
     let fromName = $derived(
-        !from ? "" : "id" in from ? from.name : "Point on map",
+        !from
+            ? ""
+            : "id" in from
+              ? from.name
+              : `Spot on ${walkwayAt(grid.pieces, from)?.name ?? "the map"}`,
     );
     // Shortcuts for room types that exist in this layout, e.g. "Toilets".
     let shortcuts = $derived(

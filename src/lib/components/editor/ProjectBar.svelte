@@ -31,7 +31,7 @@
 
 <header>
     <div class="breadcrumb">
-        Workspace <span>/</span> <b>Hospital planning</b><span class="tag">LOCAL PROJECT</span>
+        <b class="product">P-Map Editor</b> <span>/</span> {title || "Untitled map"}
     </div>
     <button class="help" onclick={onguide}>? <span>Quick guide</span></button>
 </header>

@@ -130,3 +130,15 @@ test("kerbs and posts leave junctions open where another walkway joins a side", 
   const north = poly.findIndex((a, i) => a.y === 0 && poly[(i + 1) % poly.length].y === 0);
   assert.deepEqual(exposedRuns(main, north, [main, branch]), [[0, 1]]);
 });
+
+test("a start point can be any spot on a corridor or path, not the open grounds", async () => {
+  const { walkwayAt } = await import("../src/lib/model/interiors.ts");
+  const corridor: Piece = { ...path(0, 0, 4, 1), id: 1, kind: "straight" },
+    garden = { ...path(0, 3, 2, 2), id: 2 },
+    building: Piece = { id: 3, name: "B", kind: "flat", x: 6, y: 0, w: 3, h: 3, color: "#ffffff", rotation: 0 };
+  const pieces = [corridor, garden, building];
+  assert.equal(walkwayAt(pieces, { x: 3.7, y: 0.2 })?.id, 1);
+  assert.equal(walkwayAt(pieces, { x: 1.5, y: 4.9 })?.id, 2);
+  assert.equal(walkwayAt(pieces, { x: 3, y: 2 }), undefined); // grass
+  assert.equal(walkwayAt(pieces, { x: 7, y: 1 }), undefined); // inside a building: pick the building instead
+});

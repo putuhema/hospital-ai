@@ -165,6 +165,9 @@ export function exposedRuns(p: Piece, i: number, pieces: Piece[]): [number, numb
   }
   return runs;
 }
+/** The corridor or path under a point (in tiles), if any: places people can stand outside rooms. */
+export const walkwayAt = (pieces: Piece[], point: { x: number; y: number }) =>
+  pieces.find((p) => (isCorridor(p) || isPath(p)) && inPolygon(point, footprint(p)));
 /** Sample points on a quarter-tile lattice, so half-tile notches are resolved. */
 function* samples(x0: number, y0: number, x1: number, y1: number) {
   for (let y = y0 + 0.125; y < y1; y += 0.25)

@@ -1,0 +1,15 @@
+<script lang="ts">
+    /** The P-Map mark: a map pin with a P cut into it. */
+    let { size = 32, title = "P-Map" }: { size?: number; title?: string } = $props();
+</script>
+
+<svg width={size} height={size} viewBox="0 0 32 32" role="img" aria-label={title}
+    ><path
+        fill="#2d4a38"
+        d="M16 1.5C9.1 1.5 3.6 6.9 3.6 13.6c0 9.1 12.4 16.9 12.4 16.9s12.4-7.8 12.4-16.9C28.4 6.9 22.9 1.5 16 1.5z"
+    /><path
+        fill="#f4f7ef"
+        fill-rule="evenodd"
+        d="M11.8 7.6h5.6a4.6 4.6 0 0 1 0 9.2h-2.5v4.8h-3.1zm3.1 2.8v3.6h2.4a1.8 1.8 0 0 0 0-3.6z"
+    /><circle cx="21.6" cy="20.2" r="1.7" fill="#a8c08a" /></svg
+>

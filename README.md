@@ -1,6 +1,6 @@
-# Forma hospital layout builder
+# P-Map Editor
 
-SvelteKit hospital layout editor with grid placement and real Blender-authored GLB models rendered with Three.js.
+Build a hospital campus map, then give visitors walking directions on it. A SvelteKit editor with grid placement and Blender-authored models rendered with Three.js, plus a shareable wayfinding map. The map is the home page (`/`); the editor is at `/editor`.
 
 ## Run
 
@@ -9,7 +9,7 @@ pnpm install
 pnpm dev
 ```
 
-Changes save automatically in this browser. The quick guide (`?` or the header button) walks through the four steps: place buildings, connect them with corridors, add rooms, check wayfinding.
+Open `/editor` to build the campus and `/` for the wayfinding map. Changes save automatically in this browser. The quick guide (`?` or the header button) walks through the four steps: place buildings, connect them with corridors, add rooms, check wayfinding.
 
 ## Building the map
 
@@ -26,9 +26,9 @@ Changes save automatically in this browser. The quick guide (`?` or the header b
 Directions are generated from the layout — there are no paths to draw. Every building and room is a destination, and routes go through real doors, prefer corridors over walking outside, and come with turn-by-turn steps (`src/lib/wayfinding/routing.ts`).
 
 - The editor's **Wayfinding** tab tests routes, lists anything that can't be reached (usually a room door facing a wall — click it to jump to the building), and adds **landmarks** such as entrances, cafés or lifts.
-- **Open wayfinding map** opens `/map`: search *from* and *to*, use shortcuts like *Nearest toilets*, or click a room in 3D or on the plan. Routes are drawn on both views.
+- **Open wayfinding map** opens the map at `/`: search *from* and *to*, use shortcuts like *Nearest toilets*, or click a room in 3D or on the plan. *Pick start on map* takes a room, a building, or any spot on a corridor or path. Routes are drawn on both views.
 - The 3D map sits in a calm landscape — gradient sky, drifting clouds, woodland and a pond, with the campus set straight into the meadow — sized to the canvas and fading into haze a short way past the campus (`src/lib/scene/scenery.ts`). The display bar has *Top view* (a north-up bird's-eye view, also in the editor's 3D view), toggles *Buildings* and *Rooms* name labels separately, plus *Hover info*, and has a *Trees* slider (none → lush); these preferences are remembered. The editor keeps a plain background.
-- Links are shareable: `/map?from=b:9&to=r:2:25&view=plan`. Use this for QR codes at entrances or kiosks. The map reads the layout saved in *this browser* — it isn't a hosted public link.
+- Links are shareable: `/?from=b:9&to=r:2:25&view=plan` (old `/map` links redirect). Use this for QR codes at entrances or kiosks. The map reads the layout saved in *this browser* — it isn't a hosted public link.
 
 Use **Canvas size** to set 8–100 tiles per side (2 m per tile). Layouts export and import as JSON.
 
@@ -50,8 +50,8 @@ The corridor GLBs now only supply materials: corridors, garden paths and L-shape
 
 ## Code layout
 
-- `src/routes/+page.svelte` — the editor: project state, autosave, undo and keyboard shortcuts. Its panels live in `src/lib/components/editor/` (asset library, toolbar, plan view, properties panel and its sub-editors, guide).
-- `src/routes/map/+page.svelte` — the wayfinding map, with deep links (`/map?from=b:9&to=r:2:25`).
+- `src/routes/editor/+page.svelte` — the editor (`/editor`): project state, autosave, undo and keyboard shortcuts. Its panels live in `src/lib/components/editor/` (asset library, toolbar, plan view, properties panel and its sub-editors, guide).
+- `src/routes/+page.svelte` — the wayfinding map, the home page, with deep links (`/?from=b:9&to=r:2:25`). `src/routes/map/` redirects old `/map` links.
 - `src/lib/editor/` — editing rules (`operations.ts`), JSON/OBJ export (`export.ts`) and undo history.
 - `src/lib/model/` — the layout data, assets and templates, and room/door geometry.
 - `src/lib/wayfinding/` — walls and doors (`navigation.ts`) and grid routing with turn-by-turn steps (`routing.ts`).

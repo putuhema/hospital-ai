@@ -9,7 +9,7 @@
 >
     <div class="guide" role="dialog" aria-modal="true" aria-labelledby="guide-title">
         <button class="guide-close" aria-label="Close guide" onclick={onclose}>×</button>
-        <small>QUICK GUIDE</small>
+        <small>P-MAP EDITOR · QUICK GUIDE</small>
         <h2 id="guide-title">Build a hospital map in four steps</h2>
         <ol class="guide-steps">
             <li>

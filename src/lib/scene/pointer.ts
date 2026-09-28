@@ -29,7 +29,8 @@ export function attachPointer(options: {
   ghost: THREE.Mesh;
   selectedBox: THREE.Box3Helper;
   state: () => State;
-  onselect: (id: number | null, room?: number) => void;
+  /** A click: the piece and room under it, and where it landed on that piece or the ground, in tiles. */
+  onselect: (id: number | null, room?: number, point?: Tile) => void;
   onplace: (tile: Tile) => void;
   /** Without it, buildings can't be dragged (the map is read-only). */
   onmove?: (id: number, x: number, y: number) => void;
@@ -62,6 +63,7 @@ export function attachPointer(options: {
     return {
       id: object?.userData.pieceId as number | undefined,
       room: hit?.object.userData.roomId as number | undefined,
+      point: hit?.point,
     };
   }
 
@@ -139,8 +141,10 @@ export function attachPointer(options: {
       if (tile) options.onplace(tile);
       return;
     }
-    const hit = pieceHit();
-    options.onselect(hit.id ?? null, inside ? hit.room : undefined);
+    const hit = pieceHit(),
+      // A corridor canopy covers its floor, so where the click hit it is where it is on the floor.
+      at = hit.point ?? groundPoint();
+    options.onselect(hit.id ?? null, inside ? hit.room : undefined, at ? { x: at.x / 2, y: at.z / 2 } : undefined);
   }
 
   const leave = () => options.onhover(null),

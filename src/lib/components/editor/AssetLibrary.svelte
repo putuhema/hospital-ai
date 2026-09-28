@@ -64,7 +64,7 @@
                   : category === "Templates"
                   ? "READY-MADE DEPARTMENTS"
                   : "HOSPITAL ESSENTIALS"}</span
-        ><span>{filtered.length} assets</span>
+        ><span>{filtered.length} {filtered.length === 1 ? "asset" : "assets"}</span>
     </div>
     <div class="assets">
         {#each filtered as a}<button
@@ -96,7 +96,6 @@
         </p>
     </div>
     <div class="library-footer">
-        <Icon name="cube" size={16} /> Blender asset collection
-        <span>v1.0</span>
+        <Icon name="cube" size={16} /> Blender-authored models
     </div>
 </aside>

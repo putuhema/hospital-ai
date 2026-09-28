@@ -183,8 +183,7 @@
             fill="none"
             stroke="#b4bcb0"
             stroke-dasharray="6 7"
-        /><text x="85" y="65" class="plot-label">HOSPITAL CAMPUS / 01</text
-        >{#each sorted as p}<g
+        />{#each sorted as p}<g
                 role="button"
                 tabindex="0"
                 aria-label={"Select " + p.name}
@@ -272,11 +271,6 @@
                 stroke-width="3"
                 stroke-dasharray="6 4"
                 pointer-events="none"
-            />{/if}<path d="M480 700v-36m-6 6 6-6 6 6" stroke="#839080" fill="none" /><text
-            x="480"
-            y="723"
-            text-anchor="middle"
-            class="plot-label">MAIN ENTRANCE</text
-        ></svg
+            />{/if}</svg
     >
 </div>
