@@ -10,8 +10,8 @@ Ideas to make P-Map more useful to the people finding their way, not just the pe
 
 ## 2. Find the right place
 
-- [ ] **Search by what people say.** Synonyms ("X-ray" → Radiology, "blood test" → Laboratory), doctors' names mapped to their clinics, and tolerance for typos.
-- [ ] **Visitor places as categories with icons.** Parking, drop-off, café, cash machine, prayer room, lifts, exits, information desk. Landmarks exist today but have no types.
+- [x] **Search by what people say.** Done: built-in synonyms in English and Indonesian ("X-ray"/"rontgen" → Radiology, "blood test" → Laboratory, "apotek" → Pharmacy), *Other names & doctors* per destination (results show which name matched), and tolerance for typos and half-typed words. New Radiology and Emergency room types.
+- [x] **Visitor places as categories with icons.** Done: landmarks get a kind (entrance & exit, information desk, parking, drop-off, café, cash machine, prayer room, lift) with an icon on the plan, in search and on the destination card; the map offers "nearest café / parking" shortcuts. Not yet drawn in the 3D view.
 - [x] **Opening hours and details per destination.** Done: buildings, rooms and landmarks get *Visitor info* (description, phone, opening or visiting hours); the map shows an open/closed badge on the chosen destination and in search results.
 
 ## 3. Get there comfortably

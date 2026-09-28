@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { category } from "$lib/model/categories";
     import type { Piece } from "$lib/model/layout";
     import {
         doorSegment,
@@ -260,16 +261,19 @@
                 transform={`translate(${n.x * S} ${n.y * S})`}
                 class:selected={n.id === selectedLandmark}
                 class="landmark"
-                ><rect
+                style:--color={category(n.category).color}
+                ><circle r="13" /><svg
                     x="-8"
                     y="-8"
                     width="16"
                     height="16"
-                    rx="3"
-                    transform="rotate(45)"
-                /><text y="-16" class="landmark-label"
-                    >{n.name || "Unnamed landmark"}</text
-                ></g
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    stroke-width="2.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round">{@html category(n.category).icon}</svg
+                ><text y="-20" class="landmark-label">{n.name || "Unnamed landmark"}</text></g
             >{/each}
         {#if here}<g transform={`translate(${here.x * S} ${here.y * S})`} class="here"
                 ><circle r="46" class="halo" /><circle r="18" /><text y="-62">You are here</text></g
@@ -328,13 +332,14 @@
         stroke: #fff;
         stroke-width: 4px;
     }
-    .landmark rect {
-        fill: #e0a93b;
+    .landmark circle {
+        fill: var(--color);
         stroke: white;
         stroke-width: 3;
     }
-    .landmark.selected rect {
-        fill: #d24b3b;
+    .landmark.selected circle {
+        stroke: #d24b3b;
+        stroke-width: 4;
     }
     .landmark-label {
         font-size: 11px;

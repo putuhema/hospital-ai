@@ -5,7 +5,9 @@
     import PlaceDetails from "$lib/components/shared/PlaceDetails.svelte";
     import BottomSheet from "./BottomSheet.svelte";
     import SearchScreen from "./SearchScreen.svelte";
-    import { roomTypes, walkwayAt } from "$lib/model/interiors";
+    import { walkwayAt } from "$lib/model/interiors";
+    import { shortcuts as shortcutsFor } from "$lib/wayfinding/shortcuts";
+    import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     import { hoursStatus } from "$lib/model/place-info";
     import type { Point } from "$lib/wayfinding/navigation";
     import {
@@ -59,13 +61,8 @@
         if (!routing) picking = false;
     });
 
-    // Room types in this layout, most useful first.
-    const order = ["toilet", "reception", "pharmacy", "emergency", "stairs", "lift"];
-    let shortcuts = $derived(
-        roomTypes
-            .filter((t) => places.some((p) => p.kind === "room" && p.detail === t.name))
-            .sort((a, b) => (order.indexOf(a.type) + 1 || 99) - (order.indexOf(b.type) + 1 || 99)),
-    );
+    // Room types and landmark kinds in this layout, most useful first.
+    let shortcuts = $derived(shortcutsFor(places));
     let fromName = $derived(
         !from ? "" : "id" in from ? from.name : `Spot on ${walkwayAt(grid.pieces, from)?.name ?? "the map"}`,
     );
@@ -122,7 +119,7 @@
             </div>
             {#if !to && shortcuts.length}<div class="chips" transition:rise={{ y: -6, duration: 220 }}>
                     {#each shortcuts as t}<button class="chip" onclick={() => nearest(t.name)}
-                            ><i style={`background:${t.color}`}></i>{from ? "Nearest " : ""}{t.name.toLowerCase()}</button
+                            ><PlaceIcon of={{ ...t, detail: t.name }} size={22} />{from ? "Nearest " : ""}{t.name.toLowerCase()}</button
                         >{/each}
                 </div>{/if}
         </header>
@@ -221,7 +218,10 @@
             {#snippet peek()}
                 {#key routing ? `route:${!!from}:${!!to}:${!!route}` : `place:${to?.id}`}<div class="peek" in:unblur>
                         {#if !routing && to}
-                            <h2>{to.name}</h2>
+                            <div class="title">
+                                <PlaceIcon of={to} size={40} />
+                                <h2>{to.name}</h2>
+                            </div>
                             <p class="sub">
                                 {to.detail}{to.building ? ` · ${to.building}` : ""}{#if status}<span
                                         class="status"
@@ -251,7 +251,7 @@
                             <p class="sub">Search a room or building above.</p>
                             {#if shortcuts.length}<div class="actions">
                                     {#each shortcuts as t}<button class="action" onclick={() => nearest(t.name)}
-                                            ><i style={`background:${t.color}`}></i>Nearest {t.name.toLowerCase()}</button
+                                            ><PlaceIcon of={{ ...t, detail: t.name }} size={22} />Nearest {t.name.toLowerCase()}</button
                                         >{/each}
                                 </div>{/if}
                         {:else if route}
@@ -403,7 +403,7 @@
         gap: 7px;
         flex-shrink: 0;
         height: 36px;
-        padding: 0 14px;
+        padding: 0 14px 0 7px;
         border-radius: 18px;
         background: white;
         font-size: 14px;
@@ -420,13 +420,6 @@
     }
     .mobile-map :global(.chip:active) {
         transform: scale(0.96);
-    }
-    .mobile-map :global(.chip i),
-    .action i {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        box-shadow: inset 0 0 0 1px #0000001f;
     }
     .fab {
         position: absolute;
@@ -588,6 +581,15 @@
         flex-direction: column;
         gap: 8px;
         min-width: 0;
+    }
+    .title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 4px;
+    }
+    .title h2 {
+        margin: 0;
     }
     .peek h2 {
         margin: 2px 0 4px;

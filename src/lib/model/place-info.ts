@@ -11,6 +11,8 @@ export type PlaceInfo = {
   hours?: Hours[];
   /** The hours are visiting hours (e.g. a ward), not opening hours. */
   visiting?: boolean;
+  /** Other names people search for: doctors who work here, services, local terms. */
+  keywords?: string[];
 };
 
 export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -33,6 +35,10 @@ export function parseInfo(value: unknown): PlaceInfo | undefined {
     !text(d.description, 500) ||
     !text(d.phone, 40) ||
     (d.visiting !== undefined && typeof d.visiting !== "boolean") ||
+    (d.keywords !== undefined &&
+      (!Array.isArray(d.keywords) ||
+        d.keywords.length > 40 ||
+        d.keywords.some((k) => typeof k !== "string" || k.length > 80))) ||
     (d.hours !== undefined &&
       (!Array.isArray(d.hours) ||
         d.hours.length > 14 ||
@@ -53,6 +59,8 @@ export function parseInfo(value: unknown): PlaceInfo | undefined {
   if (d.hours?.length)
     info.hours = d.hours.map((h) => ({ days: [...new Set(h.days)].sort(), open: h.open, close: h.close }));
   if (d.visiting) info.visiting = true;
+  const keywords = [...new Set((d.keywords ?? []).map((k) => k.trim()).filter(Boolean))];
+  if (keywords.length) info.keywords = keywords;
   return Object.keys(info).length ? info : undefined;
 }
 

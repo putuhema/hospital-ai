@@ -1,9 +1,16 @@
 import type { Piece } from "../model/layout.ts";
 import { corridorDoors, outline, roomDoor, type Door } from "../model/interiors.ts";
 import { parseInfo, type PlaceInfo } from "../model/place-info.ts";
+import { isCategory, type LandmarkCategory } from "../model/categories.ts";
 
 export type Point = { x: number; y: number };
-export type Waypoint = Point & { id: string; name: string; info?: PlaceInfo };
+export type Waypoint = Point & {
+  id: string;
+  name: string;
+  /** What kind of spot it is, e.g. parking; shown with an icon. */
+  category?: LandmarkCategory;
+  info?: PlaceInfo;
+};
 export type WalkingNetwork = {
   nodes: Waypoint[];
   edges: { from: string; to: string }[];
@@ -51,7 +58,8 @@ export function parseNetwork(
       p.x < 0 ||
       p.y < 0 ||
       p.x > width ||
-      p.y > height
+      p.y > height ||
+      (p.category !== undefined && !isCategory(p.category))
     )
       throw Error("Invalid waypoint");
     ids.add(p.id);
@@ -67,7 +75,14 @@ export function parseNetwork(
   return {
     nodes: n.nodes.map((p) => {
       const info = parseInfo(p.info);
-      return { id: p.id, name: p.name, x: p.x, y: p.y, ...(info && { info }) };
+      return {
+        id: p.id,
+        name: p.name,
+        x: p.x,
+        y: p.y,
+        ...(p.category && p.category !== "other" && { category: p.category }),
+        ...(info && { info }),
+      };
     }),
     edges: n.edges.map((e) => ({ from: e.from, to: e.to })),
   };

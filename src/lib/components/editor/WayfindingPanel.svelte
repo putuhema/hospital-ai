@@ -12,6 +12,8 @@
     import RouteFinder from "$lib/components/shared/RouteFinder.svelte";
     import PlaceInfoEditor from "./PlaceInfoEditor.svelte";
     import type { PlaceInfo } from "$lib/model/place-info";
+    import { categories, category, type LandmarkCategory } from "$lib/model/categories";
+    import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     let {
         pieces,
         network,
@@ -65,6 +67,22 @@
             nodes: network.nodes.map((n) => (n.id === id ? { ...n, name: name.trim().slice(0, 100) } : n)),
         });
     }
+    /** Set what kind of spot it is; a default name follows the kind. */
+    function setCategory(id: string, kind: LandmarkCategory) {
+        onchange({
+            ...network,
+            nodes: network.nodes.map((n) => {
+                if (n.id !== id) return n;
+                const named = n.name !== "New landmark" && n.name !== category(n.category).name;
+                const { category: _, ...rest } = n;
+                return {
+                    ...rest,
+                    ...(kind !== "other" && { category: kind }),
+                    name: named ? n.name : kind === "other" ? "New landmark" : category(kind).name,
+                };
+            }),
+        });
+    }
     function setInfo(id: string, info: PlaceInfo | undefined) {
         onchange({ ...network, nodes: network.nodes.map((n) => (n.id === id ? { ...n, info } : n)) });
     }
@@ -113,7 +131,8 @@
                 Landmarks <span>{landmarks.length}</span>
             </h3>
             <p class="muted">
-                Add spots that aren't rooms — main entrance, café, lifts, parking.
+                Add spots that aren't rooms — main entrance, café, lifts, parking. Give each a kind
+                so visitors see its icon and can ask for the nearest one.
             </p>
             <button
                 class="btn"
@@ -125,6 +144,7 @@
                 }}>{adding ? "Click the plan to place it…" : "+ Add landmark"}</button
             >
             {#each landmarks as n}<div class="landmark" class:selected={n.id === selected}>
+                    <PlaceIcon of={{ kind: "landmark", detail: category(n.category).name, category: n.category }} size={24} />
                     <input
                         aria-label="Landmark name"
                         maxlength="100"
@@ -134,6 +154,17 @@
                     /><button aria-label={`Remove ${n.name}`} onclick={() => remove(n.id)}>×</button>
                 </div>
                 {#if n.id === selected}<div class="landmark-info">
+                        <div class="kinds" role="radiogroup" aria-label="Kind of landmark">
+                            {#each categories as c}<button
+                                    role="radio"
+                                    aria-checked={category(n.category).id === c.id}
+                                    title={c.name}
+                                    onclick={() => setCategory(n.id, c.id)}
+                                    ><PlaceIcon of={{ kind: "landmark", detail: c.name, category: c.id }} size={26} /><span
+                                        >{c.name}</span
+                                    ></button
+                                >{/each}
+                        </div>
                         <PlaceInfoEditor info={n.info} onchange={(info) => setInfo(n.id, info)} />
                     </div>{/if}{/each}
         </section>
@@ -262,6 +293,31 @@
     .check li span {
         text-decoration: underline;
     }
+    .kinds {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+        margin-bottom: 12px;
+    }
+    .kinds button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 2px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        font-size: 10px;
+        line-height: 1.2;
+        color: #52664a;
+        text-align: center;
+    }
+    .kinds button[aria-checked="true"] {
+        border-color: #4f7d5c;
+        background: #f1f6ec;
+        color: #2d4a38;
+        font-weight: 600;
+    }
     .landmark-info {
         margin: 4px 0 10px;
         padding: 10px;
@@ -271,6 +327,7 @@
     }
     .landmark {
         display: flex;
+        align-items: center;
         gap: 6px;
         margin-top: 6px;
     }

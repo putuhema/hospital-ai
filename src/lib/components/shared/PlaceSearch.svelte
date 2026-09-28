@@ -1,5 +1,7 @@
 <script lang="ts">
-    import { searchPlaces, type Place } from "$lib/wayfinding/routing";
+    import type { Place } from "$lib/wayfinding/routing";
+    import { search } from "$lib/wayfinding/search";
+    import PlaceIcon from "./PlaceIcon.svelte";
     import { hoursStatus } from "$lib/model/place-info";
     let {
         places,
@@ -22,7 +24,7 @@
         highlighted = $state(0),
         input: HTMLInputElement;
     const id = `place-${Math.random().toString(36).slice(2)}`;
-    let results = $derived(searchPlaces(places, query).slice(0, 40));
+    let results = $derived(search(places, query).slice(0, 40));
     // The list only opens in the browser, so this is the visitor's own clock.
     const status = (p: Place) => (p.info ? hoursStatus(p.info, new Date()) : null);
     function choose(p: Place) {
@@ -39,18 +41,12 @@
             if (n) highlighted = (highlighted + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
         } else if (e.key === "Enter" && open && results[highlighted]) {
             e.preventDefault();
-            choose(results[highlighted]);
+            choose(results[highlighted].place);
         } else if (e.key === "Escape") {
             open = false;
             query = "";
         }
     }
-    const icon: Record<Place["kind"], string> = {
-        building: "▣",
-        room: "▢",
-        listed: "▢",
-        landmark: "◆",
-    };
 </script>
 
 <div class="place-search">
@@ -80,7 +76,7 @@
         onkeydown={key}
     />
     {#if open}<ul id={id} role="listbox" aria-label={label}>
-            {#each results as p, i}<li
+            {#each results as { place: p, via }, i}<li
                     id={`${id}-${i}`}
                     role="option"
                     aria-selected={i === highlighted}
@@ -91,10 +87,12 @@
                     }}
                     onpointerenter={() => (highlighted = i)}
                 >
-                    <span class="icon">{icon[p.kind]}</span>
+                    <PlaceIcon of={p} size={26} />
                     <span class="text"
                         ><b>{p.name}</b><small
-                            >{p.detail}{p.building ? ` · ${p.building}` : ""}</small
+                            >{#if via}<span class="via">{via}</span>{" · "}{/if}{p.detail}{p.building
+                                ? ` · ${p.building}`
+                                : ""}</small
                         ></span
                     >{#if status(p)}<em class:open={status(p)!.open}
                             >{status(p)!.open
@@ -178,10 +176,9 @@
     li.highlighted {
         background: #edf3e7;
     }
-    .icon {
-        color: #6d8a63;
-        width: 14px;
-        text-align: center;
+    .via {
+        color: #2f6b8f;
+        font-weight: 600;
     }
     .text {
         display: flex;

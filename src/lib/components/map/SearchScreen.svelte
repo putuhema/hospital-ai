@@ -1,8 +1,11 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fade } from "svelte/transition";
-    import { searchPlaces, type Place } from "$lib/wayfinding/routing";
+    import type { Place } from "$lib/wayfinding/routing";
+    import { search } from "$lib/wayfinding/search";
+    import type { Shortcut } from "$lib/wayfinding/shortcuts";
     import { hoursStatus } from "$lib/model/place-info";
+    import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     import { easeOut, motion, rise } from "$lib/motion";
     let {
         places,
@@ -14,8 +17,8 @@
     }: {
         places: Place[];
         title: string;
-        /** Room types to jump to, e.g. the nearest toilet. */
-        shortcuts: { name: string; color: string }[];
+        /** Kinds of place to jump to, e.g. the nearest toilet. */
+        shortcuts: Shortcut[];
         onselect: (place: Place) => void;
         onshortcut: (detail: string) => void;
         onclose: () => void;
@@ -24,15 +27,9 @@
         input: HTMLInputElement;
     // Results cascade in when the screen opens, but not on every keystroke.
     let opening = $state(true);
-    let results = $derived(searchPlaces(places, query).slice(0, 60));
+    let results = $derived(search(places, query).slice(0, 60));
     const now = new Date();
     const status = (p: Place) => (p.info ? hoursStatus(p.info, now) : null);
-    const icon: Record<Place["kind"], string> = {
-        building: "▣",
-        room: "▢",
-        listed: "▢",
-        landmark: "◆",
-    };
     onMount(() => {
         input.focus();
         const timer = setTimeout(() => (opening = false), 450);
@@ -63,7 +60,7 @@
             placeholder={`Search ${title}`}
             onkeydown={(e) => {
                 if (e.key === "Escape") onclose();
-                else if (e.key === "Enter" && results[0]) onselect(results[0]);
+                else if (e.key === "Enter" && results[0]) onselect(results[0].place);
             }}
         />
         {#if query}<button class="round" aria-label="Clear search" onclick={() => ((query = ""), input.focus())}
@@ -71,21 +68,25 @@
             >{/if}
     </div>
     {#if !query && shortcuts.length}<div class="chips">
-            {#each shortcuts as t}<button class="chip" onclick={() => onshortcut(t.name)}
-                    ><i style={`background:${t.color}`}></i>{t.name}</button
+            {#each shortcuts as s}<button class="chip" onclick={() => onshortcut(s.name)}
+                    ><PlaceIcon of={{ ...s, detail: s.name }} size={22} />{s.name}</button
                 >{/each}
         </div>{/if}
     <ul role="listbox" aria-label="Places">
         {#if !query}<li class="heading">Places in {title}</li>{/if}
-        {#each results as p, i (p.id)}<li
+        {#each results as { place: p, via }, i (p.id)}<li
                 role="option"
                 aria-selected="false"
                 in:rise={{ delay: Math.min(i, 10) * 30, duration: opening ? 320 : 0 }}
             >
                 <button onclick={() => onselect(p)}>
-                    <span class="icon">{icon[p.kind]}</span>
+                    <PlaceIcon of={p} />
                     <span class="text"
-                        ><b>{p.name}</b><small>{p.detail}{p.building ? ` · ${p.building}` : ""}</small></span
+                        ><b>{p.name}</b><small
+                            >{#if via}<span class="via">{via}</span>{" · "}{/if}{p.detail}{p.building
+                                ? ` · ${p.building}`
+                                : ""}</small
+                        ></span
                     >
                     {#if status(p)}<em class:open={status(p)!.open}>{status(p)!.open ? "Open" : "Closed"}</em>{/if}
                 </button>
@@ -181,16 +182,9 @@
     li button:active {
         background: #f1f5ed;
     }
-    .icon {
-        display: grid;
-        place-items: center;
-        width: 36px;
-        height: 36px;
-        flex-shrink: 0;
-        border-radius: 50%;
-        background: #eef3e8;
-        color: #4f6d47;
-        font-size: 14px;
+    .via {
+        color: #0f6a73;
+        font-weight: 600;
     }
     .text {
         display: flex;

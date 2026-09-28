@@ -1,5 +1,7 @@
 <script lang="ts">
-    import { roomTypes, walkwayAt } from "$lib/model/interiors";
+    import { walkwayAt } from "$lib/model/interiors";
+    import { shortcuts as shortcutsFor } from "$lib/wayfinding/shortcuts";
+    import PlaceIcon from "./PlaceIcon.svelte";
     import type { Point } from "$lib/wayfinding/navigation";
     import {
         nearestOfType,
@@ -35,14 +37,8 @@
               ? from.name
               : `Spot on ${walkwayAt(grid.pieces, from)?.name ?? "the map"}`,
     );
-    // Shortcuts for room types that exist in this layout, e.g. "Toilets".
-    let shortcuts = $derived(
-        roomTypes.filter(
-            (t) =>
-                ["toilet", "reception", "pharmacy", "stairs"].includes(t.type) &&
-                places.some((p) => p.kind === "room" && p.detail === t.name),
-        ),
-    );
+    // Kinds of place in this layout, e.g. "Toilets" or "Parking".
+    let shortcuts = $derived(shortcutsFor(places, 5));
     function nearest(detail: string) {
         to = nearestOfType(grid, places, detail, from);
     }
@@ -90,7 +86,7 @@
         {#each shortcuts as t}<button
                 class="chip"
                 onclick={() => nearest(t.name)}
-                ><i style={`background:${t.color}`}></i>{from ? "Nearest " : ""}{t.name.toLowerCase()}</button
+                ><PlaceIcon of={{ ...t, detail: t.name }} size={16} />{from ? "Nearest " : ""}{t.name.toLowerCase()}</button
             >{/each}
     </div>
     {#if to?.info}<PlaceDetails info={to.info} />{/if}
@@ -172,12 +168,6 @@
     }
     .chip:hover {
         border-color: #9fb394;
-    }
-    .chip i {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        box-shadow: inset 0 0 0 1px #0000001f;
     }
     .chip.active {
         background: #2f7fc4;

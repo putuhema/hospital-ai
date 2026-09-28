@@ -13,7 +13,9 @@ export type RoomType =
   | "lab"
   | "surgery"
   | "stairs"
-  | "storage";
+  | "storage"
+  | "radiology"
+  | "emergency";
 export type RoomAsset = {
   id: number;
   name: string;
@@ -53,6 +55,8 @@ export const roomTypes: {
   { type: "surgery", name: "Operating theatre", w: 3, h: 2, color: "#c6e2e0" },
   { type: "stairs", name: "Stairs & lift", w: 1, h: 2, color: "#d8d6cf" },
   { type: "storage", name: "Storage", w: 1, h: 1, color: "#dcd8cc" },
+  { type: "radiology", name: "Radiology", w: 2, h: 2, color: "#d4d9e6" },
+  { type: "emergency", name: "Emergency", w: 3, h: 2, color: "#ebd0cb" },
 ];
 export const roomType = (type: string) =>
   roomTypes.find((t) => t.type === type) ?? roomTypes[0];

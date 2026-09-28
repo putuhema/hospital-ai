@@ -1,6 +1,8 @@
 import type { Piece } from "../model/layout.ts";
 import { center as centerPoint, footprint, inPolygon, isBuilding, isCorridor, isPath, roomTypes } from "../model/interiors.ts";
 import type { PlaceInfo } from "../model/place-info.ts";
+import { category, type LandmarkCategory } from "../model/categories.ts";
+import { search as searchText } from "./search.ts";
 import {
   crosses,
   distance,
@@ -21,6 +23,8 @@ export type Place = {
   detail: string;
   pieceId?: number;
   roomId?: number;
+  /** A landmark's kind, e.g. parking; `detail` holds its name. */
+  category?: LandmarkCategory;
   point: Point;
   info?: PlaceInfo;
 };
@@ -81,27 +85,17 @@ export function places(pieces: Piece[], network?: WalkingNetwork): Place[] {
         id: `n:${n.id}`,
         name: n.name,
         kind: "landmark",
-        detail: "Landmark",
+        detail: category(n.category).name,
+        ...(n.category && { category: n.category }),
         point: { x: n.x, y: n.y },
         info: n.info,
       });
   return out;
 }
 
-/** Text search over names, building names and room types. */
-export function searchPlaces(list: Place[], query: string): Place[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const haystack = (p: Place) =>
-    `${p.name} ${p.building ?? ""} ${p.detail} ${p.info?.description ?? ""}`.toLowerCase();
-  return list
-    .filter((p) => words.every((w) => haystack(p).includes(w)))
-    .sort(
-      (a, b) =>
-        Number(!a.name.toLowerCase().startsWith(words[0] ?? "")) -
-          Number(!b.name.toLowerCase().startsWith(words[0] ?? "")) ||
-        a.name.localeCompare(b.name),
-    );
-}
+/** Places matching a search, best first; see search.ts. */
+export const searchPlaces = (list: Place[], query: string): Place[] =>
+  searchText(list, query).map((m) => m.place);
 
 export type NavGrid = {
   cols: number;
@@ -453,8 +447,8 @@ export function planRoute(
 }
 
 /**
- * The room of a type (its `detail`, e.g. "Toilet") with the shortest walk from
- * `from`; without a start, the first one.
+ * The room or landmark of a type (its `detail`, e.g. "Toilets" or "Parking")
+ * with the shortest walk from `from`; without a start, the first one.
  */
 export function nearestOfType(
   g: NavGrid,
@@ -462,7 +456,7 @@ export function nearestOfType(
   detail: string,
   from: Place | Point | null,
 ): Place | null {
-  const options = list.filter((p) => p.kind === "room" && p.detail === detail);
+  const options = list.filter((p) => (p.kind === "room" || p.kind === "landmark") && p.detail === detail);
   if (!from) return options[0] ?? null;
   let best: Place | null = null,
     bestMeters = Infinity;

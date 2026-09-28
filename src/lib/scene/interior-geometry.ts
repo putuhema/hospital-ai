@@ -301,5 +301,17 @@ function furnish(box: Box, type: RoomAsset["type"], W: number, D: number, name: 
       shelves(0, back + 0.25, W - 0.3, 0.4);
       if (D > 1.9) shelves(-W / 2 + 0.25, 0.1, 0.4, D - 1.2);
       break;
+    case "radiology":
+      box(name + " scanner table", -0.2, floor + 0.4, -0.1, 0.6, 0.8, Math.min(2, D - 0.8), "#9fb0c8");
+      box(name + " x-ray arm", -0.2, 2.1, -0.1, 0.5, 0.35, 0.5, WHITE, { roughness: 0.3 });
+      box(name + " arm column", -0.2 - 0.45, floor + 1, back + 0.3, 0.12, 2, 0.12, STEEL, { metalness: 0.5 });
+      box(name + " control desk", W / 2 - 0.4, floor + 0.37, D / 2 - 0.6, 0.5, 0.74, 0.8, WOOD);
+      break;
+    case "emergency":
+      bed(-W / 3);
+      bed(0);
+      if (W > 2.6) bed(W / 3);
+      box(name + " crash cart", W / 2 - 0.3, floor + 0.45, D / 2 - 0.5, 0.45, 0.9, 0.4, "#c0463a");
+      break;
   }
 }

@@ -34,6 +34,15 @@
         ></textarea></label
     >
     <label
+        >Other names &amp; doctors<textarea
+            rows="2"
+            placeholder={"One per line, e.g.\nDr. Sari Wijaya\nX-ray\nPoli Anak"}
+            value={info?.keywords?.join("\n") ?? ""}
+            onchange={(e) => set({ keywords: e.currentTarget.value.split("\n").slice(0, 40).map((k) => k.slice(0, 80)) })}
+        ></textarea></label
+    >
+    <p class="hint tight">Visitors who search for these find this place.</p>
+    <label
         >Phone<input
             type="tel"
             maxlength="40"
@@ -94,6 +103,9 @@
         color: #738466;
         line-height: 1.5;
         margin: 0 0 10px;
+    }
+    .hint.tight {
+        margin-top: -5px;
     }
     .hint b {
         color: #3f5a45;
