@@ -136,6 +136,7 @@
         let built = "",
             canvasSize = "",
             routeShown = "",
+            sited = "",
             lastZoom = zoom;
         const ready = () => templates.size === MODEL_KINDS.length;
 
@@ -201,6 +202,13 @@
             if (next !== built && ready()) {
                 built = next;
                 buildPieces();
+                // The map opens on the campus itself, not the empty grounds
+                // around it; again when the layout changes, not on a roof toggle.
+                const layout = JSON.stringify(pieces);
+                if (presentation && layout !== sited) {
+                    sited = layout;
+                    rig.frameSite(new THREE.Box3().setFromObject(buildings), zoom);
+                }
             }
             const object = buildings.children.find((o) => o.userData.pieceId === selected);
             stage.selectedBox.visible = !!object && !presentation;
