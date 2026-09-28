@@ -1,0 +1,19 @@
+/* Template badge and descriptions in the asset library. */
+.template-badge {
+    position: absolute;
+    left: 7px;
+    top: 7px;
+    z-index: 1;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: #344e37;
+    color: white;
+    font-size: 9px;
+}
+.asset small {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}

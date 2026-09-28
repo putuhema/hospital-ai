@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Global styles, in cascade order: later files override earlier ones. */
+@import "../styles/base.css";
+@import "../styles/shell.css";
+@import "../styles/library.css";
+@import "../styles/canvas.css";
+@import "../styles/inspector.css";
+@import "../styles/feedback.css";
+@import "../styles/responsive.css";
+@import "../styles/editor-controls.css";
+@import "../styles/floating-workspace.css";
+@import "../styles/property-sections.css";
+@import "../styles/templates.css";
+@import "../styles/onboarding.css";

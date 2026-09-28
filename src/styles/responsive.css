@@ -1,0 +1,226 @@
+/* Breakpoints for the stacked layout (the floating workspace refines these). */
+@media (min-width: 1600px) {
+    main {
+        grid-template-columns: 280px minmax(300px, 1fr) 290px;
+    }
+    .asset-preview {
+        height: 100px;
+    }
+    .canvas {
+        min-height: 650px;
+    }
+}
+@media (max-width: 1150px) {
+    main {
+        grid-template-columns: 220px minmax(280px, 1fr) 220px;
+        margin: 0 15px;
+    }
+    .library {
+        padding: 18px 13px 0;
+    }
+    .inspector {
+        padding: 20px 13px 0;
+    }
+    .saved {
+        display: none;
+    }
+    .rail {
+        width: 53px;
+    }
+    .project-bar {
+        padding: 22px;
+    }
+    .canvas-status {
+        gap: 8px;
+        padding: 0 8px;
+    }
+    .right-status {
+        display: none !important;
+    }
+    .asset strong {
+        font-size: 9px;
+    }
+    .asset small {
+        font-size: 7px;
+    }
+}
+@media (max-width: 850px) {
+    main {
+        grid-template-columns: 180px minmax(280px, 1fr);
+    }
+    .inspector {
+        grid-column: 1/-1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        padding-bottom: 20px;
+        border-top: 1px solid #e1e5dc;
+    }
+    .inspector > .section-heading,
+    .inspector > .overview,
+    .inspector > .blender-note {
+        display: none;
+    }
+    .selected-heading {
+        margin: 0;
+    }
+    .field-row,
+    .object-actions {
+        margin: 0;
+    }
+    .inspector h3 {
+        margin: 0;
+    }
+    .asset-preview {
+        height: 65px;
+    }
+    .project-title {
+        font-size: 24px;
+        width: 245px;
+    }
+    .tag {
+        display: none;
+    }
+    .help span {
+        display: none;
+    }
+    .project-actions .btn {
+        font-size: 10px;
+        padding: 8px;
+    }
+    .library-tip {
+        padding: 8px;
+    }
+    .library-footer {
+        font-size: 8px;
+    }
+    .canvas {
+        min-height: 590px;
+    }
+}
+@media (max-width: 600px) {
+    .rail {
+        display: none;
+    }
+    .workspace > header {
+        height: 48px;
+        padding: 0 15px;
+    }
+    .project-bar {
+        padding: 17px 15px;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .project-actions {
+        width: 100%;
+        justify-content: flex-end;
+        margin-top: -7px;
+    }
+    .project-bar p {
+        font-size: 11px;
+    }
+    main {
+        margin: 0 8px;
+        grid-template-columns: 133px minmax(200px, 1fr);
+    }
+    .library {
+        padding: 15px 9px 0;
+    }
+    .library .muted {
+        font-size: 9px;
+        line-height: 1.5;
+    }
+    .assets {
+        grid-template-columns: 1fr;
+    }
+    .asset-preview {
+        height: 66px;
+    }
+    .asset-section {
+        font-size: 7px;
+        letter-spacing: 0;
+    }
+    .asset-section span:last-child {
+        display: none;
+    }
+    .tabs {
+        gap: 0;
+        flex-wrap: wrap;
+    }
+    .tabs button {
+        padding: 5px 2px;
+        font-size: 8px;
+    }
+    .library-tip,
+    .library-footer {
+        display: none;
+    }
+    .canvas-title {
+        font-size: 8px;
+        left: 10px;
+    }
+    .canvas-title small {
+        display: none;
+    }
+    .canvas-toolbar {
+        padding: 0 8px;
+    }
+    .tool-group {
+        gap: 1px;
+    }
+    .canvas {
+        min-height: 690px;
+    }
+    .canvas-status {
+        font-size: 7px;
+    }
+    .canvas-status > span:nth-child(2) {
+        display: none;
+    }
+    .canvas-bottom {
+        left: 8px;
+        right: 8px;
+        gap: 4px;
+    }
+    .grid-button {
+        padding: 5px;
+        gap: 4px;
+        font-size: 8px;
+    }
+    .zoom {
+        gap: 0;
+    }
+    .zoom button {
+        width: 20px;
+    }
+    .compass {
+        right: 12px;
+    }
+    .inspector {
+        gap: 14px 20px;
+        padding: 18px;
+    }
+    .inspector > h3 {
+        display: none;
+    }
+}
+@media (max-width: 600px) {
+    .library {
+        max-height: 780px;
+        overflow-y: auto;
+    }
+    .canvas {
+        min-height: 680px;
+    }
+    .drawing-wrap {
+        align-items: flex-start;
+        padding-top: 100px;
+    }
+    .map {
+        margin-top: 0;
+    }
+    .canvas-section {
+        max-height: 780px;
+    }
+}

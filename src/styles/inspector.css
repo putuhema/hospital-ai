@@ -1,0 +1,208 @@
+/* Inspector panel: fields, rotation, actions, overview and the Blender note. */
+.inspector {
+    border-left: 1px solid #e1e5dc;
+    padding: 23px 19px 0;
+    display: flex;
+    flex-direction: column;
+}
+.inspector > .section-heading > span {
+    color: #909b85;
+}
+.selected-heading {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 25px 0 23px;
+}
+.selected-icon {
+    width: 39px;
+    height: 40px;
+    border-radius: 6px;
+    display: grid;
+    place-items: center;
+    color: #4b6955;
+}
+.selected-heading b {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+}
+.selected-heading small {
+    display: block;
+    font-size: 9px;
+    color: #929c87;
+    margin-top: 5px;
+}
+.selected-heading small span {
+    margin: 0 4px;
+}
+.field {
+    display: block;
+    font-size: 10px;
+    color: #89947c;
+}
+.field > input,
+.unit-input {
+    width: 100%;
+    border: 1px solid #e1e5da;
+    border-radius: 4px;
+    background: #fcfdf9;
+    margin-top: 7px;
+    height: 34px;
+}
+.field > input {
+    padding: 8px 10px;
+    color: #4f6145;
+    font-size: 11px;
+}
+h3 {
+    font-size: 11px;
+    font-weight: 600;
+    margin: 0 0 17px;
+    display: flex;
+    justify-content: space-between;
+}
+h3 span {
+    color: #9ba58e;
+    font-size: 15px;
+}
+.field-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.field-row > .field {
+    width: 50%;
+}
+.unit-input {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+}
+.unit-input input {
+    width: 100%;
+    background: none;
+    border: 0;
+    color: #56664d;
+    font-size: 11px;
+    appearance: textfield;
+}
+.unit-input input::-webkit-inner-spin-button {
+    appearance: none;
+}
+.unit-input span {
+    font-size: 9px;
+    color: #a6ae9b;
+}
+.rotation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #8b967e;
+    margin-top: 3px;
+}
+.rotation button {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 9px;
+    border: 1px solid #e3e7dc;
+    border-radius: 4px;
+    color: #607152;
+    font-size: 10px;
+}
+.rotation kbd {
+    margin-left: 10px;
+    font-size: 8px;
+    color: #a2ab97;
+    border: 1px solid #e4e8de;
+    padding: 1px 4px;
+}
+.object-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 23px;
+}
+.object-actions .btn:first-child {
+    flex: 1;
+    font-size: 10px;
+}
+.delete {
+    color: #a7867d;
+    padding: 9px 12px;
+}
+.overview {
+    margin-top: 28px;
+    border-top: 1px solid #e5e9df;
+    padding-top: 22px;
+}
+.overview .section-heading {
+    margin-bottom: 18px;
+}
+.overview h3 {
+    margin: 0;
+}
+.overview .section-heading svg {
+    color: #8d9b7e;
+}
+.overview > div:not(.section-heading):not(.coverage) {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 13px;
+    color: #939d87;
+    font-size: 10px;
+}
+.overview b {
+    color: #5c6d4e;
+    font-size: 11px;
+    font-weight: 500;
+}
+.overview b small {
+    font-size: 9px;
+    color: #949e86;
+}
+.coverage {
+    height: 4px;
+    background: #edf0e6;
+    border-radius: 4px;
+    margin-top: 19px;
+    overflow: hidden;
+}
+.coverage span {
+    height: 100%;
+    background: #a1b58a;
+    display: block;
+    border-radius: 4px;
+}
+.overview p {
+    font-size: 9px;
+    color: #a3ad95;
+    margin: 8px 0 17px;
+}
+.blender-note {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    border-top: 1px solid #e5e9df;
+    margin-top: auto;
+    padding: 15px 0;
+    color: #8c997c;
+}
+.blender-logo {
+    font-size: 24px;
+    color: #879971;
+}
+.blender-note b {
+    font-size: 8px;
+    font-weight: 550;
+    color: #6e805c;
+}
+.blender-note p {
+    font-size: 8px;
+    margin: 4px 0 0;
+}
+.blender-note button {
+    margin-left: auto;
+    font-size: 17px;
+}

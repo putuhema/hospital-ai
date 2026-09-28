@@ -1,0 +1,109 @@
+/* Collapsible property sections */
+.inspector details.section {
+    border-top: 1px solid #e9ece3;
+    padding: 4px 0;
+}
+.inspector details.section > summary,
+.inspector details.sub > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #33473a;
+    cursor: pointer;
+    list-style: none;
+}
+.inspector details > summary::-webkit-details-marker {
+    display: none;
+}
+.inspector details.section > summary::after,
+.inspector details.sub > summary::after {
+    content: "›";
+    margin-left: auto;
+    font-size: 16px;
+    color: #9ba58e;
+    transition: transform 0.15s ease;
+}
+.inspector details[open] > summary::after {
+    transform: rotate(90deg);
+}
+.inspector details.section[open] {
+    padding-bottom: 14px;
+}
+.inspector details.sub {
+    margin-top: 12px;
+    border-top: 1px dashed #e1e6da;
+}
+.inspector details.sub > summary {
+    font-weight: 500;
+    font-size: 11px;
+}
+.inspector details .rooms-editor,
+.inspector details .entrance-editor {
+    border: 0;
+    margin: 0;
+    padding: 0;
+}
+.badge {
+    font-size: 10px;
+    font-weight: 500;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #edf2e7;
+    color: #5a7050;
+    text-align: center;
+}
+.inspector .hint {
+    font-size: 10px;
+    line-height: 1.5;
+    color: #8c967f;
+    margin: -2px 0 0;
+}
+.style-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: #62745a;
+}
+.style-row .segmented {
+    display: flex;
+    border: 1px solid #dce3d4;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.style-row .segmented button {
+    padding: 6px 12px;
+    font-size: 11px;
+}
+.style-row .segmented button + button {
+    border-left: 1px solid #dce3d4;
+}
+.style-row .segmented .active {
+    background: #3f6b4e;
+    color: white;
+}
+.stepper {
+    display: flex;
+    align-items: center;
+    border: 1px solid #dce3d4;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.stepper button {
+    width: 30px;
+    height: 28px;
+    font-size: 14px;
+}
+.stepper b {
+    min-width: 26px;
+    text-align: center;
+    font-size: 12px;
+}
+.inspector .field {
+    margin-bottom: 8px;
+}

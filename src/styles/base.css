@@ -1,0 +1,48 @@
+/* Base: typography, box sizing and resets for buttons, links and inputs. */
+:root {
+    font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+    color: #29372d;
+    background: #f8f9f6;
+    font-synthesis: none;
+    font-size: 13px;
+}
+* {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+}
+button,
+input {
+    font: inherit;
+}
+button {
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        color 0.15s;
+}
+button:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid #567b46;
+    outline-offset: 3px;
+}
+button {
+    border: 0;
+    background: none;
+    color: inherit;
+}
+input {
+    min-width: 0;
+    outline: none;
+}
+input:focus {
+    border-color: #6a8663 !important;
+}
+button:hover {
+    background: #edf0e8;
+}

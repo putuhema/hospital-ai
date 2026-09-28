@@ -1,0 +1,327 @@
+/* Floating editor workspace: panels never participate in canvas sizing. */
+.app-shell {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+}
+.app-shell .workspace {
+    height: 100%;
+    min-height: 0;
+}
+.app-shell .rail {
+    padding-top: 18px;
+}
+.app-shell .workspace > header,
+.app-shell .project-bar {
+    flex-shrink: 0;
+}
+.app-shell .project-bar {
+    padding: 18px 26px;
+}
+.app-shell main {
+    position: relative;
+    display: block;
+    flex: 1;
+    min-height: 0;
+    margin: 0 14px 14px;
+    isolation: isolate;
+    border: 1px solid #dce3d5;
+    border-radius: 16px;
+    background: #edf0e7;
+    overflow: hidden;
+}
+.app-shell .canvas-section {
+    position: absolute;
+    inset: 0;
+    display: block;
+    max-height: none;
+}
+.app-shell .canvas {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    height: 100%;
+}
+.app-shell .canvas-toolbar {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 6;
+    height: 48px;
+    width: max-content;
+    max-width: calc(100% - 24px);
+    gap: 12px;
+    padding: 7px 10px;
+    border: 1px solid #ffffff;
+    border-radius: 12px;
+    background: #fffffff2;
+    box-shadow: 0 8px 30px #2b402417;
+    backdrop-filter: blur(16px);
+}
+.app-shell .canvas-toolbar .btn {
+    padding: 7px 10px;
+    border: 0;
+    background: transparent;
+}
+.app-shell .panel-toggle {
+    font-size: 11px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+.app-shell .panel-toggle.active,
+.app-shell .canvas-toolbar .tool-active {
+    background: #e7eddf;
+    color: #3e6038;
+}
+.app-shell .library,
+.app-shell .inspector {
+    position: absolute;
+    z-index: 5;
+    top: 80px;
+    bottom: 76px;
+    width: 248px;
+    display: block;
+    min-height: 0;
+    max-height: none;
+    padding: 0 18px 18px;
+    border: 1px solid #ffffff;
+    border-radius: 14px;
+    background: #fffffff2;
+    box-shadow: 0 10px 36px #2b402414;
+    backdrop-filter: blur(18px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: #bdcab2 transparent;
+}
+.app-shell .library {
+    left: 16px;
+}
+.app-shell .inspector {
+    right: 16px;
+    width: 272px;
+}
+.app-shell aside[hidden] {
+    display: none;
+}
+.app-shell .library > .section-heading,
+.app-shell .inspector > .section-heading {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    margin: 0 -18px;
+    padding: 18px;
+    background: #fcfdf9;
+    border-bottom: 1px solid #e8ece2;
+}
+.app-shell .library > .muted {
+    margin-top: 14px;
+}
+.app-shell .inspector > .selected-heading {
+    margin: 20px 0;
+}
+.app-shell .inspector > h3 {
+    display: flex;
+    margin: 0 0 17px;
+}
+.app-shell .inspector > .field-row {
+    margin-bottom: 14px;
+}
+.app-shell .inspector > .object-actions {
+    margin-top: 23px;
+}
+.app-shell .inspector > .overview {
+    display: block;
+}
+.app-shell .inspector > .blender-note {
+    display: flex;
+    margin-top: 20px;
+}
+.app-shell .library .assets {
+    grid-template-columns: 1fr 1fr;
+}
+.app-shell .library .asset-preview {
+    height: 83px;
+}
+.app-shell .library .asset strong {
+    font-size: 10px;
+}
+.app-shell .library .asset small {
+    font-size: 8px;
+}
+.app-shell .library-footer {
+    margin-top: 18px;
+    margin-bottom: -18px;
+}
+.app-shell .canvas-title {
+    top: 82px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+.app-shell .canvas-title small {
+    display: none;
+}
+.app-shell .canvas .source-link {
+    display: none;
+}
+.app-shell .canvas .scene-options {
+    top: 108px;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.app-shell .canvas .orbit-help {
+    bottom: 78px;
+    font-size: 10px;
+}
+.app-shell .compass {
+    top: auto;
+    bottom: 20px;
+    right: 24px;
+}
+.app-shell .canvas-bottom {
+    bottom: 18px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    gap: 10px;
+    width: max-content;
+}
+.app-shell .canvas-bottom .grid-button,
+.app-shell .canvas-bottom .zoom {
+    border-radius: 9px;
+    padding: 7px;
+    background: #fffffff2;
+    box-shadow: 0 6px 20px #2b402412;
+}
+.app-shell .canvas-status {
+    position: absolute;
+    bottom: 22px;
+    left: 22px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    pointer-events: none;
+}
+.app-shell .canvas-status > span:not(:first-child) {
+    display: none;
+}
+.app-shell .drawing-wrap {
+    padding: 0;
+    align-items: center;
+}
+.app-shell .canvas-settings {
+    flex-shrink: 0;
+    max-height: 25dvh;
+    overflow: auto;
+}
+@media (max-width: 1150px) {
+    .app-shell .library {
+        width: 220px;
+    }
+    .app-shell .inspector {
+        width: 248px;
+    }
+    .app-shell .canvas-toolbar {
+        gap: 6px;
+    }
+}
+@media (max-width: 900px) {
+    .app-shell .library,
+    .app-shell .inspector {
+        width: 272px;
+        bottom: 76px;
+    }
+    .app-shell .canvas-title {
+        display: none;
+    }
+    .app-shell .canvas .scene-options {
+        top: 80px;
+    }
+    .app-shell .canvas-status {
+        display: none;
+    }
+    .app-shell .library-tip {
+        display: flex;
+    }
+    .app-shell .library-footer {
+        display: flex;
+    }
+}
+@media (max-width: 600px) {
+    .app-shell .project-bar {
+        padding: 12px 14px;
+        gap: 8px;
+    }
+    .app-shell .project-bar p {
+        display: none;
+    }
+    .app-shell .project-title {
+        font-size: 22px;
+    }
+    .app-shell .project-actions {
+        margin: 0;
+        justify-content: flex-start;
+        gap: 6px;
+    }
+    .app-shell main {
+        margin: 0 6px 6px;
+        border-radius: 12px;
+    }
+    .app-shell .canvas-toolbar {
+        top: 10px;
+        gap: 3px;
+        padding: 5px;
+        height: 44px;
+        max-width: calc(100% - 12px);
+    }
+    .app-shell .panel-toggle {
+        padding: 8px 6px;
+        font-size: 10px;
+    }
+    .app-shell .canvas-toolbar .btn {
+        font-size: 10px;
+        padding: 7px 5px;
+    }
+    .app-shell .tool-group button {
+        width: 25px;
+    }
+    .app-shell .tool-group .divider {
+        margin: 0 1px;
+    }
+    .app-shell .library,
+    .app-shell .inspector {
+        top: 64px;
+        left: 10px;
+        right: auto;
+        width: min(280px, calc(100% - 20px));
+        bottom: 72px;
+    }
+    .app-shell .inspector {
+        left: auto;
+        right: 10px;
+    }
+    .app-shell .canvas .scene-options {
+        top: 68px;
+    }
+    .app-shell .canvas .orbit-help {
+        display: none;
+    }
+    .app-shell .compass {
+        right: 10px;
+        bottom: 18px;
+    }
+    .app-shell .canvas-bottom {
+        bottom: 14px;
+    }
+    .app-shell .canvas-settings {
+        margin: 0 8px 8px;
+    }
+}

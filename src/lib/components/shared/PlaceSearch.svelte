@@ -1,0 +1,198 @@
+<script lang="ts">
+    import { searchPlaces, type Place } from "$lib/wayfinding/routing";
+    let {
+        places,
+        value,
+        label,
+        placeholder,
+        marker,
+        onselect,
+    }: {
+        places: Place[];
+        /** Text shown when not searching, e.g. the chosen place's name. */
+        value: string;
+        label: string;
+        placeholder: string;
+        marker: "start" | "end";
+        onselect: (place: Place) => void;
+    } = $props();
+    let query = $state(""),
+        open = $state(false),
+        highlighted = $state(0),
+        input: HTMLInputElement;
+    const id = `place-${Math.random().toString(36).slice(2)}`;
+    let results = $derived(searchPlaces(places, query).slice(0, 40));
+    function choose(p: Place) {
+        onselect(p);
+        query = "";
+        open = false;
+        input.blur();
+    }
+    function key(e: KeyboardEvent) {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            open = true;
+            const n = results.length;
+            if (n) highlighted = (highlighted + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+        } else if (e.key === "Enter" && open && results[highlighted]) {
+            e.preventDefault();
+            choose(results[highlighted]);
+        } else if (e.key === "Escape") {
+            open = false;
+            query = "";
+        }
+    }
+    const icon: Record<Place["kind"], string> = {
+        building: "▣",
+        room: "▢",
+        listed: "▢",
+        landmark: "◆",
+    };
+</script>
+
+<div class="place-search">
+    <span class={`marker ${marker}`} aria-hidden="true"></span>
+    <input
+        bind:this={input}
+        role="combobox"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls={id}
+        aria-autocomplete="list"
+        aria-activedescendant={open && results[highlighted]
+            ? `${id}-${highlighted}`
+            : undefined}
+        placeholder={value || placeholder}
+        class:filled={!!value}
+        bind:value={query}
+        onfocus={() => {
+            open = true;
+            highlighted = 0;
+        }}
+        oninput={() => {
+            open = true;
+            highlighted = 0;
+        }}
+        onblur={() => setTimeout(() => (open = false), 120)}
+        onkeydown={key}
+    />
+    {#if open}<ul id={id} role="listbox" aria-label={label}>
+            {#each results as p, i}<li
+                    id={`${id}-${i}`}
+                    role="option"
+                    aria-selected={i === highlighted}
+                    class:highlighted={i === highlighted}
+                    onpointerdown={(e) => {
+                        e.preventDefault();
+                        choose(p);
+                    }}
+                    onpointerenter={() => (highlighted = i)}
+                >
+                    <span class="icon">{icon[p.kind]}</span>
+                    <span class="text"
+                        ><b>{p.name}</b><small
+                            >{p.detail}{p.building ? ` · ${p.building}` : ""}</small
+                        ></span
+                    >
+                </li>{:else}<li class="none">
+                    {places.length
+                        ? "No matching places"
+                        : "Add buildings and rooms in the editor first"}
+                </li>{/each}
+        </ul>{/if}
+</div>
+
+<style>
+    .place-search {
+        position: relative;
+    }
+    .marker {
+        position: absolute;
+        left: 13px;
+        top: 50%;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        transform: translateY(-50%);
+        z-index: 1;
+    }
+    .marker.start {
+        background: #2f7fc4;
+        box-shadow: 0 0 0 3px #d7e8f6;
+    }
+    .marker.end {
+        background: #d24b3b;
+        border-radius: 50% 50% 50% 0;
+        transform: translateY(-60%) rotate(-45deg);
+    }
+    input {
+        width: 100%;
+        padding: 12px 12px 12px 34px;
+        border: 1px solid #d3ddca;
+        border-radius: 10px;
+        background: white;
+        font: inherit;
+        font-size: 13px;
+        color: #243d2c;
+    }
+    input.filled::placeholder {
+        color: #243d2c;
+        font-weight: 600;
+    }
+    input:focus {
+        outline: 2px solid #4f7d5c;
+        outline-offset: 0;
+        border-color: transparent;
+    }
+    ul {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 4px);
+        z-index: 20;
+        max-height: 290px;
+        overflow: auto;
+        margin: 0;
+        padding: 5px;
+        list-style: none;
+        background: white;
+        border: 1px solid #d3ddca;
+        border-radius: 10px;
+        box-shadow: 0 12px 34px #1f35261f;
+    }
+    li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 9px;
+        border-radius: 7px;
+        cursor: pointer;
+    }
+    li.highlighted {
+        background: #edf3e7;
+    }
+    .icon {
+        color: #6d8a63;
+        width: 14px;
+        text-align: center;
+    }
+    .text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    b {
+        font-size: 13px;
+        font-weight: 600;
+        color: #243d2c;
+    }
+    small {
+        font-size: 11px;
+        color: #7b8c70;
+    }
+    .none {
+        font-size: 12px;
+        color: #7b8c70;
+        cursor: default;
+    }
+</style>
