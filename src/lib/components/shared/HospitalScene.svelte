@@ -9,6 +9,7 @@
     import { createCameraRig } from "$lib/scene/camera-rig";
     import { createStage } from "$lib/scene/stage";
     import { createRouteOverlay } from "$lib/scene/route-overlay";
+    import { createHighlight, highlightShape, type HighlightTarget } from "$lib/scene/highlight";
     import { createLabel, createDeclutter } from "$lib/scene/labels";
     import { loadTemplates, MODEL_KINDS, pieceModel } from "$lib/scene/models";
     import { attachPointer, type Hover } from "$lib/scene/pointer";
@@ -16,6 +17,7 @@
     import { defaultPrefs, loadPrefs } from "$lib/scene/display-prefs";
     import SceneOptions from "./SceneOptions.svelte";
     import SceneTooltip from "./SceneTooltip.svelte";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let {
         presentation = false,
         pan = false,
@@ -32,6 +34,7 @@
         onerror,
         registerExport,
         route = null,
+        highlight = null,
         labels = true,
         insetLeft = 0,
         insetBottom = 0,
@@ -53,12 +56,15 @@
         registerExport: (fn: () => Promise<void>) => void;
         /** Walking route in tile coordinates, drawn on the ground floor. */
         route?: Point[] | null;
+        /** A place to pick out, e.g. the one the assistant is talking about; hidden while a route shows. */
+        highlight?: HighlightTarget | null;
         labels?: boolean;
         /** Pixels on the left covered by an overlay panel; the view centres in the rest. */
         insetLeft?: number;
         /** Pixels at the bottom covered by a sheet; the campus rises clear of it. */
         insetBottom?: number;
     } = $props();
+    const { t } = useLocale();
     let cutaway = $state(false),
         overhead = $state(false);
     let prefs = $state(defaultPrefs());
@@ -67,8 +73,11 @@
     });
     let buildingNames = $derived(labels && prefs.buildings),
         roomNames = $derived(labels && prefs.rooms);
-    // A route runs indoors, so roofs come off while one is shown.
-    let inside = $derived(cutaway || !!route?.length);
+    // Shown only without a route: the route's pin marks the destination then.
+    let focus = $derived(route?.length ? null : highlight);
+    let focusShape = $derived(focus ? highlightShape(pieces, focus) : null);
+    // A route runs indoors, and a highlighted room is inside, so roofs come off.
+    let inside = $derived(cutaway || !!route?.length || !!focusShape?.room);
     let hover = $state<Hover | null>(null);
     let hoveredPiece = $derived(pieces.find((p) => p.id === hover?.id));
     let hoveredRoom = $derived(
@@ -83,6 +92,7 @@
         overhead;
         inside;
         route;
+        focusShape;
         buildingNames;
         roomNames;
         insetLeft;
@@ -105,7 +115,7 @@
         } catch {
             failed = true;
             loading = false;
-            onerror("WebGL unavailable. Use the 2D view on this device.");
+            onerror(t("webglUnavailable"));
             return;
         }
         renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -125,8 +135,9 @@
         const stage = createStage(scene, presentation);
         const buildings = new THREE.Group(),
             labelGroup = new THREE.Group(),
-            overlay = createRouteOverlay();
-        scene.add(buildings, labelGroup, overlay.group);
+            overlay = createRouteOverlay(),
+            marker = createHighlight();
+        scene.add(buildings, labelGroup, overlay.group, marker.group);
         const declutter = createDeclutter();
 
         let templates = new Map<string, THREE.Group>(),
@@ -136,6 +147,7 @@
         let built = "",
             canvasSize = "",
             routeShown = "",
+            focusShown = "",
             sited = "",
             lastZoom = zoom;
         const ready = () => templates.size === MODEL_KINDS.length;
@@ -193,13 +205,9 @@
                 rig.zoomBy(lastZoom / zoom);
                 lastZoom = zoom;
             }
-            const nextRoute = JSON.stringify(route ?? null);
-            if (nextRoute !== routeShown) {
-                routeShown = nextRoute;
-                rig.frameRoute(overlay.show(route));
-            }
             const next = JSON.stringify([pieces, inside, buildingNames, roomNames]);
-            if (next !== built && ready()) {
+            const rebuilt = next !== built && ready();
+            if (rebuilt) {
                 built = next;
                 buildPieces();
                 // The map opens on the canvas, filling the view, and stays
@@ -211,6 +219,20 @@
                         zoom,
                     );
                 }
+            }
+            // The camera frames the route, or else the highlighted place.
+            const nextRoute = JSON.stringify(route ?? null),
+                nextFocus = JSON.stringify(focusShape);
+            if (nextRoute !== routeShown || nextFocus !== focusShown || (rebuilt && focusShape)) {
+                const moved = nextRoute !== routeShown || nextFocus !== focusShown;
+                routeShown = nextRoute;
+                focusShown = nextFocus;
+                const routeBox = overlay.show(route);
+                // The pin floats over the roof, or with the roofs off, above the building's name.
+                const piece = buildings.children.find((o) => o.userData.pieceId === focus?.pieceId);
+                const top = !focusShape ? 0 : focusShape.room || inside ? 5 : piece ? new THREE.Box3().setFromObject(piece).max.y + 0.5 : 1;
+                const focusBox = marker.show(focusShape, top);
+                if (moved) rig.frameRoute(routeBox ?? focusBox, routeBox ? 8 : 3);
             }
             const object = buildings.children.find((o) => o.userData.pieceId === selected);
             stage.selectedBox.visible = !!object && !presentation;
@@ -229,7 +251,7 @@
                 if (destroyed) return;
                 loading = false;
                 failed = true;
-                onerror("Could not load the Blender models. Please reload.");
+                onerror(t("modelsFailed"));
             });
 
         const detachPointer = attachPointer({
@@ -278,6 +300,7 @@
         function animate(time = 0) {
             frame = requestAnimationFrame(animate);
             overlay.animate(time);
+            marker.animate(time);
             scenery?.animate(time, camera, rig.focusDistance());
             declutter(labelGroup, camera, dom.clientWidth, dom.clientHeight, time);
             rig.tick();
@@ -297,6 +320,7 @@
             controls.dispose();
             clearBuildings();
             overlay.dispose();
+            marker.dispose();
             scenery?.dispose();
             // What's left: the stage's meshes and lines, and the templates.
             const geometries = new Set<THREE.BufferGeometry>();
@@ -319,9 +343,9 @@
     });
 </script>
 
-<div class="real-scene" bind:this={host} aria-label="Interactive 3D hospital scene">
-    {#if loading}<div class="scene-message">Loading Blender models…</div>{/if}
-    {#if failed}<div class="scene-message">3D could not load. Switch to 2D or reload.</div>{/if}
+<div class="real-scene" bind:this={host} aria-label={t("scene3d")}>
+    {#if loading}<div class="scene-message">{t("loadingModels")}</div>{/if}
+    {#if failed}<div class="scene-message">{t("sceneFailed")}</div>{/if}
     {#if prefs.info && hover && hoveredPiece && isBuilding(hoveredPiece)}<SceneTooltip
             piece={hoveredPiece}
             room={hoveredRoom}
@@ -330,11 +354,7 @@
         />{/if}
     <SceneOptions bind:prefs bind:cutaway bind:overhead routeShown={!!route?.length} {presentation} />
     <div class="orbit-help">
-        {pan
-            ? "Drag to pan"
-            : onmove
-              ? "Drag buildings to move · Drag background to orbit"
-              : "Drag to explore"} · Scroll to zoom · Right-drag to pan
+        {t(pan ? "dragToPan" : onmove ? "dragBuildings" : "dragToExplore")} · {t("zoomHelp")}
     </div>
     {#if !presentation}<a class="source-link" href="/models/hospital-assets.blend" download
             >↓ Blender source</a

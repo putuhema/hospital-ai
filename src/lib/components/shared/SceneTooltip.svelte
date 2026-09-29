@@ -1,6 +1,7 @@
 <script lang="ts">
     import { roomType, type RoomAsset } from "$lib/model/interiors";
     import type { Piece } from "$lib/model/layout";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let {
         piece,
         room,
@@ -13,20 +14,21 @@
         x: number;
         y: number;
     } = $props();
+    const locale = useLocale();
 </script>
 
 <div class="room-tooltip" style={`left:${x}px;top:${y}px`} role="tooltip">
     <strong>{room?.name ?? piece.name}</strong>{#if room}<p>
-            {roomType(room.type).name}
+            {locale.type(roomType(room.type).name)}
         </p>
         <div>{room.w * 2} × {room.h * 2} m · {room.w * room.h * 4} m²</div>
         <small>{piece.name}</small>{:else}<p>
-            {(piece.rooms?.length ?? 0) + (piece.roomAssets?.length ?? 0)} rooms
+            {locale.t("roomCount", { n: (piece.rooms?.length ?? 0) + (piece.roomAssets?.length ?? 0) })}
         </p>
         {#each piece.roomAssets ?? [] as r}<div>{r.name}</div>{/each}{#each piece.rooms ?? [] as r}<div>
                 {r}
             </div>{/each}{#if !piece.rooms?.length && !piece.roomAssets?.length}<small
-                >No rooms added yet</small
+                >{locale.t("noRoomsYet")}</small
             >{/if}{/if}
 </div>
 

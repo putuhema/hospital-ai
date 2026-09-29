@@ -37,6 +37,10 @@ The editor's **Publish** menu stores the layout in [Convex](https://convex.dev) 
 
 The device that first publishes keeps the slug and a secret key in `localStorage`; the server stores only the key's hash, so only that browser can update or take the map offline (*Take the map offline*). The backend is `src/convex/` (a `maps` table; `maps.get`, `maps.publish`, `maps.unpublish`), and it validates layouts with the same `parseLayout` the app uses.
 
+### Hospital information
+
+**Hospital info** in the editor (or the Properties panel with nothing selected) holds general questions the map can't answer: visiting rules, BPJS and payment, registration, the emergency number. They are saved and published with the layout (`faq` in the layout file, `src/lib/model/faq.ts`). Visitors find them under *Hospital information*: in the side panel on desktop, and in the ••• menu on phones. Questions without an answer stay hidden, and phone numbers in answers can be tapped to call.
+
 ### "You are here" QR signs
 
 **Publish → Print "You are here" QR signs** opens `/editor/signs`: one A4 sign per spot, with the spot's name, a plan with a *You are here* marker, and a QR code to `/m/<slug>?from=<spot>`, so visitors who scan it only choose where they're going. Landmarks, reception desks, waiting areas and stairs are suggested (every building when there are none); tick any other room or building. Signs are built from the *published* layout, which is what phones open, and the chosen spots are remembered per map (`src/lib/signs.ts`).
@@ -69,6 +73,9 @@ The corridor GLBs now only supply materials: corridors, garden paths and L-shape
 - `src/lib/editor/` — editing rules (`operations.ts`), JSON/OBJ export (`export.ts`) and undo history.
 - `src/lib/model/` — the layout data, assets and templates, and room/door geometry.
 - `src/lib/wayfinding/` — walls and doors (`navigation.ts`) and grid routing with turn-by-turn steps (`routing.ts`).
+- `src/lib/assistant/tools.ts` — the planned chat assistant's tools, as plain code for now: `search_places`, `get_place_details` (with open-now), `find_nearest`, `get_directions` and `show_on_map`, with their Claude tool definitions and `runTool`, which checks the input. They answer from the published layout and return JSON, with problems as `{ error }`. `cards.ts` and `src/lib/components/assistant/MapCard.svelte` turn a `show_on_map` result into a chat card ("Laboratory · Open now · until 16:00 · Show on map") that links to `?to=…` or `?from=…&to=…`; the map follows such links on the page as well as on load.
+- `src/lib/assistant/chat.ts`, `chat.svelte.ts` and `src/lib/components/assistant/ChatPanel.svelte` — the chat: **Ask** beside the map on desktop, a sheet over it on phones, with suggested questions from the map and replies written out as they arrive. Replies come from a `Replier` (a stream of text and cards); for now `cannedReplier` answers from the tools and the hospital information without a model, and the chat server route will replace it. While the chat is open, the place its latest answer is about is highlighted on the 3D map (`src/lib/scene/highlight.ts`: a pulsing outline on its footprint or room, with a pin) and the camera moves to it; otherwise the chosen destination is, until a route shows.
+- `src/lib/i18n/` — the visitor map's languages: Indonesian first, English one tap away (the switch is remembered per device). `messages.ts` holds every visitor-facing string in both, `places.ts` the Indonesian names of kinds of place (Apotek, Parkir, IGD…), and `locale.svelte.ts` gives the map's components their language; the editor has none and stays English. Opening hours (`place-info.ts`) and walking steps (`stepText` in `routing.ts`) are written in either; the canned chat replies answer in the language of the question.
 - `src/lib/scene/` — the Three.js scene in parts: camera rig, stage (lights, ground, grid), model loading, generated interiors, labels, route overlay, pointer handling and the map's scenery. `src/lib/components/shared/HospitalScene.svelte` puts them together.
 - `src/styles/` — global styles, imported in cascade order by `src/routes/layout.css`.
 

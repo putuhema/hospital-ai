@@ -5,6 +5,13 @@
     import PlaceDetails from "$lib/components/shared/PlaceDetails.svelte";
     import BottomSheet from "./BottomSheet.svelte";
     import SearchScreen from "./SearchScreen.svelte";
+    import InfoScreen from "./InfoScreen.svelte";
+    import { useLocale } from "$lib/i18n/locale.svelte";
+    import ChatPanel from "$lib/components/assistant/ChatPanel.svelte";
+    import type { Chat } from "$lib/assistant/chat.svelte";
+    import type { ReplyContext } from "$lib/assistant/chat";
+    import { fly, fade } from "svelte/transition";
+    import type { FaqEntry } from "$lib/model/faq";
     import { walkwayAt } from "$lib/model/interiors";
     import { shortcuts as shortcutsFor } from "$lib/wayfinding/shortcuts";
     import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
@@ -13,14 +20,21 @@
     import {
         nearestOfType,
         stepGlyph,
+        stepText,
         walkMinutes,
         type NavGrid,
         type Place,
         type Route,
     } from "$lib/wayfinding/routing";
-    import { pop, rise, unblur } from "$lib/motion";
+    import { easeDrawer, motion, pop, rise, unblur } from "$lib/motion";
     let {
         title,
+        faq,
+        chat,
+        suggestions,
+        chatContext,
+        chatOpen = $bindable(false),
+        chatInset = $bindable(0),
         places,
         grid,
         route,
@@ -35,6 +49,17 @@
         ondownload,
     }: {
         title: string;
+        /** Hospital information: general questions for visitors. */
+        faq: FaqEntry[];
+        chat: Chat;
+        /** Questions to start the chat with. */
+        suggestions: string[];
+        /** Where the visitor is, for the assistant. */
+        chatContext: () => ReplyContext;
+        /** The chat sheet is open. */
+        chatOpen?: boolean;
+        /** Pixels of the map the chat sheet covers, so the map frames what it highlights above it. */
+        chatInset?: number;
         places: Place[];
         grid: NavGrid;
         route: Route | null;
@@ -51,11 +76,17 @@
         ondownload: () => void;
     } = $props();
 
+    const locale = useLocale();
     let routing = $state(false),
         searching = $state(false),
+        infoOpen = $state(false),
         menuOpen = $state(false),
         snap = $state<"peek" | "full">("peek");
     let sheetOpen = $derived(!!to || routing);
+    let chatHeight = $state(0);
+    $effect(() => {
+        chatInset = chatOpen ? chatHeight : 0;
+    });
     // Stop picking a start when directions close.
     $effect(() => {
         if (!routing) picking = false;
@@ -64,14 +95,24 @@
     // Room types and landmark kinds in this layout, most useful first.
     let shortcuts = $derived(shortcutsFor(places));
     let fromName = $derived(
-        !from ? "" : "id" in from ? from.name : `Spot on ${walkwayAt(grid.pieces, from)?.name ?? "the map"}`,
+        !from
+            ? ""
+            : "id" in from
+              ? from.name
+              : locale.t("spotOn", { name: walkwayAt(grid.pieces, from)?.name ?? locale.t("theMap") }),
     );
-    let status = $derived(to?.info ? hoursStatus(to.info, new Date()) : null);
+    let status = $derived(to?.info ? hoursStatus(to.info, new Date(), locale.lang) : null);
 
     onMount(() => {
         // A shared link with both ends opens straight on the directions.
         if (from && to) routing = true;
     });
+    /** The map was given a place or route to show: bring it up in the sheet. */
+    export function show(route: boolean) {
+        routing = route;
+        snap = "peek";
+        searching = infoOpen = menuOpen = layersOpen = chatOpen = false;
+    }
     function goTo(place: Place | null) {
         if (!place) return;
         to = place;
@@ -90,6 +131,8 @@
 <svelte:window
     onkeydown={(e) => {
         if (e.key !== "Escape" || searching) return;
+        if (infoOpen) return void (infoOpen = false);
+        if (chatOpen) return void (chatOpen = false);
         if (menuOpen || layersOpen) menuOpen = layersOpen = false;
         else if (sheetOpen && !picking) closeSheet();
     }}
@@ -101,14 +144,14 @@
             <div class="search-pill">
                 <button class="pill-main" onclick={() => (searching = true)}>
                     <Logo size={24} title="" />
-                    {#key to?.id}<span class:filled={!!to} in:unblur>{to?.name ?? `Search ${title}`}</span>{/key}
+                    {#key to?.id}<span class:filled={!!to} in:unblur>{to?.name ?? locale.t("searchTitle", { title })}</span>{/key}
                 </button>
-                {#if to}<button class="round small" aria-label="Clear destination" onclick={() => (to = null)}
+                {#if to}<button class="round small" aria-label={locale.t("clearDestination")} onclick={() => (to = null)}
                         >×</button
                     >{/if}
                 <button
                     class="round avatar"
-                    aria-label="More options"
+                    aria-label={locale.t("moreOptions")}
                     aria-expanded={menuOpen}
                     onclick={() => ((menuOpen = !menuOpen), (layersOpen = false))}
                 >
@@ -119,13 +162,13 @@
             </div>
             {#if !to && shortcuts.length}<div class="chips" transition:rise={{ y: -6, duration: 220 }}>
                     {#each shortcuts as t}<button class="chip" onclick={() => nearest(t.name)}
-                            ><PlaceIcon of={{ ...t, detail: t.name }} size={22} />{from ? "Nearest " : ""}{t.name.toLowerCase()}</button
+                            ><PlaceIcon of={{ ...t, detail: t.name }} size={22} />{locale.shortcut(t.name, !!from)}</button
                         >{/each}
                 </div>{/if}
         </header>
         <button
             class="fab layers"
-            aria-label="Map view"
+            aria-label={locale.t("mapView")}
             aria-expanded={layersOpen}
             onclick={() => ((layersOpen = !layersOpen), (menuOpen = false))}
             transition:pop
@@ -138,26 +181,45 @@
 
     {#if menuOpen || layersOpen}<button
             class="scrim"
-            aria-label="Close"
+            aria-label={locale.t("close")}
             onclick={() => (menuOpen = layersOpen = false)}
         ></button>{/if}
     {#if menuOpen}<div class="popover menu" role="menu" transition:pop>
-            {#if editable}<a role="menuitem" href="/editor">Open editor</a>{/if}
-            <button role="menuitem" onclick={() => ((menuOpen = false), onshare())}>Share this map</button>
-            <button role="menuitem" onclick={() => ((menuOpen = false), ondownload())}>Export 3D model (.glb)</button>
+            {#if editable}<a role="menuitem" href="/editor">{locale.t("openEditor")}</a>{/if}
+            {#if faq.length}<button role="menuitem" onclick={() => ((menuOpen = false), (infoOpen = true))}
+                    >{locale.t("hospitalInfo")}</button
+                >{/if}
+            <button role="menuitem" onclick={() => ((menuOpen = false), onshare())}>{locale.t("shareMap")}</button>
+            <button role="menuitem" onclick={() => ((menuOpen = false), ondownload())}>{locale.t("exportModel")}</button>
+            <button
+                role="menuitem"
+                class="language"
+                lang={locale.lang === "id" ? "en" : "id"}
+                onclick={() => ((menuOpen = false), locale.set(locale.lang === "id" ? "en" : "id"))}
+                >🌐 {locale.lang === "id" ? "English" : "Bahasa Indonesia"}</button
+            >
         </div>{/if}
     {#if layersOpen}<div class="popover map-type" transition:pop>
-            <small>Map type</small>
+            <small>{locale.t("mapType")}</small>
             <div class="tiles">
                 {#each ["3D", "Plan"] as const as v}<button class:active={view === v} aria-pressed={view === v} onclick={() => (view = v)}
-                        ><span class={`tile ${v === "3D" ? "three" : "plan"}`}></span>{v === "3D" ? "3D" : "Floor plan"}</button
+                        ><span class={`tile ${v === "3D" ? "three" : "plan"}`}></span>{locale.t(v === "3D" ? "view3d" : "floorPlan")}</button
                     >{/each}
             </div>
         </div>{/if}
 
     {#if !to && !routing && !picking}<button
+            class="fab ask"
+            aria-label={locale.t("askAbout")}
+            onclick={() => ((chatOpen = true), (menuOpen = layersOpen = false))}
+            transition:pop={{ from: 0.9 }}
+        >
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"
+                ><path d="M5 18.5V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" /><path d="M9 9.5h6M9 12h3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg
+            >{locale.t("ask")}
+        </button><button
             class="fab directions"
-            aria-label="Directions"
+            aria-label={locale.t("directions")}
             onclick={() => (routing = true)}
             transition:pop={{ from: 0.9 }}
         >
@@ -174,7 +236,7 @@
         </button>{/if}
 
     {#if routing && !picking}<div class="route-card" transition:rise={{ y: -12, duration: 320 }}>
-            <button class="round" aria-label="Close directions" onclick={() => (routing = false)}>
+            <button class="round" aria-label={locale.t("closeDirections")} onclick={() => (routing = false)}>
                 <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"
                     ><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg
                 >
@@ -183,23 +245,23 @@
                 <PlaceSearch
                     {places}
                     marker="start"
-                    label="Starting point"
-                    placeholder="Choose starting point"
+                    label={locale.t("startingPoint")}
+                    placeholder={locale.t("chooseStart")}
                     value={fromName}
                     onselect={(p) => (from = p)}
                 />
                 <PlaceSearch
                     {places}
                     marker="end"
-                    label="Destination"
-                    placeholder="Choose destination"
+                    label={locale.t("destination")}
+                    placeholder={locale.t("chooseDestination")}
                     value={to?.name ?? ""}
                     onselect={(p) => (to = p)}
                 />
             </div>
             <button
                 class="round"
-                aria-label="Swap start and destination"
+                aria-label={locale.t("swap")}
                 disabled={!from || !to || !("id" in from)}
                 onclick={() => {
                     if (from && "id" in from && to) [from, to] = [to, from];
@@ -208,7 +270,7 @@
         </div>{/if}
 
     {#if sheetOpen}<BottomSheet
-            label={routing ? "Directions" : "Destination"}
+            label={locale.t(routing ? "directions" : "destination")}
             hidden={picking}
             top={routing ? "150px" : "72px"}
             bind:snap
@@ -223,7 +285,7 @@
                                 <h2>{to.name}</h2>
                             </div>
                             <p class="sub">
-                                {to.detail}{to.building ? ` · ${to.building}` : ""}{#if status}<span
+                                {locale.type(to.detail)}{to.building ? ` · ${to.building}` : ""}{#if status}<span
                                         class="status"
                                         class:open={status.open}>· {status.text}</span
                                     >{/if}
@@ -232,51 +294,51 @@
                                 <button class="action primary" onclick={() => ((routing = true), (snap = "peek"))}>
                                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
                                         ><path d="M5 19V13a3 3 0 0 1 3-3h10m-4-4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg
-                                    >Directions
+                                    >{locale.t("directions")}
                                 </button>
-                                <button class="action" onclick={() => ((from = to), (to = null))}>● Start here</button>
-                                <button class="action" onclick={onshare}>Share</button>
+                                <button class="action" onclick={() => ((from = to), (to = null))}>{locale.t("startHere")}</button>
+                                <button class="action" onclick={onshare}>{locale.t("share")}</button>
                                 {#if to.info?.phone}<a class="action" href={`tel:${to.info.phone.replace(/[^\d+]/g, "")}`}
-                                        >☎ Call</a
+                                        >☎ {locale.t("call")}</a
                                     >{/if}
                             </div>
                         {:else if !from}
-                            <h2>Where are you now?</h2>
-                            <p class="sub">Search your room above, or tap where you are on the map.</p>
+                            <h2>{locale.t("whereAreYou")}</h2>
+                            <p class="sub">{locale.t("whereFromHint")}</p>
                             <div class="actions">
-                                <button class="action primary" onclick={() => (picking = true)}>📍 Choose on map</button>
+                                <button class="action primary" onclick={() => (picking = true)}>{locale.t("chooseOnMap")}</button>
                             </div>
                         {:else if !to}
-                            <h2>Where to?</h2>
-                            <p class="sub">Search a room or building above.</p>
+                            <h2>{locale.t("whereTo")}</h2>
+                            <p class="sub">{locale.t("whereToHint")}</p>
                             {#if shortcuts.length}<div class="actions">
                                     {#each shortcuts as t}<button class="action" onclick={() => nearest(t.name)}
-                                            ><PlaceIcon of={{ ...t, detail: t.name }} size={22} />Nearest {t.name.toLowerCase()}</button
+                                            ><PlaceIcon of={{ ...t, detail: t.name }} size={22} />{locale.shortcut(t.name, true)}</button
                                         >{/each}
                                 </div>{/if}
                         {:else if route}
                             <h2 class="time">
-                                {walkMinutes(route.meters)} min <span>({route.meters} m)</span>
+                                {locale.t("minutes", { n: walkMinutes(route.meters) })} <span>({route.meters} m)</span>
                             </h2>
-                            <p class="sub">Walking · {route.steps.length - 1} steps to {to.name}</p>
+                            <p class="sub">{locale.t("walkingSteps", { n: route.steps.length - 1, name: to.name })}</p>
                             <div class="actions">
                                 <button class="action primary" onclick={() => (snap = snap === "full" ? "peek" : "full")}
-                                    >{snap === "full" ? "Hide steps" : "Steps"}</button
+                                    >{locale.t(snap === "full" ? "hideSteps" : "steps")}</button
                                 >
-                                <button class="action" onclick={onshare}>Share</button>
-                                <button class="action" onclick={() => (picking = true)}>📍 Change start</button>
+                                <button class="action" onclick={onshare}>{locale.t("share")}</button>
+                                <button class="action" onclick={() => (picking = true)}>{locale.t("changeStart")}</button>
                             </div>
                         {:else}
-                            <h2>No walking route</h2>
-                            <p class="sub">The destination may be closed off — check that its room door isn't facing a wall.</p>
+                            <h2>{locale.t("noRoute")}</h2>
+                            <p class="sub">{locale.t("noRouteHint")}</p>
                         {/if}
                     </div>{/key}
             {/snippet}
             {#if !routing && to?.info}<PlaceDetails info={to.info} />{/if}
             {#if routing && route && from && to}<ol class="steps">
                     {#each route.steps as step, i (i + step.text)}<li in:rise={{ delay: Math.min(i, 8) * 35 }}>
-                            <span class="glyph">{stepGlyph(step.text)}</span>
-                            <span class="step">{step.text}{#if step.meters}<small>{step.meters} m</small>{/if}</span>
+                            <span class="glyph">{stepGlyph(step)}</span>
+                            <span class="step">{stepText(step.say, locale.lang)}{#if step.meters}<small>{step.meters} m</small>{/if}</span>
                         </li>{/each}
                 </ol>{/if}
         </BottomSheet>{/if}
@@ -289,6 +351,31 @@
             onshortcut={nearest}
             onclose={() => (searching = false)}
         />{/if}
+    {#if chatOpen}<button
+            class="chat-scrim"
+            aria-label={locale.t("closeChat")}
+            onclick={() => (chatOpen = false)}
+            transition:fade={{ duration: motion(200) }}
+        ></button>
+        <div
+            class="chat-sheet"
+            bind:offsetHeight={chatHeight}
+            role="dialog"
+            aria-label={locale.t("askAbout")}
+            transition:fly={{ y: 600, duration: motion(420), easing: easeDrawer, opacity: 1 }}
+        >
+            <span class="grabber" aria-hidden="true"></span>
+            <ChatPanel
+                {chat}
+                {places}
+                {suggestions}
+                {title}
+                context={chatContext}
+                onclose={() => (chatOpen = false)}
+                onshow={() => (chatOpen = false)}
+            />
+        </div>{/if}
+    {#if infoOpen}<InfoScreen {faq} {title} onclose={() => (infoOpen = false)} />{/if}
 </div>
 
 <style>
@@ -410,7 +497,6 @@
         font-weight: 500;
         color: #2f4336;
         white-space: nowrap;
-        text-transform: capitalize;
         box-shadow:
             0 1px 2px #1f35261a,
             0 2px 8px #1f352614;
@@ -447,6 +533,56 @@
         width: 44px;
         height: 44px;
         border-radius: 50%;
+    }
+    .ask {
+        left: 12px;
+        right: auto;
+        bottom: calc(env(safe-area-inset-bottom) + 28px);
+        display: flex;
+        gap: 8px;
+        height: 52px;
+        padding: 0 20px 0 16px;
+        border-radius: 26px;
+        font-size: 16px;
+        font-weight: 600;
+        color: #0f6a73;
+        fill: none;
+    }
+    .chat-scrim {
+        position: absolute;
+        inset: 0;
+        z-index: 24;
+        background: #1f35261a;
+        cursor: default;
+    }
+    .chat-scrim:hover {
+        background: #1f35261a;
+    }
+    .chat-sheet {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 25;
+        /* Leaves the top of the map showing, where the place being talked about is highlighted. */
+        height: min(62%, calc(100% - var(--safe-top) - 40px));
+        display: flex;
+        flex-direction: column;
+        border-radius: 22px 22px 0 0;
+        background: white;
+        box-shadow: 0 -8px 40px #1f352633;
+    }
+    .grabber {
+        align-self: center;
+        width: 36px;
+        height: 5px;
+        margin-top: 8px;
+        border-radius: 3px;
+        background: #d5dccf;
+    }
+    .chat-sheet > :global(.chat) {
+        flex: 1;
+        height: auto;
     }
     .directions {
         bottom: calc(env(safe-area-inset-bottom) + 24px);

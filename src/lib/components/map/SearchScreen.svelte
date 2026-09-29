@@ -7,6 +7,7 @@
     import { hoursStatus } from "$lib/model/place-info";
     import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     import { easeOut, motion, rise } from "$lib/motion";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let {
         places,
         title,
@@ -23,13 +24,14 @@
         onshortcut: (detail: string) => void;
         onclose: () => void;
     } = $props();
+    const locale = useLocale();
     let query = $state(""),
         input: HTMLInputElement;
     // Results cascade in when the screen opens, but not on every keystroke.
     let opening = $state(true);
     let results = $derived(search(places, query).slice(0, 60));
     const now = new Date();
-    const status = (p: Place) => (p.info ? hoursStatus(p.info, now) : null);
+    const status = (p: Place) => (p.info ? hoursStatus(p.info, now, locale.lang) : null);
     onMount(() => {
         input.focus();
         const timer = setTimeout(() => (opening = false), 450);
@@ -40,12 +42,12 @@
 <div
     class="search-screen"
     role="dialog"
-    aria-label="Search places"
+    aria-label={locale.t("searchPlaces")}
     in:fade={{ duration: motion(180), easing: easeOut }}
     out:fade={{ duration: motion(140) }}
 >
     <div class="bar" in:rise={{ y: -6, duration: 260 }}>
-        <button class="round" aria-label="Back to the map" onclick={onclose}>
+        <button class="round" aria-label={locale.t("backToMap")} onclick={onclose}>
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"
                 ><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg
             >
@@ -56,24 +58,24 @@
             type="search"
             enterkeyhint="search"
             autocomplete="off"
-            aria-label="Search rooms and buildings"
-            placeholder={`Search ${title}`}
+            aria-label={locale.t("searchRoomsLabel")}
+            placeholder={locale.t("searchTitle", { title })}
             onkeydown={(e) => {
                 if (e.key === "Escape") onclose();
                 else if (e.key === "Enter" && results[0]) onselect(results[0].place);
             }}
         />
-        {#if query}<button class="round" aria-label="Clear search" onclick={() => ((query = ""), input.focus())}
+        {#if query}<button class="round" aria-label={locale.t("clearSearch")} onclick={() => ((query = ""), input.focus())}
                 >×</button
             >{/if}
     </div>
     {#if !query && shortcuts.length}<div class="chips">
             {#each shortcuts as s}<button class="chip" onclick={() => onshortcut(s.name)}
-                    ><PlaceIcon of={{ ...s, detail: s.name }} size={22} />{s.name}</button
+                    ><PlaceIcon of={{ ...s, detail: s.name }} size={22} />{locale.type(s.name)}</button
                 >{/each}
         </div>{/if}
-    <ul role="listbox" aria-label="Places">
-        {#if !query}<li class="heading">Places in {title}</li>{/if}
+    <ul role="listbox" aria-label={locale.t("searchPlaces")}>
+        {#if !query}<li class="heading">{locale.t("placesIn", { title })}</li>{/if}
         {#each results as { place: p, via }, i (p.id)}<li
                 role="option"
                 aria-selected="false"
@@ -83,15 +85,15 @@
                     <PlaceIcon of={p} />
                     <span class="text"
                         ><b>{p.name}</b><small
-                            >{#if via}<span class="via">{via}</span>{" · "}{/if}{p.detail}{p.building
+                            >{#if via}<span class="via">{via}</span>{" · "}{/if}{locale.type(p.detail)}{p.building
                                 ? ` · ${p.building}`
                                 : ""}</small
                         ></span
                     >
-                    {#if status(p)}<em class:open={status(p)!.open}>{status(p)!.open ? "Open" : "Closed"}</em>{/if}
+                    {#if status(p)}<em class:open={status(p)!.open}>{locale.t(status(p)!.open ? "open" : "closed")}</em>{/if}
                 </button>
             </li>{:else}<li class="none">
-                {places.length ? `Nothing matches “${query}”` : "Add buildings and rooms in the editor first"}
+                {places.length ? locale.t("nothingMatches", { query }) : locale.t("emptyMap")}
             </li>{/each}
     </ul>
 </div>

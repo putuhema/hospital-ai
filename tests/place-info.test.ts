@@ -60,3 +60,19 @@ test('buildings, rooms and landmarks keep their details through save and search'
   assert.equal(list.find((p) => p.id === 'n:c')!.info!.description, 'Coffee and snacks');
   assert.throws(() => parseLayout(JSON.stringify({ pieces: [{ ...building, info: { phone: 5 } }] })));
 });
+
+test('opening and visiting hours in Indonesian', () => {
+  assert.equal(hoursStatus(weekdays, at(1, '09:30'), 'id')!.text, 'Buka · sampai 17.00');
+  assert.equal(hoursStatus(weekdays, at(1, '07:00'), 'id')!.text, 'Tutup · buka 08.00');
+  assert.equal(hoursStatus(weekdays, at(1, '17:00'), 'id')!.text, 'Tutup · buka besok 08.00');
+  assert.equal(hoursStatus(weekdays, at(5, '18:00'), 'id')!.text, 'Tutup · buka Sen 08.00');
+  const ward = { visiting: true, hours: [{ days: [0, 1, 2, 3, 4, 5, 6], open: '14:00', close: '20:00' }] };
+  assert.equal(hoursStatus(ward, at(3, '15:00'), 'id')!.text, 'Jam besuk · sampai 20.00');
+  assert.equal(hoursStatus(ward, at(3, '21:00'), 'id')!.text, 'Bukan jam besuk · mulai besok 14.00');
+  const always = { hours: [{ days: [0, 1, 2, 3, 4, 5, 6], open: '00:00', close: '00:00' }] };
+  assert.equal(hoursStatus(always, at(2, '03:00'), 'id')!.text, 'Buka · 24 jam');
+  assert.equal(dayRange([1, 2, 3, 4, 5], 'id'), 'Sen–Jum');
+  assert.equal(dayRange([0, 1, 2, 3, 4, 5, 6], 'id'), 'Setiap hari');
+  assert.deepEqual(hoursLines([{ days: [1, 2, 3, 4, 5], open: '08:00', close: '16:30' }], 'id'), ['Sen–Jum 08.00–16.30']);
+  assert.deepEqual(hoursLines([{ days: [6], open: '00:00', close: '00:00' }], 'id'), ['Sab 24 jam']);
+});

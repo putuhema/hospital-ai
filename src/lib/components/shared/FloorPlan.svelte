@@ -1,5 +1,6 @@
 <script lang="ts">
     import { category } from "$lib/model/categories";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     import type { Piece } from "$lib/model/layout";
     import {
         doorSegment,
@@ -48,6 +49,7 @@
         /** A click on the plan: the tile point and the place under it, if any. */
         onpick?: (point: Point, place: Place | null) => void;
     } = $props();
+    const { t } = useLocale();
     const S = 40;
     let view = $state({ x: -1, y: -1, w: 0, h: 0 });
     let svg: SVGSVGElement;
@@ -142,7 +144,7 @@
         class:picking
         viewBox={`${view.x * S} ${view.y * S} ${view.w * S} ${view.h * S}`}
         role="img"
-        aria-label="Floor plan. Click a room to choose it. Scroll to zoom, drag to move."
+        aria-label={t("planLabel")}
         onpointerdown={down}
         onpointermove={move}
         onpointerup={up}
@@ -313,21 +315,21 @@
                     stroke-width="2.4"
                     stroke-linecap="round"
                     stroke-linejoin="round">{@html category(n.category).icon}</svg
-                ><text y="-20" class="landmark-label">{n.name || "Unnamed landmark"}</text></g
+                ><text y="-20" class="landmark-label">{n.name || t("unnamedLandmark")}</text></g
             >{/each}
         {#if here}<g transform={`translate(${here.x * S} ${here.y * S})`} class="here"
-                ><circle r="46" class="halo" /><circle r="18" /><text y="-62">You are here</text></g
+                ><circle r="46" class="halo" /><circle r="18" /><text y="-62">{t("youAreHere")}</text></g
             >{/if}
         <g transform={`translate(${width * S - 30} 34)`} class="north"
             ><path d="M0 -20 L9 8 L0 2 L-9 8Z" /><text y="24">N</text></g
         >
     </svg>
     {#if controls}<div class="zoom">
-        <button aria-label="Zoom in" onclick={() => zoom(1 / 1.3)}>+</button
-        ><button aria-label="Zoom out" onclick={() => zoom(1.3)}>−</button
+        <button aria-label={t("zoomIn")} onclick={() => zoom(1 / 1.3)}>+</button
+        ><button aria-label={t("zoomOut")} onclick={() => zoom(1.3)}>−</button
         ><button
-            aria-label="Fit plan"
-            title="Fit plan"
+            aria-label={t("fitPlan")}
+            title={t("fitPlan")}
             onclick={() => (view = { x: -1, y: -1, w: width + 2, h: height + 2 })}
             >⛶</button
         >

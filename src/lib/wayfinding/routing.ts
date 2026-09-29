@@ -3,6 +3,7 @@ import { center as centerPoint, footprint, inPolygon, isArea, isBuilding, isCorr
 import type { PlaceInfo } from "../model/place-info.ts";
 import { category, type LandmarkCategory } from "../model/categories.ts";
 import { search as searchText } from "./search.ts";
+import type { Lang } from "../i18n/lang.ts";
 import {
   crosses,
   distance,
@@ -29,7 +30,19 @@ export type Place = {
   point: Point;
   info?: PlaceInfo;
 };
-export type Step = { text: string; meters: number };
+export type Heading = "east" | "south-east" | "south" | "south-west" | "west" | "north-west" | "north" | "north-east";
+export type Turn = "straight" | "bear-left" | "bear-right" | "left" | "right" | "around";
+/** What a stretch passes through on the way. */
+export type Via = "corridor" | "path" | "grounds";
+/** Where a step leads: one of the walkways, or a named room, building or area. */
+export type Area = { walkway: "corridor" | "path" | "outside" } | { name: string };
+/** What a step means, so it can be put into words in either language (see `stepText`). */
+export type StepSay =
+  | { kind: "start"; from: string | null; heading: Heading; through?: Via; into?: Area }
+  | { kind: "turn"; turn: Turn; through?: Via; into?: Area }
+  | { kind: "arrive"; place: string; building?: string; listed?: boolean };
+/** One instruction; `text` is the English wording. */
+export type Step = { text: string; meters: number; say: StepSay };
 export type Route = { points: Point[]; meters: number; steps: Step[] };
 
 /** Cells per tile. Fine enough that 0.4-tile room doors contain cell centres. */
@@ -345,21 +358,34 @@ export function areaAt(pieces: Piece[], p: Point) {
     return r ? r.name : b.name;
   }
   const c = pieces.find((c) => (isCorridor(c) || isOpenAir(c)) && inPolygon(p, footprint(c)));
-  return c ? (isPath(c) ? "the path" : isCorridor(c) ? "the corridor" : c.name) : "outside";
+  return c ? (isPath(c) ? PATH_AREA : isCorridor(c) ? CORRIDOR : c.name) : OUTSIDE;
 }
 
-const compass = (d: Point) =>
-  ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][
+// What `areaAt` calls the walkways; any other answer is a name from the layout.
+const CORRIDOR = "the corridor",
+  PATH_AREA = "the path",
+  OUTSIDE = "outside";
+const areaOf = (area: string): Area =>
+  area === CORRIDOR
+    ? { walkway: "corridor" }
+    : area === PATH_AREA
+      ? { walkway: "path" }
+      : area === OUTSIDE
+        ? { walkway: "outside" }
+        : { name: area };
+
+const compass = (d: Point): Heading =>
+  (["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"] as const)[
     (Math.round(Math.atan2(d.y, d.x) / (Math.PI / 4)) + 8) % 8
   ];
 
 function describe(
   pieces: Piece[],
   points: Point[],
-  fromName: string,
+  fromName: string | null,
   to: Place,
 ): Step[] {
-  const steps: Step[] = [];
+  const says: { say: StepSay; meters: number }[] = [];
   let heading: Point | null = null;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1],
@@ -377,25 +403,15 @@ function describe(
     }
     // Ignore slivers, e.g. a line that grazes the corner where two corridors meet.
     const passes = (v: string) => (via.get(v) ?? 0) >= 3;
-    const through = passes("the corridor")
-      ? " through the corridor"
-      : passes("the path")
-        ? " along the path"
-        : passes("outside")
-          ? " across the grounds"
-          : "";
-    const into =
-      through +
-      (area === start
-        ? ""
-        : area === "outside"
-          ? " and go outside"
-          : area === "the corridor"
-            ? " into the corridor"
-            : area === "the path"
-              ? " onto the path"
-              : ` into ${area}`);
-    let turn = "";
+    const through: Via | undefined = passes(CORRIDOR)
+      ? "corridor"
+      : passes(PATH_AREA)
+        ? "path"
+        : passes(OUTSIDE)
+          ? "grounds"
+          : undefined;
+    const into = area === start ? undefined : areaOf(area);
+    let turn: Turn | null = null;
     if (heading) {
       const angle =
         (Math.atan2(heading.x * d.y - heading.y * d.x, heading.x * d.x + heading.y * d.y) *
@@ -404,34 +420,88 @@ function describe(
       const side = angle > 0 ? "right" : "left";
       turn =
         Math.abs(angle) < 25
-          ? "Continue straight"
+          ? "straight"
           : Math.abs(angle) < 65
-            ? `Bear ${side}`
+            ? `bear-${side}`
             : Math.abs(angle) < 150
-              ? `Turn ${side}`
-              : "Turn around";
+              ? side
+              : "around";
     }
-    const last = steps[steps.length - 1];
+    const last = says[says.length - 1];
     // Fold tiny wiggles and straight continuations into the previous instruction.
-    if (last && (turn === "Continue straight" || meters < 1) && !into) {
+    if (last && (turn === "straight" || meters < 1) && !through && !into) {
       last.meters += meters;
     } else {
-      steps.push({
-        text: heading
-          ? `${turn}${into}`
-          : `From ${fromName}, head ${compass(d)}${into}`,
+      const extra = { ...(through && { through }), ...(into && { into }) };
+      says.push({
+        say: turn
+          ? { kind: "turn", turn, ...extra }
+          : { kind: "start", from: fromName, heading: compass(d), ...extra },
         meters,
       });
     }
     heading = d;
   }
-  steps.push({
-    text: `Arrive at ${to.name}${to.building && to.kind !== "listed" ? ` in ${to.building}` : ""}`,
+  says.push({
+    say: {
+      kind: "arrive",
+      place: to.name,
+      ...(to.building && { building: to.building }),
+      ...(to.kind === "listed" && { listed: true }),
+    },
     meters: 0,
   });
-  if (to.kind === "listed")
-    steps[steps.length - 1].text += ` — it's inside ${to.building}`;
-  return steps.map((s) => ({ ...s, meters: Math.round(s.meters) }));
+  return says.map(({ say, meters }) => ({ text: stepText(say, "en"), meters: Math.round(meters), say }));
+}
+
+const HEADINGS: Record<Lang, Record<Heading, string>> = {
+  en: {
+    east: "east", "south-east": "south-east", south: "south", "south-west": "south-west",
+    west: "west", "north-west": "north-west", north: "north", "north-east": "north-east",
+  },
+  id: {
+    east: "timur", "south-east": "tenggara", south: "selatan", "south-west": "barat daya",
+    west: "barat", "north-west": "barat laut", north: "utara", "north-east": "timur laut",
+  },
+};
+const WORDS = {
+  en: {
+    turn: {
+      straight: "Continue straight", "bear-left": "Bear left", "bear-right": "Bear right",
+      left: "Turn left", right: "Turn right", around: "Turn around",
+    },
+    through: { corridor: " through the corridor", path: " along the path", grounds: " across the grounds" },
+    into: { corridor: " into the corridor", path: " onto the path", outside: " and go outside" },
+    intoName: (name: string) => ` into ${name}`,
+    start: (from: string | null, heading: string) => `From ${from ?? "your position"}, head ${heading}`,
+    arrive: (place: string, building?: string, listed?: boolean) =>
+      listed
+        ? `Arrive at ${place} — it's inside ${building}`
+        : `Arrive at ${place}${building ? ` in ${building}` : ""}`,
+  },
+  id: {
+    turn: {
+      straight: "Jalan terus", "bear-left": "Serong ke kiri", "bear-right": "Serong ke kanan",
+      left: "Belok kiri", right: "Belok kanan", around: "Putar balik",
+    },
+    through: { corridor: " melalui koridor", path: " menyusuri jalan setapak", grounds: " melintasi halaman" },
+    into: { corridor: " masuk ke koridor", path: " ke jalan setapak", outside: " lalu keluar gedung" },
+    intoName: (name: string) => ` masuk ke ${name}`,
+    start: (from: string | null, heading: string) => `Dari ${from ?? "posisi Anda"}, jalan ke arah ${heading}`,
+    arrive: (place: string, building?: string, listed?: boolean) =>
+      listed
+        ? `Tiba di ${place} — letaknya di dalam ${building}`
+        : `Tiba di ${place}${building ? ` di ${building}` : ""}`,
+  },
+};
+
+/** A step in words, e.g. "Turn left into the corridor" or "Belok kiri masuk ke koridor". */
+export function stepText(say: StepSay, lang: Lang): string {
+  const w = WORDS[lang];
+  if (say.kind === "arrive") return w.arrive(say.place, say.building, say.listed);
+  const into = !say.into ? "" : "name" in say.into ? w.intoName(say.into.name) : w.into[say.into.walkway];
+  const rest = (say.through ? w.through[say.through] : "") + into;
+  return say.kind === "start" ? w.start(say.from, HEADINGS[lang][say.heading]) + rest : w.turn[say.turn] + rest;
 }
 
 /** Shortest walking route between two places (or a map point and a place). */
@@ -458,7 +528,7 @@ export function planRoute(
   return {
     points: route,
     meters: Math.round(meters),
-    steps: describe(g.pieces, route, fromPlace?.name ?? "your position", to),
+    steps: describe(g.pieces, route, fromPlace?.name ?? null, to),
   };
 }
 
@@ -489,16 +559,12 @@ export function nearestOfType(
 /** Walking time at about 72 m a minute, never under a minute. */
 export const walkMinutes = (meters: number) => Math.max(1, Math.round(meters / 72));
 
-/** An arrow for a direction step, from its wording. */
-export function stepGlyph(text: string): string {
-  if (text.startsWith("From")) return "●";
-  if (text.startsWith("Arrive")) return "⚑";
-  if (/Turn left/.test(text)) return "↰";
-  if (/Turn right/.test(text)) return "↱";
-  if (/Bear left/.test(text)) return "↖";
-  if (/Bear right/.test(text)) return "↗";
-  if (/around/.test(text)) return "↩";
-  return "↑";
+/** An arrow for a direction step. */
+export function stepGlyph(step: Step): string {
+  const say = step.say;
+  if (say.kind === "start") return "●";
+  if (say.kind === "arrive") return "⚑";
+  return { left: "↰", right: "↱", "bear-left": "↖", "bear-right": "↗", around: "↩", straight: "↑" }[say.turn];
 }
 
 /** Places that can't be reached from outside, e.g. a room whose door faces a wall. */

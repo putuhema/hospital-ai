@@ -1,6 +1,7 @@
 import { parseNetwork } from "../wayfinding/navigation.ts";
 import { doorFits, fitsRoom, isArea, isBuilding, roomTypes, type RoomAsset } from "./interiors.ts";
 import { parseInfo, type PlaceInfo } from "./place-info.ts";
+import { parseFaq } from "./faq.ts";
 export type Piece = {
   id: number;
   name: string;
@@ -469,5 +470,6 @@ export function parseLayout(text: string) {
     title: typeof d.title === "string" ? d.title : "Hospital map",
     pieces: d.pieces as Piece[],
     grid: { width, height, tileMeters: 2 },
+    faq: parseFaq(d.faq),
   };
 }

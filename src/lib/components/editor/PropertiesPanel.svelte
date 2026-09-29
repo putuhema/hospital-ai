@@ -1,11 +1,13 @@
 <script lang="ts">
     import type { Piece } from "$lib/model/layout";
+    import type { FaqEntry } from "$lib/model/faq";
     import { isArea, isBarrier, isBuilding, isGate, isParking, isPath, pieceType } from "$lib/model/interiors";
     import ColorField from "$lib/components/shared/ColorField.svelte";
     import InteriorEditor from "./InteriorEditor.svelte";
     import DestinationsEditor from "./DestinationsEditor.svelte";
     import EntranceEditor from "./EntranceEditor.svelte";
     import PlaceInfoEditor from "./PlaceInfoEditor.svelte";
+    import FaqEditor from "./FaqEditor.svelte";
     import PositionFields from "./PositionFields.svelte";
     import ProjectOverview from "./ProjectOverview.svelte";
     import Icon from "./Icon.svelte";
@@ -16,6 +18,9 @@
         canvasWidth,
         canvasHeight,
         hidden,
+        faq,
+        faqOpen = $bindable(false),
+        onfaqchange,
         update,
         edit,
         onrotate,
@@ -33,6 +38,10 @@
         canvasWidth: number;
         canvasHeight: number;
         hidden: boolean;
+        /** Hospital information, edited when nothing is selected. */
+        faq: FaqEntry[];
+        faqOpen?: boolean;
+        onfaqchange: (faq: FaqEntry[]) => void;
         /** Set one property, with the editor's checks (sizes, doors, rooms). */
         update: (key: keyof Piece, value: string | number | undefined) => void;
         /** Apply changes to the selected piece as they are. */
@@ -227,6 +236,10 @@
                 <li>Open the wayfinding map to find your way</li>
             </ol>
             <button class="btn" onclick={onguide}>Open quick guide</button>
-        </div>{/if}
+        </div>
+        <details class="section" bind:open={faqOpen}>
+            <summary>Hospital information <span class="badge">{faq.length}</span></summary>
+            <FaqEditor {faq} onchange={onfaqchange} />
+        </details>{/if}
     <ProjectOverview {pieces} {canvasWidth} {canvasHeight} {onexportmodel} />
 </aside>

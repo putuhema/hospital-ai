@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount, tick, type Snippet } from "svelte";
     import { easeOut, motion } from "$lib/motion";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let {
         label,
         hidden = false,
@@ -27,6 +28,7 @@
         children?: Snippet;
     } = $props();
 
+    const { t } = useLocale();
     // A flick faster than this (px/ms) settles in its direction, however short.
     const FLICK = 0.4;
     let sheet: HTMLElement, head: HTMLElement;
@@ -144,7 +146,7 @@
     >
         <button
             class="handle"
-            aria-label={snap === "full" ? "Show less" : "Show more"}
+            aria-label={t(snap === "full" ? "showLess" : "showMore")}
             aria-expanded={snap === "full"}
             onclick={() => (snap = snap === "full" ? "peek" : "full")}><i></i></button
         >

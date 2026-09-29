@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { hoursLines, hoursStatus, type PlaceInfo } from "$lib/model/place-info";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let { info }: { info: PlaceInfo } = $props();
     // The visitor's own clock: they are at the hospital, so it is the hospital's
     // time too. Unknown during server rendering, so the badge waits for the browser.
@@ -10,16 +11,17 @@
         const timer = setInterval(() => (now = new Date()), 30_000);
         return () => clearInterval(timer);
     });
-    let status = $derived(now && hoursStatus(info, now));
+    const locale = useLocale();
+    let status = $derived(now && hoursStatus(info, now, locale.lang));
 </script>
 
-<section class="place-details" aria-label="About this destination">
+<section class="place-details" aria-label={locale.t("aboutPlace")}>
     {#if status}<p class="badge" class:open={status.open}><i></i>{status.text}</p>{/if}
     {#if info.description}<p class="description">{info.description}</p>{/if}
     {#if info.phone}<a class="phone" href={`tel:${info.phone.replace(/[^\d+]/g, "")}`}>☎ {info.phone}</a>{/if}
     {#if info.hours?.length}<div class="hours">
-            <small>{info.visiting ? "Visiting hours" : "Opening hours"}</small>
-            {#each hoursLines(info.hours) as line}<span>{line}</span>{/each}
+            <small>{locale.t(info.visiting ? "visitingHours" : "openingHours")}</small>
+            {#each hoursLines(info.hours, locale.lang) as line}<span>{line}</span>{/each}
         </div>{/if}
 </section>
 

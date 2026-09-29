@@ -1,5 +1,6 @@
 <script lang="ts">
     import { savePrefs, type DisplayPrefs } from "$lib/scene/display-prefs";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let {
         prefs = $bindable(),
         cutaway = $bindable(),
@@ -16,51 +17,50 @@
         /** The map also offers the trees slider. */
         presentation: boolean;
     } = $props();
+    const { t } = useLocale();
     function toggle(pref: "buildings" | "rooms" | "info") {
         prefs[pref] = !prefs[pref];
         savePrefs(prefs);
     }
 </script>
 
-<div class="scene-options" role="group" aria-label="Display options">
+<div class="scene-options" role="group" aria-label={t("displayOptions")}>
     <button
         aria-pressed={overhead}
-        title={overhead ? "Back to the angled 3D view" : "Bird's-eye view from straight above"}
-        onclick={() => (overhead = !overhead)}>Top view</button
+        title={t(overhead ? "topViewOn" : "topViewOff")}
+        onclick={() => (overhead = !overhead)}>{t("topView")}</button
     >{#if !routeShown}<button
             aria-pressed={cutaway}
             onclick={() => (cutaway = !cutaway)}
-            >{cutaway ? "Show roofs" : "Look inside"}</button
+            >{t(cutaway ? "showRoofs" : "lookInside")}</button
         >{/if}<button
         aria-pressed={prefs.buildings}
-        title={prefs.buildings ? "Hide building names" : "Show building names"}
-        onclick={() => toggle("buildings")}>Buildings</button
+        title={t(prefs.buildings ? "hideBuildingNames" : "showBuildingNames")}
+        onclick={() => toggle("buildings")}>{t("buildings")}</button
     ><button
         aria-pressed={prefs.rooms}
-        title={prefs.rooms
-            ? "Hide room names (shown when looking inside)"
-            : "Show room names (shown when looking inside)"}
-        onclick={() => toggle("rooms")}>Rooms</button
+        title={t(prefs.rooms ? "hideRoomNames" : "showRoomNames")}
+        onclick={() => toggle("rooms")}>{t("rooms")}</button
     ><button
         aria-pressed={prefs.info}
-        title={prefs.info
-            ? "Hide the building/room tooltip on hover"
-            : "Show the building/room tooltip on hover"}
-        onclick={() => toggle("info")}>Hover info</button
-    >{#if presentation}<label class="greenery" title="Amount of trees and foliage"
-            >Trees<input
+        title={t(prefs.info ? "hideHoverInfo" : "showHoverInfo")}
+        onclick={() => toggle("info")}>{t("hoverInfo")}</button
+    >{#if presentation}<label class="greenery" title={t("treesLabel")}
+            >{t("trees")}<input
                 type="range"
                 min="0"
                 max="2"
                 step="0.25"
-                aria-label="Amount of trees and foliage"
-                aria-valuetext={prefs.greenery === 0
-                    ? "None"
-                    : prefs.greenery < 1
-                      ? "Few"
-                      : prefs.greenery > 1
-                        ? "Lush"
-                        : "Normal"}
+                aria-label={t("treesLabel")}
+                aria-valuetext={t(
+                    prefs.greenery === 0
+                        ? "treesNone"
+                        : prefs.greenery < 1
+                          ? "treesFew"
+                          : prefs.greenery > 1
+                            ? "treesLush"
+                            : "treesNormal",
+                )}
                 bind:value={prefs.greenery}
                 onchange={() => savePrefs(prefs)}
             /></label

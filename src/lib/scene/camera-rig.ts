@@ -36,11 +36,14 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   const orbit = new THREE.Spherical(),
     offset = new THREE.Vector3();
 
-  // Pixels covered by overlays: where the frame is heading and where it is now.
-  // The bottom inset (a sheet sliding up) glides there over a few frames.
+  // Pixels covered by overlays. A side panel narrows the view; a bottom sheet
+  // floats over the map, which only leaves room for it when framing a place.
   let size = { width: 0, height: 0 },
-    target = { left: 0, bottom: 0 },
-    shown = { left: 0, bottom: 0 };
+    target = { left: 0, bottom: 0 };
+  // The last place or route framed, framed again if a sheet rises just after.
+  let framed: { bounds: THREE.Box3; pad: number; at: number } | null = null;
+  const ray = new THREE.Raycaster(),
+    ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   function skyFrame() {
     // Looking straight down there is no sky to leave room for.
@@ -51,13 +54,11 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   function project() {
     const { width, height } = size;
     if (presentation) {
-      // Frame the campus in the part of the view the overlays leave clear,
-      // then extend the view down behind the bottom overlay.
-      const inset = Math.min(shown.left, width / 2),
-        clear = height - Math.min(shown.bottom, height * 0.7),
+      // Frame the campus beside the side panel, sitting low with sky above it.
+      const inset = Math.min(target.left, width / 2),
         tall = skyFrame();
-      camera.aspect = (width + inset) / (clear * tall);
-      camera.setViewOffset(width + inset, clear * tall, 0, 0, width, height);
+      camera.aspect = (width + inset) / (height * tall);
+      camera.setViewOffset(width + inset, height * tall, 0, 0, width, height);
     } else camera.aspect = width / height;
     camera.updateProjectionMatrix();
   }
@@ -65,19 +66,20 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   /**
    * Match the viewport. On the map, render the top-right part of a larger
    * frame: the campus sits lower (sky above it) and clear of a panel of
-   * `insetLeft` pixels on the left and a sheet of `insetBottom` pixels at the
-   * bottom. Returns false when nothing changed.
+   * `insetLeft` pixels on the left. A sheet of `insetBottom` pixels floats
+   * over the bottom; places framed from now on sit above it. Returns false
+   * when nothing changed.
    */
   function frame(width: number, height: number, insetLeft = 0, insetBottom = 0) {
     const key = `${width}:${height}:${insetLeft}:${insetBottom}:${overhead}`;
     if (!width || !height || key === framedAs) return false;
-    const first = !framedAs;
+    const risen = insetBottom !== target.bottom;
     framedAs = key;
     size = { width, height };
     target = { left: insetLeft, bottom: insetBottom };
-    shown.left = insetLeft;
-    if (first || matchMedia("(prefers-reduced-motion: reduce)").matches) shown.bottom = insetBottom;
     project();
+    // A sheet opening with the place it shows: keep the place above it.
+    if (risen && framed && performance.now() - framed.at < 700) frameRoute(framed.bounds, framed.pad);
     return true;
   }
 
@@ -87,13 +89,15 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
    * width beside the side panel, down to the top of the sheet, and up to just
    * under the search bar. With `cover`, it may run off the view the tight
    * way, meeting halfway between fitting it and filling the view with it.
+   * Without `sheet`, the whole height counts, as if no sheet were open.
    */
-  function fitDistance(box: THREE.Box3, margin = 0.9, cover = false) {
+  function fitDistance(box: THREE.Box3, margin = 0.9, cover = false, sheet = true) {
     const { width, height } = size;
     const inset = Math.min(target.left, width / 2),
-      clear = height - Math.min(target.bottom, height * 0.7),
+      clear = height - (sheet ? Math.min(target.bottom, height * 0.7) : 0),
       tall = skyFrame(),
-      tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)),
+      // The view angles of the clear part, at the scale of the whole view.
+      tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * (clear / height),
       tanH = tanV * ((width + inset) / (clear * tall));
     // Shares of the half-frame, measured from its centre where the box sits.
     const across = ((width - inset) / (width + inset)) * margin,
@@ -122,6 +126,22 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     return cover ? Math.sqrt(byWidth * byHeight) : Math.max(byWidth, byHeight);
   }
 
+  /** Slide the view so `centre`, framed by `fitDistance`, sits in the part above the sheet. */
+  function clearOfSheet(centre: THREE.Vector3) {
+    const { width, height } = size,
+      clear = height - Math.min(target.bottom, height * 0.7);
+    if (!width || clear === height) return;
+    camera.updateMatrixWorld();
+    // Where the centre should show: middle of the clear part's frame, as `project` places it for the whole view.
+    const inset = Math.min(target.left, width / 2);
+    ray.setFromCamera(new THREE.Vector2(inset / width, 1 - (clear * skyFrame()) / height), camera);
+    const hit = ray.ray.intersectPlane(ground, new THREE.Vector3());
+    if (!hit) return;
+    const shift = centre.clone().sub(hit).setY(0);
+    camera.position.add(shift);
+    controls.target.add(shift);
+  }
+
   /** Move along the current view direction to fit the canvas (or the campus, or a framed route). */
   function fit(width: number, height: number, zoom: number) {
     if (routeDistance === null && presentation && site && size.width) {
@@ -131,6 +151,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
       const portrait = size.width < size.height,
         distance = Math.max(controls.minDistance, fitDistance(site, 1, portrait)) * (100 / zoom);
       camera.position.sub(controls.target).normalize().multiplyScalar(distance).add(controls.target);
+      clearOfSheet(controls.target.clone());
       return;
     }
     const distance =
@@ -161,7 +182,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
    */
   function bound() {
     if (!site || !size.width) return;
-    controls.maxDistance = Math.max(controls.minDistance, fitDistance(site, 1) * 1.05);
+    controls.maxDistance = Math.max(controls.minDistance, fitDistance(site, 1, false, false) * 1.05);
     const t = controls.target,
       x = THREE.MathUtils.clamp(t.x, site.min.x, site.max.x),
       z = THREE.MathUtils.clamp(t.z, site.min.z, site.max.z);
@@ -176,9 +197,15 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     camera.position.sub(controls.target).multiplyScalar(ratio).add(controls.target);
   }
 
-  /** Look down on a route from about 50° so trees and walls don't hide it; null releases it. */
-  function frameRoute(bounds: THREE.Box3 | null) {
+  /**
+   * Look down on a route (or a highlighted place) from about 50° so trees and
+   * walls don't hide it; null releases it. `pad` metres at least are kept
+   * clear around it: routes keep the rooms around them in view, a single
+   * place is framed closer.
+   */
+  function frameRoute(bounds: THREE.Box3 | null, pad = 8) {
     routeDistance = null;
+    framed = bounds && { bounds: bounds.clone(), pad, at: performance.now() };
     if (!bounds) {
       // Back to the whole campus once a route is cleared.
       if (site) fit(0, 0, 100);
@@ -196,11 +223,12 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     camera.lookAt(centre);
     const padded = bounds
       .clone()
-      .expandByVector(new THREE.Vector3(Math.max(8, extent.x * 0.25), 0, Math.max(8, extent.z * 0.25)));
+      .expandByVector(new THREE.Vector3(Math.max(pad, extent.x * 0.25), 0, Math.max(pad, extent.z * 0.25)));
     routeDistance = size.width
       ? Math.max(30, fitDistance(padded))
       : Math.max(60, Math.max(extent.x, extent.z) * 3.2) * Math.max(1, 1.1 / camera.aspect);
     camera.position.copy(centre).addScaledVector(direction, routeDistance);
+    clearOfSheet(centre);
   }
 
   /**
@@ -222,13 +250,8 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     return true;
   }
 
-  /** Advance the glides (bird's-eye view, bottom inset); call once per frame. */
+  /** Advance the bird's-eye glide; call once per frame. */
   function tick(step = 0.14) {
-    if (shown.bottom !== target.bottom) {
-      const gap = target.bottom - shown.bottom;
-      shown.bottom = Math.abs(gap) < 0.5 ? target.bottom : shown.bottom + gap * 0.16;
-      project();
-    }
     if (goal === null) return;
     orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
     // Turn the short way round.

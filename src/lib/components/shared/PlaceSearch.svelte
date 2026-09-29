@@ -3,6 +3,7 @@
     import { search } from "$lib/wayfinding/search";
     import PlaceIcon from "./PlaceIcon.svelte";
     import { hoursStatus } from "$lib/model/place-info";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let {
         places,
         value,
@@ -19,6 +20,7 @@
         marker: "start" | "end";
         onselect: (place: Place) => void;
     } = $props();
+    const locale = useLocale();
     let query = $state(""),
         open = $state(false),
         highlighted = $state(0),
@@ -90,19 +92,19 @@
                     <PlaceIcon of={p} size={26} />
                     <span class="text"
                         ><b>{p.name}</b><small
-                            >{#if via}<span class="via">{via}</span>{" · "}{/if}{p.detail}{p.building
+                            >{#if via}<span class="via">{via}</span>{" · "}{/if}{locale.type(p.detail)}{p.building
                                 ? ` · ${p.building}`
                                 : ""}</small
                         ></span
                     >{#if status(p)}<em class:open={status(p)!.open}
-                            >{status(p)!.open
-                                ? p.info?.visiting ? "Visiting" : "Open"
-                                : p.info?.visiting ? "No visits" : "Closed"}</em
+                            >{locale.t(
+                                status(p)!.open
+                                    ? p.info?.visiting ? "visiting" : "open"
+                                    : p.info?.visiting ? "noVisits" : "closed",
+                            )}</em
                         >{/if}
                 </li>{:else}<li class="none">
-                    {places.length
-                        ? "No matching places"
-                        : "Add buildings and rooms in the editor first"}
+                    {locale.t(places.length ? "noMatches" : "emptyMap")}
                 </li>{/each}
         </ul>{/if}
 </div>

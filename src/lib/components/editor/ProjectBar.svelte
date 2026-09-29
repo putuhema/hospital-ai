@@ -10,6 +10,7 @@
         onedit,
         onguide,
         oncanvassize,
+        onfaq,
         onopenmap,
         ondownload,
         onexportmodel,
@@ -24,6 +25,8 @@
         onedit: () => void;
         onguide: () => void;
         oncanvassize: () => void;
+        /** Open the hospital information (general questions for visitors). */
+        onfaq: () => void;
         onopenmap: () => void;
         ondownload: (format: "json" | "obj") => void;
         onexportmodel: () => void;
@@ -65,6 +68,9 @@
     </div>
     <div class="project-actions">
         <button class="btn" onclick={oncanvassize}>Canvas size</button><button
+            class="btn"
+            onclick={onfaq}>Hospital info</button
+        ><button
             class="btn"
             onclick={onopenmap}>Open wayfinding map ↗</button
         >

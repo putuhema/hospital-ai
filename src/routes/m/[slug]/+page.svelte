@@ -3,9 +3,14 @@
     import { parseLayout } from "$lib/model/layout";
     import { publicUrl } from "$lib/publish";
     import { page } from "$app/state";
+    import { onMount } from "svelte";
+    import { Locale } from "$lib/i18n/locale.svelte";
 
     // The published map; it updates live when the editor publishes again.
     let { data } = $props();
+    // Only for the messages before the map is there; the map keeps its own.
+    const locale = new Locale();
+    onMount(() => locale.restore());
     const map = $derived(data.map);
     const layout = $derived.by(() => {
         if (!map.data) return null;
@@ -26,11 +31,12 @@
         network={layout.network}
         canvasWidth={layout.grid.width}
         canvasHeight={layout.grid.height}
+        faq={layout.faq}
         shareUrl={publicUrl(map.data.slug, page.url.origin)}
     />{:else}<main class="missing">
-        {#if map.isLoading}<p>Loading the map…</p>{:else if map.error}<h1>The map could not be loaded</h1>
-            <p>Check your connection and try again.</p>{:else}<h1>This map isn't published</h1>
-            <p>The link may be mistyped, or the map was taken down. Ask at reception for directions.</p>{/if}
+        {#if map.isLoading}<p>{locale.t("loadingMap")}</p>{:else if map.error}<h1>{locale.t("mapFailed")}</h1>
+            <p>{locale.t("mapFailedHint")}</p>{:else}<h1>{locale.t("notPublished")}</h1>
+            <p>{locale.t("notPublishedHint")}</p>{/if}
     </main>{/if}
 
 <style>

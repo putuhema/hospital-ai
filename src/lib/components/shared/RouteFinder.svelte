@@ -6,6 +6,7 @@
     import {
         nearestOfType,
         stepGlyph,
+        stepText,
         walkMinutes,
         type NavGrid,
         type Place,
@@ -13,6 +14,7 @@
     } from "$lib/wayfinding/routing";
     import PlaceSearch from "$lib/components/shared/PlaceSearch.svelte";
     import PlaceDetails from "$lib/components/shared/PlaceDetails.svelte";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let {
         places,
         grid,
@@ -29,13 +31,14 @@
         /** True while the user is choosing a start point on the map. */
         picking?: boolean;
     } = $props();
+    const locale = useLocale();
     // A picked spot is named after the corridor or path it is on.
     let fromName = $derived(
         !from
             ? ""
             : "id" in from
               ? from.name
-              : `Spot on ${walkwayAt(grid.pieces, from)?.name ?? "the map"}`,
+              : locale.t("spotOn", { name: walkwayAt(grid.pieces, from)?.name ?? locale.t("theMap") }),
     );
     // Kinds of place in this layout, e.g. "Toilets" or "Parking".
     let shortcuts = $derived(shortcutsFor(places, 5));
@@ -49,8 +52,8 @@
         <PlaceSearch
             {places}
             marker="start"
-            label="Starting point"
-            placeholder="Where are you now?"
+            label={locale.t("startingPoint")}
+            placeholder={locale.t("whereAreYou")}
             value={fromName}
             onselect={(p) => {
                 from = p;
@@ -60,15 +63,15 @@
         <PlaceSearch
             {places}
             marker="end"
-            label="Destination"
-            placeholder="Search a room or building"
+            label={locale.t("destination")}
+            placeholder={locale.t("searchRoomOrBuilding")}
             value={to?.name ?? ""}
             onselect={(p) => (to = p)}
         />
         <button
             class="swap"
-            title="Swap start and destination"
-            aria-label="Swap start and destination"
+            title={locale.t("swap")}
+            aria-label={locale.t("swap")}
             disabled={!from || !to || !("id" in from)}
             onclick={() => {
                 if (from && "id" in from && to) [from, to] = [to, from];
@@ -81,47 +84,44 @@
             class:active={picking}
             aria-pressed={picking}
             onclick={() => (picking = !picking)}
-            >{picking ? "Click the map…" : "📍 Pick start on map"}</button
+            >{locale.t(picking ? "clickTheMap" : "pickStart")}</button
         >
         {#each shortcuts as t}<button
                 class="chip"
                 onclick={() => nearest(t.name)}
-                ><PlaceIcon of={{ ...t, detail: t.name }} size={16} />{from ? "Nearest " : ""}{t.name.toLowerCase()}</button
+                ><PlaceIcon of={{ ...t, detail: t.name }} size={16} />{locale.shortcut(t.name, !!from)}</button
             >{/each}
     </div>
     {#if to?.info}<PlaceDetails info={to.info} />{/if}
     {#if from && to}
         {#if route}<section class="result" aria-live="polite">
                 <div class="summary">
-                    <b>{walkMinutes(route.meters)} min</b>
-                    <span>{route.meters} m walk</span>
+                    <b>{locale.t("minutes", { n: walkMinutes(route.meters) })}</b>
+                    <span>{locale.t("metresWalk", { m: route.meters })}</span>
                     <button
                         class="clear"
                         onclick={() => {
                             to = null;
-                        }}>Clear</button
+                        }}>{locale.t("clear")}</button
                     >
                 </div>
                 <ol>
                     {#each route.steps as step}<li>
-                            <span class="glyph">{stepGlyph(step.text)}</span>
+                            <span class="glyph">{stepGlyph(step)}</span>
                             <span class="step"
-                                >{step.text}{#if step.meters}<small
+                                >{stepText(step.say, locale.lang)}{#if step.meters}<small
                                         >{step.meters} m</small
                                     >{/if}</span
                             >
                         </li>{/each}
                 </ol>
             </section>{:else}<p class="notice" role="status">
-                <b>No walking route found.</b> The destination may be closed off —
-                check that its room door isn't facing a wall.
+                <b>{locale.t("noRouteFound")}</b> {locale.t("noRouteHint")}
             </p>{/if}
     {:else if !places.length}<p class="notice">
-            Add buildings and rooms in the editor to start finding your way.
+            {locale.t("emptyMapLong")}
         </p>{:else}<p class="tip">
-            {from
-                ? "Now choose where you want to go."
-                : "Choose your starting point — or pick it on the map."}
+            {locale.t(from ? "nowChooseDestination" : "chooseStartTip")}
         </p>{/if}
 </div>
 

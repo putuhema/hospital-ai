@@ -67,3 +67,26 @@ test('a route along a garden path follows it, even when the doors are a step off
   assert.ok(grass < 2.5, `crossed ${grass.toFixed(1)} tiles of grass instead of taking the path`);
 });
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(b.x - a.x, b.y - a.y);
+test('steps are put into words in Indonesian, with arrows from what they mean', async () => {
+  const { stepText, stepGlyph } = await import('../src/lib/wayfinding/routing.ts');
+  const { typeName } = await import('../src/lib/i18n/places.ts');
+  const g = buildGrid(starterPieces, 24, 20), list = places(starterPieces);
+  const route = planRoute(g, find(list, 'Main reception'), find(list, 'Laboratory'))!;
+  assert.equal(stepText(route.steps[0].say, 'id'), 'Dari Main reception, jalan ke arah utara masuk ke koridor');
+  assert.equal(stepText(route.steps.at(-1)!.say, 'id'), 'Tiba di Laboratory di Pharmacy & lab');
+  assert.deepEqual(route.steps.map(stepGlyph), ['●', '↗', '↗', '↱', '⚑']);
+  const fromSpot = planRoute(g, { x: 12, y: 18 }, find(list, 'Room 1'))!;
+  assert.match(stepText(fromSpot.steps[0].say, 'id'), /^Dari posisi Anda/);
+  assert.match(fromSpot.steps[0].text, /^From your position/);
+  assert.equal(typeName('Pharmacy', 'id'), 'Apotek');
+  assert.equal(typeName('Parking', 'id'), 'Parkir');
+  assert.equal(typeName('Pharmacy', 'en'), 'Pharmacy');
+  assert.equal(typeName('Something new', 'id'), 'Something new');
+});
+test('every kind of room and landmark has an Indonesian name', async () => {
+  const { typeName } = await import('../src/lib/i18n/places.ts');
+  const { roomTypes } = await import('../src/lib/model/interiors.ts');
+  const { categories } = await import('../src/lib/model/categories.ts');
+  for (const name of [...roomTypes.map((t) => t.name), ...categories.map((c) => c.name), 'Building', 'Listed room'])
+    assert.ok(name === 'Lift' || typeName(name, 'id') !== name, `${name} has no Indonesian name`);
+});

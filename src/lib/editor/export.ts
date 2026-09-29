@@ -1,4 +1,5 @@
 import type { Piece } from "../model/layout.ts";
+import type { FaqEntry } from "../model/faq.ts";
 import { footprint, isCorridor, isOpenAir } from "../model/interiors.ts";
 import type { WalkingNetwork } from "../wayfinding/navigation.ts";
 
@@ -8,18 +9,20 @@ export type Project = {
   network: WalkingNetwork;
   width: number;
   height: number;
+  /** Hospital information: questions the map can't answer. */
+  faq?: FaqEntry[];
 };
 
 const grid = (p: Project) => ({ width: p.width, height: p.height, tileMeters: 2 });
 
 /** What autosave stores (read back with `parseLayout`). */
 export const layoutSnapshot = (p: Project) =>
-  JSON.stringify({ title: p.title, pieces: p.pieces, network: p.network, grid: grid(p) });
+  JSON.stringify({ title: p.title, pieces: p.pieces, network: p.network, grid: grid(p), faq: p.faq ?? [] });
 
 /** The downloadable layout file. */
 export const layoutJson = (p: Project) =>
   JSON.stringify(
-    { version: 1, title: p.title, grid: grid(p), pieces: p.pieces, network: p.network },
+    { version: 1, title: p.title, grid: grid(p), pieces: p.pieces, network: p.network, faq: p.faq ?? [] },
     null,
     2,
   );

@@ -3,6 +3,7 @@
     import { goto } from "$app/navigation";
     import { assets, starterPieces, parseLayout, pieceFrom, STORAGE_KEY, type Piece } from "$lib/model/layout";
     import { emptyNetwork, type WalkingNetwork } from "$lib/wayfinding/navigation";
+    import type { FaqEntry } from "$lib/model/faq";
     import {
         anchoredLayout,
         checkCanvasSize,
@@ -34,6 +35,7 @@
     // The project.
     let pieces: Piece[] = $state(structuredClone(starterPieces));
     let network: WalkingNetwork = $state(emptyNetwork());
+    let faq: FaqEntry[] = $state([]);
     let title = $state("Greenfield Hospital"),
         canvasWidth = $state(24),
         canvasHeight = $state(20);
@@ -59,6 +61,7 @@
     });
     let assetsOpen = $state(true),
         propertiesOpen = $state(true),
+        faqOpen = $state(false),
         canvasSettings = $state(false),
         exportOpen = $state(false),
         guideOpen = $state(false),
@@ -72,12 +75,12 @@
         setTimeout(() => (toast = ""), 2800);
     }
 
-    // Undo/redo covers the pieces and the walking network.
+    // Undo/redo covers the pieces, the walking network and the hospital information.
     const history = new History();
-    const serialised = () => JSON.stringify({ pieces, network });
+    const serialised = () => JSON.stringify({ pieces, network, faq });
     function restore(json: string | null) {
         if (json === null) return;
-        ({ pieces, network } = JSON.parse(json));
+        ({ pieces, network, faq } = JSON.parse(json));
         saved = false;
     }
     /** Call before every change, so it can be undone. */
@@ -91,7 +94,7 @@
     // Persistence: autosave shortly after every change, so work is never lost.
     let loaded = false,
         saveTimer: ReturnType<typeof setTimeout> | undefined;
-    const snapshot = () => layoutSnapshot({ title, pieces, network, width: canvasWidth, height: canvasHeight });
+    const snapshot = () => layoutSnapshot({ title, pieces, network, faq, width: canvasWidth, height: canvasHeight });
     function save(announce = true) {
         clearTimeout(saveTimer);
         localStorage.setItem(STORAGE_KEY, snapshot());
@@ -112,6 +115,7 @@
         const d = parseLayout(json);
         pieces = d.pieces;
         network = d.network;
+        faq = d.faq;
         title = d.title;
         canvasWidth = d.grid.width;
         canvasHeight = d.grid.height;
@@ -215,7 +219,7 @@
 
     // Import and export.
     function download(format: "json" | "obj") {
-        const project = { title, pieces, network, width: canvasWidth, height: canvasHeight };
+        const project = { title, pieces, network, faq, width: canvasWidth, height: canvasHeight };
         if (format === "json") {
             downloadFile(layoutJson(project), "application/json", fileName(title, "json"));
             notify("Layout exported");
@@ -293,6 +297,11 @@
             onedit={() => (saved = false)}
             onguide={() => (guideOpen = true)}
             oncanvassize={() => (canvasSettings = !canvasSettings)}
+            onfaq={() => {
+                active = null;
+                selected = null;
+                propertiesOpen = faqOpen = true;
+            }}
             onopenmap={() => {
                 save(false);
                 goto("/");
@@ -393,6 +402,12 @@
                 {canvasWidth}
                 {canvasHeight}
                 hidden={!propertiesOpen}
+                {faq}
+                bind:faqOpen
+                onfaqchange={(next) => {
+                    checkpoint();
+                    faq = next;
+                }}
                 {update}
                 {edit}
                 onrotate={rotate}
