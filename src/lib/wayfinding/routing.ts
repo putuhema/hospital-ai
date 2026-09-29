@@ -1,5 +1,5 @@
 import type { Piece } from "../model/layout.ts";
-import { center as centerPoint, footprint, inPolygon, isBuilding, isCorridor, isPath, roomTypes } from "../model/interiors.ts";
+import { center as centerPoint, footprint, inPolygon, isArea, isBuilding, isCorridor, isGateway, isOpenAir, isPath, roomTypes } from "../model/interiors.ts";
 import type { PlaceInfo } from "../model/place-info.ts";
 import { category, type LandmarkCategory } from "../model/categories.ts";
 import { search as searchText } from "./search.ts";
@@ -17,13 +17,14 @@ import {
 export type Place = {
   id: string;
   name: string;
-  kind: "building" | "room" | "listed" | "landmark";
+  /** An area is an open-air destination drawn on the layout, e.g. a car park. */
+  kind: "building" | "room" | "listed" | "landmark" | "area";
   /** Name of the building that contains this place. */
   building?: string;
   detail: string;
   pieceId?: number;
   roomId?: number;
-  /** A landmark's kind, e.g. parking; `detail` holds its name. */
+  /** A landmark's or area's kind, e.g. parking; `detail` holds its name. */
   category?: LandmarkCategory;
   point: Point;
   info?: PlaceInfo;
@@ -79,6 +80,17 @@ export function places(pieces: Piece[], network?: WalkingNetwork): Place[] {
       }),
     );
   }
+  for (const p of pieces.filter(isArea))
+    out.push({
+      id: `a:${p.id}`,
+      name: p.name,
+      kind: "area",
+      detail: category(isGateway(p) ? "entrance" : "parking").name,
+      category: isGateway(p) ? "entrance" : "parking",
+      pieceId: p.id,
+      point: centerPoint(p),
+      info: p.info,
+    });
   for (const n of network?.nodes ?? [])
     if (n.name.trim())
       out.push({
@@ -128,7 +140,7 @@ export function buildGrid(
           (isBuilding(p) && !p.shape) ||
           inPolygon({ x: (i + 0.5) / RES, y: (j + 0.5) / RES }, poly)
         )
-          cost[j * cols + i] = isPath(p) ? PATH : INDOOR;
+          cost[j * cols + i] = isOpenAir(p) ? PATH : INDOOR;
   }
   // Walls are axis-aligned, so each one blocks a run of neighbouring cell pairs.
   for (const [a, b] of segments) {
@@ -285,29 +297,33 @@ function search(g: NavGrid, sources: number[], targets: Set<number>) {
   return null;
 }
 
-/** Straight-line shortcut that crosses no wall and doesn't detour outdoors. */
-function clear(g: NavGrid, a: Point, b: Point) {
-  if (g.walls.some((w) => crosses(a, b, w))) return false;
-  const limit = Math.max(g.cost[cellAt(g, a)], g.cost[cellAt(g, b)]),
-    samples = Math.ceil(distance(a, b) * RES * 8);
-  for (let k = 1; k < samples; k++) {
-    const t = k / samples;
-    if (
-      g.cost[
-        cellAt(g, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
-      ] > limit
-    )
-      return false;
+/** Walking cost of a straight line: its length weighted by the ground under it. */
+function lineCost(g: NavGrid, a: Point, b: Point) {
+  const length = distance(a, b),
+    samples = Math.max(1, Math.ceil(length * RES * 8));
+  let sum = 0;
+  for (let k = 0; k < samples; k++) {
+    const t = (k + 0.5) / samples;
+    sum += g.cost[cellAt(g, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })];
   }
-  return true;
+  return (sum * length) / samples;
 }
+/**
+ * Straighten the grid path: skip ahead while the straight line crosses no wall
+ * and costs no more than the stretch of path it replaces, so a shortcut never
+ * trades a path or corridor for the grass beside it.
+ */
 function smooth(g: NavGrid, points: Point[]) {
+  const walked = [0];
+  for (let k = 1; k < points.length; k++) walked.push(walked[k - 1] + lineCost(g, points[k - 1], points[k]));
+  const clear = (i: number, j: number) =>
+    !g.walls.some((w) => crosses(points[i], points[j], w)) &&
+    lineCost(g, points[i], points[j]) <= walked[j] - walked[i] + 1e-6;
   const out = [points[0]];
   let anchor = 0;
   while (anchor < points.length - 1) {
     let next = anchor + 1;
-    while (next + 1 < points.length && clear(g, points[anchor], points[next + 1]))
-      next++;
+    while (next + 1 < points.length && clear(anchor, next + 1)) next++;
     out.push(points[next]);
     anchor = next;
   }
@@ -328,8 +344,8 @@ export function areaAt(pieces: Piece[], p: Point) {
     );
     return r ? r.name : b.name;
   }
-  const c = pieces.find((c) => (isCorridor(c) || isPath(c)) && inPolygon(p, footprint(c)));
-  return c ? (isPath(c) ? "the path" : "the corridor") : "outside";
+  const c = pieces.find((c) => (isCorridor(c) || isOpenAir(c)) && inPolygon(p, footprint(c)));
+  return c ? (isPath(c) ? "the path" : isCorridor(c) ? "the corridor" : c.name) : "outside";
 }
 
 const compass = (d: Point) =>
@@ -456,7 +472,7 @@ export function nearestOfType(
   detail: string,
   from: Place | Point | null,
 ): Place | null {
-  const options = list.filter((p) => (p.kind === "room" || p.kind === "landmark") && p.detail === detail);
+  const options = list.filter((p) => ["room", "landmark", "area"].includes(p.kind) && p.detail === detail);
   if (!from) return options[0] ?? null;
   let best: Place | null = null,
     bestMeters = Infinity;

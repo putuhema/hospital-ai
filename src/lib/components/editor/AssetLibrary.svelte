@@ -1,5 +1,6 @@
 <script lang="ts">
     import { assets } from "$lib/model/layout";
+    import { pieceType } from "$lib/model/interiors";
     import Icon from "./Icon.svelte";
     let {
         active = $bindable(),
@@ -11,7 +12,7 @@
         hidden: boolean;
         onnotify: (message: string) => void;
     } = $props();
-    const categories = ["All assets", "Buildings", "Corridors", "Paths", "Templates"];
+    const categories = ["All assets", "Buildings", "Corridors", "Outdoor", "Templates"];
     let category = $state("All assets"),
         search = $state("");
     let filtered = $derived(
@@ -59,8 +60,8 @@
         <span
             >{category === "Corridors"
                 ? "MODULAR CORRIDORS"
-                : category === "Paths"
-                  ? "OPEN-AIR WALKWAYS"
+                : category === "Outdoor"
+                  ? "PATHS, PARKING & GATES"
                   : category === "Templates"
                   ? "READY-MADE DEPARTMENTS"
                   : "HOSPITAL ESSENTIALS"}</span
@@ -83,7 +84,7 @@
                 </div>
                 <strong>{a.name}</strong><small
                     >{a.description ??
-                        `${a.w} × ${a.h} tiles · ${a.group === "Corridors" ? "Corridor" : a.group === "Paths" ? "Path" : "Building"}`}</small
+                        `${a.w} × ${a.h} tiles · ${pieceType(a)}`}</small
                 ></button
             >{/each}
     </div>

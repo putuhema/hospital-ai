@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildGrid, places, planRoute, searchPlaces, unreachable } from '../src/lib/wayfinding/routing.ts';
 import { starterPieces, type Piece } from '../src/lib/model/layout.ts';
+import { footprint, inPolygon } from '../src/lib/model/interiors.ts';
 const find = (list: ReturnType<typeof places>, name: string) => list.find((p) => p.name === name)!;
 const ward: Piece = { id: 1, name: 'Ward', kind: 'flat', x: 2, y: 2, w: 5, h: 4, rotation: 0, color: '#ffffff' };
 
@@ -46,3 +47,23 @@ test('landmarks and listed rooms are searchable destinations', () => {
   assert.equal(searchPlaces(list, 'caf').length, 1);
   assert.ok(planRoute(buildGrid(pieces, 12, 12), find(list, 'MRI suite'), find(list, 'Café')));
 });
+
+test('a route along a garden path follows it, even when the doors are a step off the path', () => {
+  const block = (id: number, name: string, x: number, y: number, side: 'east' | 'north', offset: number): Piece =>
+    ({ id, name, kind: 'flat', x, y, w: side === 'east' ? 4 : 5, h: 4, rotation: 0, color: '#ffffff', entrances: [{ side, offset, width: 0.8 }] });
+  const path = (id: number, x: number, y: number, w: number, h: number): Piece =>
+    ({ id, name: 'Path', kind: 'path', x, y, w, h, rotation: 0, color: '#cfc6b4' });
+  // An L of path with a tile of grass between it and each door.
+  const pieces = [block(1, 'A', 0, 0, 'east', 1.5), path(2, 5, 1, 5, 1), path(3, 9, 2, 1, 7), block(4, 'B', 7, 10, 'north', 2.5)],
+    list = places(pieces),
+    route = planRoute(buildGrid(pieces, 24, 20), find(list, 'A'), find(list, 'B'))!;
+  let grass = 0;
+  for (let i = 1; i < route.points.length; i++)
+    for (let t = 0.05; t < 1; t += 0.1) {
+      const a = route.points[i - 1], b = route.points[i],
+        p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      if (!pieces.some((q) => inPolygon(p, footprint(q)))) grass += distance(a, b) * 0.1;
+    }
+  assert.ok(grass < 2.5, `crossed ${grass.toFixed(1)} tiles of grass instead of taking the path`);
+});
+const distance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(b.x - a.x, b.y - a.y);

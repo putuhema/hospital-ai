@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { Piece } from "$lib/model/layout";
-    import { isBuilding, isCorridor, isPath } from "$lib/model/interiors";
+    import { isArea, isBarrier, isBuilding, isGate, isParking, isPath, pieceType } from "$lib/model/interiors";
     import ColorField from "$lib/components/shared/ColorField.svelte";
     import InteriorEditor from "./InteriorEditor.svelte";
     import DestinationsEditor from "./DestinationsEditor.svelte";
@@ -70,7 +70,7 @@
             </div>
             <div>
                 <b>{piece.name}</b><small
-                    >{isCorridor(piece) ? "Corridor" : isPath(piece) ? "Path" : "Building"} <span>·</span>
+                    >{pieceType(piece)} <span>·</span>
                     {placing ? "Before placing" : "Selected"}</small
                 >
             </div>
@@ -136,7 +136,35 @@
                     fallback="#cfc6b4"
                     onchange={(c) => update("color", c)}
                 />
-                <p class="hint">Open-air path: no roof. Routes prefer it over crossing the grass.</p>{:else}<ColorField
+                <p class="hint">Open-air path: no roof. Routes prefer it over crossing the grass.</p>{:else if isParking(piece)}<ColorField
+                    label="Surface"
+                    value={piece.color}
+                    fallback="#7c8286"
+                    onchange={(c) => update("color", c)}
+                />
+                <p class="hint">
+                    Open-air parking: no building. Visitors can search for it and get directions
+                    to it, and start a route from where they parked.
+                </p>{:else if isGate(piece)}<ColorField
+                    label="Drive"
+                    value={piece.color}
+                    fallback="#b9b2a3"
+                    onchange={(c) => update("color", c)}
+                />
+                <p class="hint">
+                    The way into the campus. Its name is written on the gateway, and visitors can
+                    search for it as an entrance. Traffic crosses its short side.
+                </p>{:else if isBarrier(piece)}<ColorField
+                    label="Lane"
+                    value={piece.color}
+                    fallback="#6f7579"
+                    onchange={(c) => update("color", c)}
+                />
+                <p class="hint">
+                    Ticket booth and barrier arm. Put it across the way into a car park; traffic
+                    crosses its short side. Visitors can search for it as an entrance and exit.
+                    Turn it twice to put the booth on the other side.
+                </p>{:else}<ColorField
                     label="Floor"
                     value={piece.color}
                     fallback="#d9d4c9"
@@ -176,6 +204,10 @@
                     {onnotify}
                 />
             </details>{/if}{/if}
+        {#if isArea(piece) && !placing}<details class="section">
+                <summary>Visitor info</summary>
+                <PlaceInfoEditor info={piece.info} onchange={(info) => edit({ info })} />
+            </details>{/if}
         <details class="section" open={placing}>
             <summary>{placing ? "Size & rotation" : "Position & size"}</summary>
             <PositionFields {piece} {placing} {canvasWidth} {canvasHeight} {update} {onrotate} />

@@ -1,5 +1,5 @@
 import type { Piece } from "../model/layout.ts";
-import { footprint, isCorridor, isPath } from "../model/interiors.ts";
+import { footprint, isCorridor, isOpenAir } from "../model/interiors.ts";
 import type { WalkingNetwork } from "../wayfinding/navigation.ts";
 
 export type Project = {
@@ -26,13 +26,13 @@ export const layoutJson = (p: Project) =>
 
 /**
  * A Blender-friendly OBJ blockout: each piece's outline extruded to 1 m
- * (corridors), 0.1 m (paths) or 3 m (buildings). One unit is one metre.
+ * (corridors), 0.1 m (paths, car parks and gateways) or 3 m (buildings). One unit is one metre.
  */
 export function layoutObj(pieces: Piece[]) {
   let body = "# Hospital layout — 1 unit = 1 meter\n",
     v = 1;
   for (const p of pieces) {
-    const height = isPath(p) ? 0.1 : isCorridor(p) ? 1 : 3,
+    const height = isOpenAir(p) ? 0.1 : isCorridor(p) ? 1 : 3,
       poly = footprint(p).map(({ x, y }) => [x * 2, y * 2]),
       n = poly.length;
     body += `o ${p.name.replaceAll(" ", "_")}\n`;

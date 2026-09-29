@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import * as THREE from "three";
     import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
-    import { center, isBuilding, isPath } from "$lib/model/interiors";
+    import { center, isArea, isBuilding, isOpenAir } from "$lib/model/interiors";
     import type { Piece } from "$lib/model/layout";
     import type { Point } from "$lib/wayfinding/navigation";
     import { createScenery, SKY } from "$lib/scene/scenery";
@@ -149,12 +149,12 @@
         function buildPieces() {
             clearBuildings();
             for (const p of pieces) {
-                // Paths are built without a Blender template.
+                // Open-air pieces are built without a Blender template.
                 const template = templates.get(p.kind);
-                if (!template && !isPath(p)) continue;
+                if (!template && !isOpenAir(p)) continue;
                 const { model, interior } = pieceModel(p, template, pieces, inside);
                 if (interior) buildings.add(interior);
-                if (isBuilding(p)) addLabels(p, model);
+                if (isBuilding(p) || isArea(p)) addLabels(p, model);
                 buildings.add(model);
             }
         }

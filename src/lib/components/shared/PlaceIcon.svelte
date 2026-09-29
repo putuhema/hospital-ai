@@ -24,7 +24,7 @@
 
     /** The icon and colours for a place; landmarks get a solid badge. */
     export function iconFor(p: IconFor): { icon: string; color: string; solid: boolean } {
-        if (p.kind === "landmark") {
+        if (p.kind === "landmark" || p.kind === "area") {
             const c = p.category ? category(p.category) : categories.find((c) => c.name === p.detail) ?? category("other");
             return { icon: c.icon, color: c.color, solid: true };
         }

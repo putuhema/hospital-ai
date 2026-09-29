@@ -164,8 +164,8 @@
                     insetLeft={panelOpen && wide ? 400 : 0}
                     insetBottom={wide ? 0 : sheetInset}
                     onselect={(id, roomId, point) => {
-                        const key = roomId ? `r:${id}:${roomId}` : `b:${id}`;
-                        choose(placeList.find((p) => p.id === key) ?? null, point);
+                        const keys = roomId ? [`r:${id}:${roomId}`] : [`b:${id}`, `a:${id}`];
+                        choose(placeList.find((p) => keys.includes(p.id)) ?? null, point);
                     }}
                     onplace={() => {}}
                     onerror={(s) => (error = s)}

@@ -43,7 +43,7 @@ export const categories: Category[] = [
     name: "Parking",
     color: "#3a5ba8",
     icon: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M10 17V8h3a2.5 2.5 0 0 1 0 5h-3"/>',
-    words: ["parking", "car park", "park", "garage", "parkir", "tempat parkir"],
+    words: ["parking", "car park", "park", "garage", "motorcycle", "motorbike", "scooter", "parkir", "tempat parkir", "parkir motor", "parkir mobil", "sepeda motor"],
   },
   {
     id: "dropoff",

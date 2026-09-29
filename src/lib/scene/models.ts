@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { Piece } from "../model/layout.ts";
-import { corridorEnds, exposedRuns, footprint, isBuilding, isCorridor, isPath } from "../model/interiors.ts";
+import { corridorEnds, exposedRuns, footprint, gatewayParts, isBarrier, isBuilding, isCorridor, isGate, isMotorcycleParking, isOpenAir, isParking, isPath, parkingBays } from "../model/interiors.ts";
 import { buildingInterior, STOREY } from "./interior-geometry.ts";
 
 export const MODEL_KINDS = ["pitched", "flat", "straight", "corner", "junction", "cross"];
@@ -148,6 +148,247 @@ function pathModel(p: Piece, pieces: Piece[]) {
   return group;
 }
 
+const CAR_COLOURS = ["#e8e8e4", "#2f3437", "#a8b0b5", "#7d2a2a", "#2c4a6e", "#c9c2b0", "#556b4f"],
+  MOTORCYCLE_COLOURS = ["#c23b32", "#1f2427", "#e8e8e4", "#2d5fa0", "#9aa3a8", "#d9a32c"];
+
+/** Sign faces, drawn once per text and colour: white letters on a framed board. */
+const signs = new Map<string, THREE.Texture>();
+function signTexture(text = "P", background = "#2f5aa8", width = 128) {
+  const key = `${background}:${width}:${text}`;
+  if (signs.has(key) || typeof document === "undefined") return signs.get(key) ?? null;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = 128;
+  const g = canvas.getContext("2d")!;
+  g.fillStyle = background;
+  g.fillRect(0, 0, width, 128);
+  g.strokeStyle = "white";
+  g.lineWidth = 6;
+  g.strokeRect(8, 8, width - 16, 112);
+  g.fillStyle = "white";
+  // Short text such as "P" fills the board; names shrink to fit.
+  let size = text.length > 2 ? 64 : 92;
+  g.font = `bold ${size}px sans-serif`;
+  while (size > 20 && g.measureText(text).width > width - 48) g.font = `bold ${(size -= 4)}px sans-serif`;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(text, width / 2, 70);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  signs.set(key, texture);
+  return texture;
+}
+
+/**
+ * An open-air car park: asphalt with painted bays in one row (or two facing
+ * an aisle when it is deep enough), some parked cars, kerbs along the sides
+ * and a "P" sign. The short ends stay open for cars to drive in.
+ */
+function parkingModel(p: Piece, pieces: Piece[]) {
+  const group = new THREE.Group();
+  const poly = footprint(p).map((v) => ({ x: v.x * 2, z: v.y * 2 }));
+  group.add(slab("Parking surface", poly, 0, 0.05, new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.9 })));
+  const { alongX, bayDepth, lines, bays } = parkingBays(p);
+  // Sizes along the row (u) and across it (v), in metres, placed in the world.
+  const box = (name: string, x: number, y: number, z: number, du: number, h: number, dv: number, material: THREE.Material) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(alongX ? du : dv, h, alongX ? dv : du), material);
+    mesh.position.set(x, y, z);
+    mesh.name = name;
+    group.add(mesh);
+    return mesh;
+  };
+  const paint = new THREE.MeshStandardMaterial({ color: "#f2f2ee", roughness: 0.6 }),
+    glass = new THREE.MeshStandardMaterial({ color: "#39444c", roughness: 0.25, metalness: 0.3 });
+  for (const [a, b] of lines) {
+    const length = Math.hypot(b.x - a.x, b.y - a.y) * 2,
+      horizontal = Math.abs(b.x - a.x) > Math.abs(b.y - a.y),
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? length : 0.1, 0.012, horizontal ? 0.1 : length), paint);
+    mesh.name = "Parking bay line";
+    mesh.position.set(a.x + b.x, 0.056, a.y + b.y);
+    group.add(mesh);
+  }
+  const rubber = new THREE.MeshStandardMaterial({ color: "#1d1f21", roughness: 0.9 });
+  // A motorcycle nose-in to the kerb: wheels, body, seat and handlebars.
+  const motorcycle = (bay: { x: number; y: number; row: number }, colour: string) => {
+    const x = bay.x * 2,
+      z = bay.y * 2,
+      // Along the bay, toward the aisle.
+      out = bay.row ? -1 : 1,
+      along = (d: number) => (alongX ? { x, z: z + d * out } : { x: x + d * out, z });
+    const body = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.4, metalness: 0.2 });
+    for (const d of [-0.62, 0.62]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16), rubber),
+        at = along(d);
+      // The axle runs along the row.
+      wheel.rotation[alongX ? "z" : "x"] = Math.PI / 2;
+      wheel.position.set(at.x, 0.35, at.z);
+      wheel.name = "Parking motorcycle wheel";
+      group.add(wheel);
+    }
+    const mid = along(0.05),
+      seat = along(0.25),
+      bars = along(-0.55);
+    box("Parking motorcycle body", mid.x, 0.62, mid.z, 0.32, 0.36, 1.1, body);
+    box("Parking motorcycle seat", seat.x, 0.86, seat.z, 0.28, 0.1, 0.62, rubber);
+    box("Parking motorcycle handlebars", bars.x, 1.02, bars.z, 0.7, 0.05, 0.05, rubber);
+  };
+  // Some bays are taken, the same ones every time for a given car park.
+  let seed = p.id * 9301 + 49297;
+  const random = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const depth = bayDepth * 2;
+  const motorcycles = isMotorcycleParking(p);
+  for (const bay of bays) {
+    if (random() > (motorcycles ? 0.7 : 0.6)) continue;
+    if (motorcycles) {
+      motorcycle(bay, MOTORCYCLE_COLOURS[Math.floor(random() * MOTORCYCLE_COLOURS.length)]);
+      continue;
+    }
+    const colour = CAR_COLOURS[Math.floor(random() * CAR_COLOURS.length)],
+      body = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.35, metalness: 0.25 }),
+      // The cabin sits toward the back of the car, which faces the kerb.
+      back = bay.row ? 0.25 : -0.25,
+      x = bay.x * 2,
+      z = bay.y * 2;
+    box("Parking car body", x, 0.5, z, 1.8, 0.6, Math.min(4.2, depth - 0.6), body);
+    box("Parking car cabin", alongX ? x : x + back, 1.05, alongX ? z + back : z, 1.6, 0.5, Math.min(2.2, depth - 1.6), glass);
+  }
+  // Kerbs along the long sides where they meet grass; the ends stay open.
+  const kerb = new THREE.MeshStandardMaterial({ color: "#a3a197", roughness: 0.85 }),
+    inward = turning(poly) > 0 ? 1 : -1;
+  poly.forEach((a, i) => {
+    const b = poly[(i + 1) % poly.length],
+      side = Math.hypot(b.x - a.x, b.z - a.z),
+      horizontal = Math.abs(b.x - a.x) > Math.abs(b.z - a.z);
+    if (horizontal !== alongX) return;
+    const nx = (-(b.z - a.z) / side) * inward,
+      nz = ((b.x - a.x) / side) * inward;
+    for (const [from, to] of exposedRuns(p, i, pieces)) {
+      const run = (to - from) * side,
+        t = (from + to) / 2,
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? run : 0.18, 0.14, horizontal ? 0.18 : run), kerb);
+      mesh.name = "Parking kerb";
+      mesh.position.set(a.x + (b.x - a.x) * t + nx * 0.09, 0.07, a.z + (b.z - a.z) * t + nz * 0.09);
+      group.add(mesh);
+    }
+  });
+  // The sign stands at a corner of the open end, facing out of it.
+  const steel = new THREE.MeshStandardMaterial({ color: "#8d9599", metalness: 0.6, roughness: 0.4 }),
+    corner = { x: p.x * 2 + 0.35, z: (p.y + p.h) * 2 - 0.35 };
+  box("Parking sign post", corner.x, 1.1, corner.z, 0.08, 2.2, 0.08, steel);
+  // Thin along the row, so it faces out of the open end.
+  const face = signTexture();
+  box(
+    "Parking sign",
+    corner.x,
+    2.35,
+    corner.z,
+    0.06,
+    0.8,
+    0.8,
+    new THREE.MeshStandardMaterial({ color: face ? "white" : "#2f5aa8", map: face, roughness: 0.5 }),
+  );
+  return group;
+}
+
+/**
+ * Boxes laid out along a gateway's long side (u) and across it (v), in metres
+ * from its corner, so one description serves both ways it can face.
+ */
+function placer(group: THREE.Group, p: Piece, alongX: boolean) {
+  return (name: string, u: number, y: number, v: number, du: number, h: number, dv: number, material: THREE.Material) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(alongX ? du : dv, h, alongX ? dv : du), material);
+    mesh.position.set(p.x * 2 + (alongX ? u : v), y, p.y * 2 + (alongX ? v : u));
+    mesh.name = name;
+    group.add(mesh);
+    return mesh;
+  };
+}
+
+/** Metres along (u) and across (v) a gateway for a point in tiles. */
+const local = (p: Piece, alongX: boolean, t: { x: number; y: number }) =>
+  alongX ? { u: (t.x - p.x) * 2, v: (t.y - p.y) * 2 } : { u: (t.y - p.y) * 2, v: (t.x - p.x) * 2 };
+
+/**
+ * The campus entrance: a paved drive between two stone pillars, with a beam
+ * across the top carrying the hospital's name on both faces.
+ */
+function gateModel(p: Piece) {
+  const group = new THREE.Group(),
+    poly = footprint(p).map((v) => ({ x: v.x * 2, z: v.y * 2 }));
+  group.add(slab("Gate drive", poly, 0, 0.06, new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.9 })));
+  const { alongX, blocks, span } = gatewayParts(p),
+    box = placer(group, p, alongX),
+    stone = new THREE.MeshStandardMaterial({ color: "#d8d2c4", roughness: 0.8 }),
+    trim = new THREE.MeshStandardMaterial({ color: "#8a8272", roughness: 0.7 });
+  const HEIGHT = 4.6;
+  for (const b of blocks) {
+    const c = local(p, alongX, { x: b.x + b.w / 2, y: b.y + b.h / 2 }),
+      size = Math.min(b.w, b.h) * 2;
+    box("Gate pillar", c.u, HEIGHT / 2, c.v, size, HEIGHT, size, stone);
+    box("Gate pillar cap", c.u, HEIGHT + 0.1, c.v, size + 0.2, 0.2, size + 0.2, trim);
+    box("Gate pillar plinth", c.u, 0.2, c.v, size + 0.12, 0.4, size + 0.12, trim);
+  }
+  const a = local(p, alongX, span[0]),
+    b = local(p, alongX, span[1]),
+    length = b.u - a.u,
+    mid = (a.u + b.u) / 2;
+  box("Gate beam", mid, HEIGHT - 0.55, a.v, length, 0.9, 0.4, trim);
+  // The name faces both ways along the drive.
+  const face = signTexture(p.name, "#2f7d44", 512),
+    board = new THREE.MeshStandardMaterial({ color: face ? "white" : "#2f7d44", map: face, roughness: 0.5 }),
+    signLength = Math.max(0.5, length - 0.3);
+  for (const side of [-1, 1]) {
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(signLength, 0.75), board),
+      v = a.v + side * 0.21;
+    sign.position.set(p.x * 2 + (alongX ? mid : v), HEIGHT - 0.55, p.y * 2 + (alongX ? v : mid));
+    // Planes face +z; turn each to face out of its side of the beam.
+    sign.rotation.y = alongX ? (side > 0 ? 0 : Math.PI) : side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    sign.name = "Gate name sign";
+    group.add(sign);
+  }
+  return group;
+}
+
+/**
+ * A parking gate: an asphalt lane with a ticket booth on a kerbed island at
+ * one end and a red-and-white barrier arm across the rest, lowered.
+ */
+function barrierModel(p: Piece) {
+  const group = new THREE.Group(),
+    poly = footprint(p).map((v) => ({ x: v.x * 2, z: v.y * 2 }));
+  group.add(slab("Parking gate lane", poly, 0, 0.05, new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.9 })));
+  const { alongX, blocks, span } = gatewayParts(p),
+    box = placer(group, p, alongX),
+    [booth] = blocks,
+    c = local(p, alongX, { x: booth.x + booth.w / 2, y: booth.y + booth.h / 2 }),
+    du = (alongX ? booth.w : booth.h) * 2,
+    dv = (alongX ? booth.h : booth.w) * 2;
+  const kerb = new THREE.MeshStandardMaterial({ color: "#d9d6cc", roughness: 0.85 }),
+    wall = new THREE.MeshStandardMaterial({ color: "#f1efe8", roughness: 0.7 }),
+    glass = new THREE.MeshStandardMaterial({ color: "#5b7584", roughness: 0.2, metalness: 0.3 }),
+    roof = new THREE.MeshStandardMaterial({ color: "#2f5aa8", roughness: 0.6 }),
+    steel = new THREE.MeshStandardMaterial({ color: "#8d9599", metalness: 0.6, roughness: 0.4 });
+  box("Parking gate island", c.u, 0.08, c.v, du + 0.3, 0.16, dv + 0.4, kerb);
+  box("Parking gate booth", c.u, 1.26, c.v, du, 2.2, dv, wall);
+  box("Parking gate booth window", c.u, 1.55, c.v, du + 0.02, 0.8, dv - 0.3, glass);
+  box("Parking gate booth roof", c.u, 2.44, c.v, du + 0.5, 0.16, dv + 0.5, roof);
+  // The arm pivots on a post at the island's edge and rests on a fork at the far side.
+  const a = local(p, alongX, span[0]),
+    b = local(p, alongX, span[1]),
+    dir = Math.sign(b.u - a.u),
+    post = a.u - dir * 0.12,
+    red = new THREE.MeshStandardMaterial({ color: "#d24b3b", roughness: 0.5 }),
+    white = new THREE.MeshStandardMaterial({ color: "#f4f4f0", roughness: 0.5 });
+  box("Parking gate post", post, 0.55, a.v, 0.3, 1.1, 0.3, new THREE.MeshStandardMaterial({ color: "#e2b93b", roughness: 0.5 }));
+  box("Parking gate ticket machine", post, 0.6, a.v - 0.45, 0.3, 1.2, 0.3, steel);
+  const length = Math.abs(b.u - post) - 0.15,
+    stripes = Math.max(2, Math.round(length / 0.5));
+  for (let i = 0; i < stripes; i++)
+    box("Parking gate arm", post + dir * (0.15 + ((i + 0.5) * length) / stripes), 1.0, a.v, length / stripes, 0.08, 0.08, i % 2 ? white : red);
+  box("Parking gate arm rest", b.u - dir * 0.1, 0.48, a.v, 0.06, 0.96, 0.06, steel);
+  return group;
+}
+
 const EAVE = 3.92,
   OVERHANG = 0.28,
   PITCH = 0.5;
@@ -282,11 +523,17 @@ export function pieceModel(
   pieces: Piece[],
   inside: boolean,
 ) {
-  const generated = isPath(p) || isCorridor(p) || (isBuilding(p) && !!p.shape);
+  const generated = isOpenAir(p) || isCorridor(p) || (isBuilding(p) && !!p.shape);
   const empty = new THREE.Group();
   const model: THREE.Object3D = isPath(p)
     ? pathModel(p, pieces)
-    : isCorridor(p)
+    : isParking(p)
+      ? parkingModel(p, pieces)
+      : isGate(p)
+      ? gateModel(p)
+      : isBarrier(p)
+      ? barrierModel(p)
+      : isCorridor(p)
       ? corridorModel(p, template ?? empty, pieces)
       : generated
         ? lShapedRoof(p, template ?? empty)

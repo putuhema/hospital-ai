@@ -144,7 +144,7 @@ export type Match = {
   via?: string;
 };
 
-const order: Record<Place["kind"], number> = { room: 0, landmark: 0, building: 1, listed: 2 };
+const order: Record<Place["kind"], number> = { room: 0, landmark: 0, area: 0, building: 1, listed: 2 };
 
 /** Places matching every word of the query, best first. */
 export function search(list: Place[], query: string): Match[] {

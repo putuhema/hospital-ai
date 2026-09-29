@@ -6,7 +6,7 @@ import type { Place } from "./routing.ts";
 export type Shortcut = {
   /** The places' `detail`, e.g. "Toilets" or "Parking". */
   name: string;
-  kind: "room" | "landmark";
+  kind: "room" | "landmark" | "area";
   category?: LandmarkCategory;
 };
 
@@ -20,7 +20,7 @@ export function shortcuts(list: Place[], limit = Infinity): Shortcut[] {
     .filter((t) => list.some((p) => p.kind === "room" && p.detail === t.name))
     .map((t) => ({ key: t.type as string, name: t.name, kind: "room" as const }));
   const marks = categories
-    .filter((c) => c.id !== "other" && list.some((p) => p.kind === "landmark" && p.category === c.id))
+    .filter((c) => c.id !== "other" && list.some((p) => (p.kind === "landmark" || p.kind === "area") && p.category === c.id))
     .map((c) => ({ key: c.id as string, name: c.name, kind: "landmark" as const, category: c.id }));
   return [...rooms, ...marks]
     .sort((a, b) => rank(a.key) - rank(b.key))

@@ -94,10 +94,109 @@ export function fitsRoom(b: Piece, r: RoomAsset, others: RoomAsset[] = []) {
   );
 }
 export const corridorKinds = ["straight", "corner", "junction", "cross"];
-export const isCorridor = (p: Piece) => corridorKinds.includes(p.kind);
+type Kind = Pick<Piece, "kind">;
+export const isCorridor = (p: Kind) => corridorKinds.includes(p.kind);
 /** Open-air paved footpath: walkable and gets building doors, but no canopy. */
-export const isPath = (p: Piece) => p.kind === "path";
+export const isPath = (p: Kind) => p.kind === "path";
 export const isBuilding = (p: Piece) => p.kind === "pitched" || p.kind === "flat";
+/** Open-air car or motorcycle park: no building, walkable, and a destination in its own right. */
+export const isParking = (p: Kind) => p.kind === "parking" || p.kind === "motorcycle";
+export const isMotorcycleParking = (p: Kind) => p.kind === "motorcycle";
+/** The campus entrance: a gateway over the drive with the hospital's name on it. */
+export const isGate = (p: Kind) => p.kind === "gate";
+/** A parking gate: a ticket booth and a barrier arm across the lane. */
+export const isBarrier = (p: Kind) => p.kind === "barrier";
+/** Open-air ground people walk across: paths, car parks and gateways. */
+export const isOpenAir = (p: Kind) => isPath(p) || isParking(p) || isGate(p) || isBarrier(p);
+/** Open-air places visitors can search for and be given directions to. */
+export const isArea = (p: Kind) => isParking(p) || isGate(p) || isBarrier(p);
+/** Gateways are ways in and out: visitors find them as entrances and exits. */
+export const isGateway = (p: Kind) => isGate(p) || isBarrier(p);
+/** What a piece is, in words, for the editor. */
+export const pieceType = (p: Kind) =>
+  isCorridor(p)
+    ? "Corridor"
+    : isPath(p)
+      ? "Path"
+      : isMotorcycleParking(p)
+        ? "Motorcycle parking"
+        : isParking(p)
+          ? "Car park"
+          : isGate(p)
+            ? "Campus entrance"
+            : isBarrier(p)
+              ? "Parking gate"
+              : "Building";
+
+/**
+ * Bays in tiles: a car's is 2.5 × 5 m (1.25 × 2.5 tiles), a motorcycle's
+ * 1 × 2 m (0.5 × 1 tile).
+ */
+const bayOf = (p: Kind) => (isMotorcycleParking(p) ? { width: 0.5, depth: 1, aisle: 0.75 } : { width: 1.25, depth: 2.5, aisle: 1.5 });
+/**
+ * Painted bays of a car park, in tiles: one row along its length, or two
+ * facing an aisle when it is deep enough. `lines` are the painted markings;
+ * each bay has its centre and which row it is in (0 along the top or left).
+ */
+export function parkingBays(p: Piece) {
+  const { width: BAY, depth: BAY_DEPTH, aisle: AISLE } = bayOf(p),
+    alongX = p.w >= p.h,
+    length = alongX ? p.w : p.h,
+    depth = alongX ? p.h : p.w,
+    count = Math.max(1, Math.floor((length - 0.2) / BAY)),
+    start = (length - count * BAY) / 2,
+    bayDepth = Math.min(BAY_DEPTH, depth * 0.62),
+    rows = depth >= BAY_DEPTH * 2 + AISLE ? 2 : 1;
+  // Local (u along the row, v across it) to tiles.
+  const at = (u: number, v: number) => (alongX ? { x: p.x + u, y: p.y + v } : { x: p.x + v, y: p.y + u });
+  const lines: [{ x: number; y: number }, { x: number; y: number }][] = [],
+    bays: { x: number; y: number; row: number }[] = [];
+  for (let row = 0; row < rows; row++) {
+    const v0 = row ? depth - bayDepth : 0,
+      kerb = row ? depth - 0.08 : 0.08,
+      aisle = row ? v0 : bayDepth;
+    for (let i = 0; i <= count; i++) lines.push([at(start + i * BAY, kerb), at(start + i * BAY, aisle)]);
+    lines.push([at(start, aisle), at(start + count * BAY, aisle)]);
+    for (let i = 0; i < count; i++) bays.push({ ...at(start + (i + 0.5) * BAY, v0 + bayDepth / 2), row });
+  }
+  return { alongX, bayDepth, lines, bays };
+}
+
+type Point = { x: number; y: number };
+type Rect = Point & { w: number; h: number };
+/**
+ * The fixed parts of a gateway, in tiles. Traffic crosses its short side.
+ * A campus entrance has a pillar at each end of its long side (`blocks`) and
+ * a beam between them (`span`); a parking gate has a ticket booth at one end,
+ * the far end once turned past 180°, and a barrier arm across the rest.
+ */
+export function gatewayParts(p: Piece): { alongX: boolean; blocks: Rect[]; span: [Point, Point] } {
+  const alongX = p.w >= p.h,
+    length = alongX ? p.w : p.h,
+    depth = alongX ? p.h : p.w,
+    mid = depth / 2;
+  const rect = (u: number, v: number, du: number, dv: number): Rect =>
+    alongX ? { x: p.x + u, y: p.y + v, w: du, h: dv } : { x: p.x + v, y: p.y + u, w: dv, h: du };
+  const at = (u: number, v: number) => (alongX ? { x: p.x + u, y: p.y + v } : { x: p.x + v, y: p.y + u });
+  if (isGate(p)) {
+    const s = Math.min(0.45, length / 6);
+    return {
+      alongX,
+      blocks: [rect(0, mid - s / 2, s, s), rect(length - s, mid - s / 2, s, s)],
+      span: [at(s, mid), at(length - s, mid)],
+    };
+  }
+  // A 1.4 × 1.6 m booth on a kerbed island, where the lane allows.
+  const island = Math.min(0.95, length / 3),
+    far = p.rotation >= 180,
+    from = far ? length - island : 0,
+    half = Math.min(0.4, depth * 0.4);
+  return {
+    alongX,
+    blocks: [rect(from + 0.125, mid - half, island - 0.25, half * 2)],
+    span: far ? [at(length - island, mid), at(0.1, mid)] : [at(island, mid), at(length - 0.1, mid)],
+  };
+}
 const shapes: Record<string, number[][]> = {
   corner: [[0, 0], [0.5, 0], [0.5, 0.5], [1, 0.5], [1, 1], [0, 1]],
   junction: [[0, 0], [1, 0], [1, 0.5], [2 / 3, 0.5], [2 / 3, 1], [1 / 3, 1], [1 / 3, 0.5], [0, 0.5]],
@@ -159,7 +258,7 @@ export function exposedRuns(p: Piece, i: number, pieces: Piece[]): [number, numb
   const out = area > 0 ? 1 : -1,
     nx = ((b.y - a.y) / length) * out,
     ny = (-(b.x - a.x) / length) * out;
-  const others = pieces.filter((o) => o.id !== p.id && (isCorridor(o) || isPath(o))).map(footprint);
+  const others = pieces.filter((o) => o.id !== p.id && (isCorridor(o) || isOpenAir(o))).map(footprint);
   const steps = Math.max(1, Math.round(length / 0.25)),
     runs: [number, number][] = [];
   for (let k = 0; k < steps; k++) {
@@ -172,9 +271,9 @@ export function exposedRuns(p: Piece, i: number, pieces: Piece[]): [number, numb
   }
   return runs;
 }
-/** The corridor or path under a point (in tiles), if any: places people can stand outside rooms. */
+/** The corridor or open-air ground under a point (in tiles), if any: places people can stand outside rooms. */
 export const walkwayAt = (pieces: Piece[], point: { x: number; y: number }) =>
-  pieces.find((p) => (isCorridor(p) || isPath(p)) && inPolygon(point, footprint(p)));
+  pieces.find((p) => (isCorridor(p) || isOpenAir(p)) && inPolygon(point, footprint(p)));
 /** Sample points on a quarter-tile lattice, so half-tile notches are resolved. */
 function* samples(x0: number, y0: number, x1: number, y1: number) {
   for (let y = y0 + 0.125; y < y1; y += 0.25)

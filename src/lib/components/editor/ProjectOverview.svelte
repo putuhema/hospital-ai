@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { Piece } from "$lib/model/layout";
-    import { isBuilding, isCorridor, isPath } from "$lib/model/interiors";
+    import { isBuilding, isCorridor, isGate, isBarrier, isParking, isPath } from "$lib/model/interiors";
     import Icon from "./Icon.svelte";
     let {
         pieces,
@@ -19,6 +19,8 @@
     let buildings = $derived(pieces.filter(isBuilding).length);
     let corridors = $derived(pieces.filter(isCorridor).length);
     let paths = $derived(pieces.filter(isPath).length);
+    let parking = $derived(pieces.filter(isParking).length);
+    let gates = $derived(pieces.filter((p) => isGate(p) || isBarrier(p)).length);
     let rooms = $derived(pieces.reduce((n, p) => n + (p.roomAssets?.length ?? 0), 0));
 </script>
 
@@ -30,6 +32,8 @@
     <div><span>Buildings</span><b>{count(buildings)}</b></div>
     <div><span>Corridor pieces</span><b>{count(corridors)}</b></div>
     {#if paths}<div><span>Path pieces</span><b>{count(paths)}</b></div>{/if}
+    {#if parking}<div><span>Parking areas</span><b>{count(parking)}</b></div>{/if}
+    {#if gates}<div><span>Gates</span><b>{count(gates)}</b></div>{/if}
     <div><span>Rooms</span><b>{count(rooms)}</b></div>
     <div>
         <span>Total floor area</span><b>{area} <small>m²</small></b>

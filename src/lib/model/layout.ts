@@ -1,5 +1,5 @@
 import { parseNetwork } from "../wayfinding/navigation.ts";
-import { doorFits, fitsRoom, isBuilding, roomTypes, type RoomAsset } from "./interiors.ts";
+import { doorFits, fitsRoom, isArea, isBuilding, roomTypes, type RoomAsset } from "./interiors.ts";
 import { parseInfo, type PlaceInfo } from "./place-info.ts";
 export type Piece = {
   id: number;
@@ -24,7 +24,7 @@ export type Piece = {
   floors?: number;
   /** Buildings only: "L" cuts away one quarter, turning with `rotation`. */
   shape?: "L";
-  /** Buildings only: description, phone and hours shown to visitors. */
+  /** Buildings, car parks and gateways: description, phone and hours shown to visitors. */
   info?: PlaceInfo;
 };
 export type Asset = {
@@ -34,7 +34,7 @@ export type Asset = {
   h: number;
   color: string;
   label: string;
-  group: "Buildings" | "Corridors" | "Paths" | "Templates";
+  group: "Buildings" | "Corridors" | "Outdoor" | "Templates";
   roofColor?: string;
   floors?: number;
   shape?: "L";
@@ -121,7 +121,7 @@ export const assets: Asset[] = [
   },
   {
     name: "Garden path",
-    group: "Paths",
+    group: "Outdoor",
     kind: "path",
     w: 4,
     h: 1,
@@ -129,6 +129,61 @@ export const assets: Asset[] = [
     label: "4 × 1 tiles",
     description: "Open-air paved walkway, no roof",
     image: "/models/path.png",
+  },
+  {
+    name: "Car park",
+    group: "Outdoor",
+    kind: "parking",
+    w: 6,
+    h: 4,
+    color: "#7c8286",
+    label: "6 × 4 tiles",
+    description: "Open-air parking area with marked bays, no building",
+    image: "/models/parking.svg",
+  },
+  {
+    name: "Small car park",
+    group: "Outdoor",
+    kind: "parking",
+    w: 3,
+    h: 3,
+    color: "#7c8286",
+    label: "3 × 3 tiles",
+    description: "A few bays, e.g. drop-off or disabled parking",
+    image: "/models/parking.svg",
+  },
+  {
+    name: "Motorcycle parking",
+    group: "Outdoor",
+    kind: "motorcycle",
+    w: 4,
+    h: 3,
+    color: "#80868a",
+    label: "4 × 3 tiles",
+    description: "Narrow 1 × 2 m bays for motorcycles and scooters",
+    image: "/models/motorcycle.svg",
+  },
+  {
+    name: "Campus entrance",
+    group: "Outdoor",
+    kind: "gate",
+    w: 5,
+    h: 1,
+    color: "#b9b2a3",
+    label: "5 × 1 tiles",
+    description: "Gateway over the drive with the hospital's name on it",
+    image: "/models/gate.svg",
+  },
+  {
+    name: "Parking gate",
+    group: "Outdoor",
+    kind: "barrier",
+    w: 3,
+    h: 1,
+    color: "#6f7579",
+    label: "3 × 1 tiles",
+    description: "Ticket booth and barrier arm across a car park lane",
+    image: "/models/barrier.svg",
   },
   {
     name: "Outpatient clinic",
@@ -405,7 +460,7 @@ export function parseLayout(text: string) {
         ))
     )
       throw Error("Invalid interior rooms");
-    p.info = isBuilding(p) ? parseInfo(p.info) : undefined;
+    p.info = isBuilding(p) || isArea(p) ? parseInfo(p.info) : undefined;
     for (const r of p.roomAssets ?? []) r.info = parseInfo(r.info);
   }
   const network = parseNetwork(d.network, width, height);

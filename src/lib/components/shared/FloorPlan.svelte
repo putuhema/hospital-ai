@@ -6,6 +6,12 @@
         footprint,
         inPolygon,
         isBuilding,
+        gatewayParts,
+        isArea,
+        isBarrier,
+        isGate,
+        isParking,
+        parkingBays,
         roomColor,
         roomDoor,
     } from "$lib/model/interiors";
@@ -79,7 +85,8 @@
                 ) ?? null
             );
         }
-        return null;
+        const area = pieces.find((a) => isArea(a) && inPolygon(p, footprint(a)));
+        return (area && places.find((pl) => pl.id === `a:${area.id}`)) ?? null;
     }
     let drag: { x: number; y: number; moved: boolean; view: typeof view } | null =
         null;
@@ -158,12 +165,40 @@
             fill="url(#plan-grid)"
             stroke="#c8d3be"
         />
-        {#each pieces.filter((p) => !isBuilding(p)) as p}<polygon
+        {#each pieces.filter((p) => !isBuilding(p) && !isParking(p) && !isGate(p) && !isBarrier(p)) as p}<polygon
                 points={pts(footprint(p))}
                 fill="#ece6d8"
                 stroke="#c9bfa9"
                 stroke-width="1.5"
             />{/each}
+        {#each pieces.filter(isParking) as p}<g class="parking"
+                ><polygon points={pts(footprint(p))} />{#each parkingBays(p).lines as [a, b]}<line
+                        x1={a.x * S}
+                        y1={a.y * S}
+                        x2={b.x * S}
+                        y2={b.y * S}
+                    />{/each}<g transform={`translate(${(p.x + p.w / 2) * S} ${(p.y + p.h / 2) * S})`} class="badge"
+                    ><rect x="-13" y="-13" width="26" height="26" rx="6" /><text y="6">P</text></g
+                ><text class="parking-name" x={(p.x + p.w / 2) * S} y={(p.y + p.h / 2) * S + 32}>{p.name}</text></g
+            >{/each}
+        {#each pieces.filter((p) => isGate(p) || isBarrier(p)) as p}{@const g = gatewayParts(p)}<g
+                class="gateway"
+                class:gate={isGate(p)}
+                ><polygon points={pts(footprint(p))} /><line
+                    x1={g.span[0].x * S}
+                    y1={g.span[0].y * S}
+                    x2={g.span[1].x * S}
+                    y2={g.span[1].y * S}
+                />{#each g.blocks as b}<rect
+                        x={b.x * S}
+                        y={b.y * S}
+                        width={b.w * S}
+                        height={b.h * S}
+                        rx="3"
+                    />{/each}<text class="parking-name" x={(p.x + p.w / 2) * S} y={(p.y + p.h / 2) * S - 10}
+                        >{p.name}</text
+                    ></g
+            >{/each}
         {#each pieces.filter(isBuilding) as p}
             <polygon
                 points={pts(footprint(p))}
@@ -331,6 +366,63 @@
         fill: #1f3a2b;
         stroke: #fff;
         stroke-width: 4px;
+    }
+    .parking polygon {
+        fill: #c7ccd0;
+        stroke: #9ba2a6;
+        stroke-width: 1.5;
+    }
+    .parking line {
+        stroke: white;
+        stroke-width: 2;
+    }
+    .parking .badge rect {
+        fill: #3a5ba8;
+        stroke: white;
+        stroke-width: 2.5;
+    }
+    .parking .badge text {
+        fill: white;
+        font-size: 17px;
+        font-weight: 700;
+        text-anchor: middle;
+    }
+    .parking-name {
+        font-size: 11px;
+        font-weight: 600;
+        text-anchor: middle;
+        fill: #2f3a44;
+        paint-order: stroke;
+        stroke: #eef1f3;
+        stroke-width: 4px;
+    }
+    .gateway polygon {
+        fill: #d9d6cf;
+        stroke: #a9a49a;
+        stroke-width: 1.5;
+    }
+    .gateway line {
+        stroke: #d24b3b;
+        stroke-width: 5;
+        stroke-dasharray: 10 7;
+        stroke-linecap: round;
+    }
+    .gateway rect {
+        fill: #f4f2ec;
+        stroke: #5c6266;
+        stroke-width: 2;
+    }
+    .gateway.gate polygon {
+        fill: #e6e0d2;
+    }
+    .gateway.gate line {
+        stroke: #2f7d44;
+        stroke-width: 7;
+        stroke-dasharray: none;
+    }
+    .gateway.gate rect {
+        fill: #d8d2c4;
+        stroke: #6f6a5e;
     }
     .landmark circle {
         fill: var(--color);

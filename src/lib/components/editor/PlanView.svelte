@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { Piece } from "$lib/model/layout";
-    import { center, footprint, isBuilding, roomColor } from "$lib/model/interiors";
+    import { center, footprint, gatewayParts, isBarrier, isBuilding, isGate, isParking, parkingBays, roomColor } from "$lib/model/interiors";
     type Tile = { x: number; y: number };
     let {
         pieces,
@@ -244,6 +244,41 @@
                         y={center(p).y * TILE + 45}
                         text-anchor="middle"
                         class="building-size">{p.w * 2} × {p.h * 2} m</text
+                    >{:else if isParking(p)}{#each parkingBays(p).lines as [a, b]}<line
+                            x1={a.x * TILE}
+                            y1={a.y * TILE}
+                            x2={b.x * TILE}
+                            y2={b.y * TILE}
+                            stroke="#fff"
+                            stroke-opacity=".85"
+                            stroke-width="2"
+                        />{/each}<g
+                        transform={`translate(${center(p).x * TILE} ${center(p).y * TILE})`}
+                        class="parking-badge"
+                        ><rect x="-11" y="-11" width="22" height="22" rx="5" /><text y="5">P</text></g
+                    ><text
+                        x={center(p).x * TILE}
+                        y={center(p).y * TILE + 28}
+                        text-anchor="middle"
+                        class="building-label parking-label">{p.name}</text
+                    >{:else if isGate(p) || isBarrier(p)}{@const g = gatewayParts(p)}<line
+                        x1={g.span[0].x * TILE}
+                        y1={g.span[0].y * TILE}
+                        x2={g.span[1].x * TILE}
+                        y2={g.span[1].y * TILE}
+                        class={isGate(p) ? "gateway-beam" : "gateway-arm"}
+                    />{#each g.blocks as b}<rect
+                            x={b.x * TILE}
+                            y={b.y * TILE}
+                            width={b.w * TILE}
+                            height={b.h * TILE}
+                            rx="2"
+                            class={isGate(p) ? "gateway-pillar" : "gateway-booth"}
+                        />{/each}<text
+                        x={center(p).x * TILE}
+                        y={center(p).y * TILE - 6}
+                        text-anchor="middle"
+                        class="building-label parking-label">{p.name}</text
                     >{:else}<path
                         d={p.w >= p.h
                             ? `M${p.x * TILE + 10} ${p.y * TILE + p.h * 20}h${p.w * TILE - 20}`

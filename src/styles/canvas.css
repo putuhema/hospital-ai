@@ -197,3 +197,43 @@
 .right-status {
     margin-left: auto;
 }
+/* Car parks on the plan: a "P" badge and a light name on the asphalt. */
+.parking-badge rect {
+    fill: #3a5ba8;
+    stroke: white;
+    stroke-width: 2;
+}
+.parking-badge text {
+    fill: white;
+    font-size: 15px;
+    font-weight: 700;
+    text-anchor: middle;
+    pointer-events: none;
+}
+.building-label.parking-label {
+    fill: white;
+    paint-order: stroke;
+    stroke: #4c5357;
+    stroke-width: 3px;
+}
+/* Gateways on the plan: the entrance's pillars and beam, the parking gate's booth and arm. */
+.gateway-beam {
+    stroke: #2f7d44;
+    stroke-width: 5;
+}
+.gateway-pillar {
+    fill: #d8d2c4;
+    stroke: #6f6a5e;
+    stroke-width: 1.5;
+}
+.gateway-arm {
+    stroke: #d24b3b;
+    stroke-width: 4;
+    stroke-dasharray: 8 6;
+    stroke-linecap: round;
+}
+.gateway-booth {
+    fill: #f1efe8;
+    stroke: #5c6266;
+    stroke-width: 1.5;
+}
