@@ -149,7 +149,7 @@ export function createScenery(scene: THREE.Scene) {
   let signature = "";
   const fog = new THREE.Fog(SKY.haze, 200, 600);
   scene.fog = fog;
-  let haze = { extent: 48, depth: 300 };
+  let haze = { extent: 48 };
   /** Rebuild the trees for a canvas of W × D metres. */
   function update(
     pieces: Piece[],
@@ -175,7 +175,7 @@ export function createScenery(scene: THREE.Scene) {
     const hazeFar = extent * 1.5 + reach + 240;
     camera.far = hazeFar * 2 + 1200;
     camera.updateProjectionMatrix();
-    haze = { extent, depth: reach + 240 };
+    haze = { extent };
     // Hills stand just inside the haze, as faint silhouettes on the horizon.
     hills.scale.setScalar((hazeFar * 0.85) / 960);
 
@@ -273,10 +273,11 @@ export function createScenery(scene: THREE.Scene) {
   /** `focus` is the camera's distance to the point it orbits (the campus). */
   function animate(time: number, camera: THREE.Camera, focus: number) {
     sky.position.copy(camera.position);
-    // Haze begins just past the campus from wherever the camera is, so
-    // buildings stay crisp at any zoom and only the surroundings fade.
-    fog.near = focus + haze.extent * 0.6 + 20;
-    fog.far = fog.near + haze.depth;
+    // Haze begins at the far edge of the canvas from wherever the camera is
+    // and thickens quickly past it, so the campus stays crisp at any zoom
+    // and the countryside around it soon fades out.
+    fog.near = focus + haze.extent * 0.5;
+    fog.far = fog.near + Math.max(40, haze.extent * 0.6);
     const dt = Math.min(0.1, (time - last) / 1000);
     last = time;
     // Clouds drift slowly around the campus.

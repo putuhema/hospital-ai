@@ -202,12 +202,14 @@
             if (next !== built && ready()) {
                 built = next;
                 buildPieces();
-                // The map opens on the campus itself, not the empty grounds
-                // around it; again when the layout changes, not on a roof toggle.
-                const layout = JSON.stringify(pieces);
-                if (presentation && layout !== sited) {
-                    sited = layout;
-                    rig.frameSite(new THREE.Box3().setFromObject(buildings), zoom);
+                // The map opens on the canvas, filling the view, and stays
+                // within it; framed again when the canvas is resized.
+                if (presentation && canvasSize !== sited) {
+                    sited = canvasSize;
+                    rig.frameSite(
+                        new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(canvasWidth * 2, 0, canvasHeight * 2)),
+                        zoom,
+                    );
                 }
             }
             const object = buildings.children.find((o) => o.userData.pieceId === selected);
@@ -280,6 +282,7 @@
             declutter(labelGroup, camera, dom.clientWidth, dom.clientHeight, time);
             rig.tick();
             controls.update();
+            rig.bound();
             renderer.render(scene, camera);
         }
         sync();

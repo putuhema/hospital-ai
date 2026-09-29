@@ -20,12 +20,13 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   controls.target.set(24, 0, 20);
   controls.enableDamping = true;
   controls.maxPolarAngle = LOWEST;
-  controls.minDistance = 15;
+  // The map lets you get closer; how far out is set by the canvas (see `bound`).
+  controls.minDistance = presentation ? 6 : 15;
   controls.maxDistance = 900;
 
   // Set while a route is framed, so resizing keeps the route in view.
   let routeDistance: number | null = null;
-  // On the map: the built campus, framed instead of the whole canvas.
+  // On the map: the canvas, which the view opens on and never leaves.
   let site: THREE.Box3 | null = null;
   let framedAs = "";
   // Bird's-eye view: the angles to glide to, and the view to return to afterwards.
@@ -84,9 +85,10 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
    * How far back the camera must be, looking from its current direction, for
    * `box` to fill the part of the view the overlays leave clear: across the
    * width beside the side panel, down to the top of the sheet, and up to just
-   * under the search bar.
+   * under the search bar. With `cover`, it may run off the view the tight
+   * way, meeting halfway between fitting it and filling the view with it.
    */
-  function fitDistance(box: THREE.Box3, margin = 0.9) {
+  function fitDistance(box: THREE.Box3, margin = 0.9, cover = false) {
     const { width, height } = size;
     const inset = Math.min(target.left, width / 2),
       clear = height - Math.min(target.bottom, height * 0.7),
@@ -105,7 +107,8 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
       up = back.clone().cross(right);
     const centre = box.getCenter(new THREE.Vector3()).setY(0),
       corner = new THREE.Vector3();
-    let distance = 0;
+    let byWidth = 0,
+      byHeight = 0;
     for (let i = 0; i < 8; i++) {
       corner
         .set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z)
@@ -113,20 +116,20 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
       const x = corner.dot(right),
         y = corner.dot(up),
         z = corner.dot(back);
-      distance = Math.max(
-        distance,
-        z + Math.abs(x) / (tanH * across),
-        z + (y > 0 ? y / (tanV * above) : -y / (tanV * below)),
-      );
+      byWidth = Math.max(byWidth, z + Math.abs(x) / (tanH * across));
+      byHeight = Math.max(byHeight, z + (y > 0 ? y / (tanV * above) : -y / (tanV * below)));
     }
-    return distance;
+    return cover ? Math.sqrt(byWidth * byHeight) : Math.max(byWidth, byHeight);
   }
 
   /** Move along the current view direction to fit the canvas (or the campus, or a framed route). */
   function fit(width: number, height: number, zoom: number) {
     if (routeDistance === null && presentation && site && size.width) {
       controls.target.copy(site.getCenter(new THREE.Vector3()).setY(0));
-      const distance = Math.max(controls.minDistance, fitDistance(site)) * (100 / zoom);
+      // A phone held upright opens close in, the canvas running off its
+      // sides; zooming out still shows the whole canvas (see `bound`).
+      const portrait = size.width < size.height,
+        distance = Math.max(controls.minDistance, fitDistance(site, 1, portrait)) * (100 / zoom);
       camera.position.sub(controls.target).normalize().multiplyScalar(distance).add(controls.target);
       return;
     }
@@ -137,7 +140,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     camera.position.sub(controls.target).normalize().multiplyScalar(distance).add(controls.target);
   }
 
-  /** On the map, frame the built campus rather than the whole canvas; null forgets it. */
+  /** On the map, frame this area (the canvas) and keep the view over it; null forgets it. */
   function frameSite(box: THREE.Box3 | null, zoom: number) {
     site = box && !box.isEmpty() ? box.clone() : null;
     if (site && routeDistance === null) fit(0, 0, zoom);
@@ -149,6 +152,23 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     controls.target.set(width, 0, height);
     camera.position.copy(controls.target).add(offset);
     fit(width, height, zoom);
+  }
+
+  /**
+   * On the map, keep the view over the canvas: no zooming out past the
+   * distance that fits it, no panning its centre off it. Call after the
+   * controls update.
+   */
+  function bound() {
+    if (!site || !size.width) return;
+    controls.maxDistance = Math.max(controls.minDistance, fitDistance(site, 1) * 1.05);
+    const t = controls.target,
+      x = THREE.MathUtils.clamp(t.x, site.min.x, site.max.x),
+      z = THREE.MathUtils.clamp(t.z, site.min.z, site.max.z);
+    if (x === t.x && z === t.z) return;
+    camera.position.x += x - t.x;
+    camera.position.z += z - t.z;
+    t.set(x, t.y, z);
   }
 
   /** Scale the viewing distance when the zoom level changes. */
@@ -237,6 +257,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     zoomBy,
     frameRoute,
     frameSite,
+    bound,
     /** Distance from the camera to the point it orbits. */
     focusDistance: () => camera.position.distanceTo(controls.target),
   };

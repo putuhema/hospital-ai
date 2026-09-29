@@ -101,7 +101,7 @@
         if (Math.hypot(dx, dy) > 4) drag.moved = true;
         if (!drag.moved) return;
         const scale = drag.view.w / svg.clientWidth;
-        view = { ...drag.view, x: drag.view.x - dx * scale, y: drag.view.y - dy * scale };
+        view = bounded({ ...drag.view, x: drag.view.x - dx * scale, y: drag.view.y - dy * scale });
     }
     function up(e: PointerEvent) {
         if (drag && !drag.moved) {
@@ -111,11 +111,16 @@
         }
         drag = null;
     }
+    /** Keep the view over the canvas: no zooming out past it, no panning off it. */
+    function bounded(v: typeof view) {
+        const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), Math.max(lo, hi));
+        return { ...v, x: clamp(v.x, -1, width + 1 - v.w), y: clamp(v.y, -1, height + 1 - v.h) };
+    }
     function zoom(factor: number, around?: Point) {
         const c = around ?? { x: view.x + view.w / 2, y: view.y + view.h / 2 };
-        const w = Math.min(width + 10, Math.max(3, view.w * factor)),
+        const w = Math.min(width + 2, Math.max(1.5, view.w * factor)),
             k = w / view.w;
-        view = { x: c.x - (c.x - view.x) * k, y: c.y - (c.y - view.y) * k, w, h: view.h * k };
+        view = bounded({ x: c.x - (c.x - view.x) * k, y: c.y - (c.y - view.y) * k, w, h: view.h * k });
     }
     function wheel(e: WheelEvent) {
         e.preventDefault();
