@@ -59,6 +59,11 @@
                 from = p;
                 picking = false;
             }}
+            onclear={() => {
+                from = null;
+                picking = false;
+            }}
+            clearLabel={locale.t("clearStart")}
         />
         <PlaceSearch
             {places}
@@ -67,6 +72,8 @@
             placeholder={locale.t("searchRoomOrBuilding")}
             value={to?.name ?? ""}
             onselect={(p) => (to = p)}
+            onclear={() => (to = null)}
+            clearLabel={locale.t("clearDestination")}
         />
         <button
             class="swap"

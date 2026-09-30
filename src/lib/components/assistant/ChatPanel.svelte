@@ -19,6 +19,7 @@
         here = null,
         onshow,
         onhere,
+        onclearhere,
     }: {
         chat: Chat;
         places: Place[];
@@ -35,6 +36,8 @@
         onshow?: () => void;
         /** Set or change where the visitor is. */
         onhere?: () => void;
+        /** Forget where the visitor is. */
+        onclearhere?: () => void;
     } = $props();
     const locale = useLocale();
     const t = locale.t;
@@ -145,9 +148,19 @@
         {/each}
     </div>
     <div class="dock">
-        {#if here !== null || onhere}<button class="here" onclick={() => onhere?.()}>
-                <span class="pin" class:set={!!here}></span>{here ? t("youAreAt", { name: here }) : t("setWhereYouAre")}
-            </button>{/if}
+        {#if here !== null || onhere}<div class="where">
+                <button class="here" onclick={() => onhere?.()}>
+                    <span class="pin" class:set={!!here}></span>{here ? t("youAreAt", { name: here }) : t("setWhereYouAre")}
+                </button>{#if here && onclearhere}<button
+                        class="forget"
+                        aria-label={t("clearStart")}
+                        title={t("clearStart")}
+                        onclick={() => onclearhere()}
+                        ><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"
+                            ><path d="M6 6l12 12M18 6 6 18" /></svg
+                        ></button
+                    >{/if}
+            </div>{/if}
         <form
             class="composer"
             onsubmit={(e) => {
@@ -419,9 +432,35 @@
         gap: 8px;
         padding-top: 6px;
     }
+    .where {
+        display: flex;
+        align-self: flex-start;
+        align-items: center;
+        gap: 4px;
+        max-width: 100%;
+        min-width: 0;
+    }
+    .forget {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #fffdf8cc;
+        box-shadow: 0 0 0 1px var(--line);
+        color: var(--muted);
+        backdrop-filter: blur(8px);
+    }
+    .forget svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        stroke-linecap: round;
+    }
     .here {
         display: inline-flex;
-        align-self: flex-start;
+        min-width: 0;
         align-items: center;
         gap: 8px;
         max-width: 100%;
@@ -559,7 +598,8 @@
         .send:hover:not(:disabled) {
             background: var(--forest-2);
         }
-        .here:hover {
+        .here:hover,
+        .forget:hover {
             background: #fffdf8;
             color: var(--ink);
         }

@@ -11,6 +11,8 @@
         placeholder,
         marker,
         onselect,
+        onclear,
+        clearLabel = "",
     }: {
         places: Place[];
         /** Text shown when not searching, e.g. the chosen place's name. */
@@ -19,6 +21,9 @@
         placeholder: string;
         marker: "start" | "end";
         onselect: (place: Place) => void;
+        /** Forget the chosen place; a × shows in the field while one is chosen. */
+        onclear?: () => void;
+        clearLabel?: string;
     } = $props();
     const locale = useLocale();
     let query = $state(""),
@@ -65,6 +70,7 @@
             : undefined}
         placeholder={value || placeholder}
         class:filled={!!value}
+        class:clearable={!!value && !!onclear}
         bind:value={query}
         onfocus={() => {
             open = true;
@@ -107,11 +113,44 @@
                     {locale.t(places.length ? "noMatches" : "emptyMap")}
                 </li>{/each}
         </ul>{/if}
+    {#if value && onclear && !query}<button
+            type="button"
+            class="clear-field"
+            aria-label={clearLabel}
+            title={clearLabel}
+            onclick={() => {
+                onclear();
+                input.focus();
+            }}
+            ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg
+            ></button
+        >{/if}
 </div>
 
 <style>
     .place-search {
         position: relative;
+    }
+    .clear-field {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        color: #6f7c69;
+    }
+    .clear-field:hover {
+        background: #edf3e7;
+    }
+    .clear-field svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
     }
     .marker {
         position: absolute;
@@ -141,6 +180,9 @@
         font: inherit;
         font-size: 13px;
         color: #243d2c;
+    }
+    input.clearable {
+        padding-right: 40px;
     }
     input.filled::placeholder {
         color: #243d2c;

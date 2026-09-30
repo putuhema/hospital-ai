@@ -401,6 +401,10 @@
                     {here}
                     onshow={() => (sheetOpen = false)}
                     onhere={() => open("route")}
+                    onclearhere={() => {
+                        from = null;
+                        picking = false;
+                    }}
                 />{:else}<div class="scroll" in:unblur>
                     <h2>{t("directions")}</h2>
                     <RouteFinder places={placeList} {grid} {route} bind:from bind:to bind:picking />
@@ -727,6 +731,17 @@
         background: transparent;
         font-size: 15px;
         color: var(--ink);
+    }
+    /* The clear button sits left of the swap button. */
+    .scroll :global(.route-finder .place-search input.clearable) {
+        padding-right: 88px;
+    }
+    .scroll :global(.route-finder .place-search .clear-field) {
+        right: 52px;
+        color: var(--muted);
+    }
+    .scroll :global(.route-finder .place-search .clear-field:hover) {
+        background: var(--paper-2);
     }
     .scroll :global(.route-finder .place-search input::placeholder) {
         color: var(--muted);
