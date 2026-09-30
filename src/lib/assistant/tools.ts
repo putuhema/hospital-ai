@@ -16,7 +16,8 @@ import {
   type NavGrid,
   type Place,
 } from "../wayfinding/routing.ts";
-import { normalize, search } from "../wayfinding/search.ts";
+import { editDistance, normalize, search } from "../wayfinding/search.ts";
+import { dateOf, doctorStatus, shortDate, type Doctor } from "../model/doctors.ts";
 import { shortcuts } from "../wayfinding/shortcuts.ts";
 
 /** What the tools know: the published map and the time at the hospital. */
@@ -61,6 +62,24 @@ export type PlaceDetails = PlaceSummary & {
   /** The hours are visiting hours (a ward), not opening hours. */
   visiting_hours?: boolean;
   other_names?: string[];
+  /** Doctors who practise here. */
+  doctors?: DoctorSchedule[];
+};
+
+/** A doctor's schedule as the model sees it. */
+export type DoctorSchedule = {
+  name: string;
+  specialty?: string;
+  /** Where they practise; left out inside `get_place_details`, which is about that place. */
+  place?: PlaceSummary;
+  /** e.g. ["Mon, Wed 08:00–12:00"]. */
+  hours: string[];
+  /** e.g. "Practising · until 12:00" or "On leave · back Mon 08:00". */
+  status?: string;
+  practising?: boolean;
+  on_leave?: boolean;
+  /** Leave today or coming up, e.g. ["30 Sep – 2 Oct"]. */
+  leave?: string[];
 };
 
 export type Directions = {
@@ -122,7 +141,61 @@ export function getPlaceDetails(
     if (p.info.visiting) d.visiting_hours = true;
   }
   if (p.info?.keywords?.length) d.other_names = p.info.keywords;
+  if (p.info?.doctors?.length) d.doctors = p.info.doctors.map((doc) => schedule(ctx, doc));
   return d;
+}
+
+function schedule(ctx: AssistantContext, d: Doctor, place?: Place): DoctorSchedule {
+  const s: DoctorSchedule = { name: d.name, hours: hoursLines(d.hours) };
+  if (d.specialty) s.specialty = d.specialty;
+  if (place) s.place = summary(ctx, place);
+  const status = doctorStatus(d, ctx.now);
+  if (status) {
+    s.status = status.text;
+    s.practising = status.practising;
+    if (status.onLeave) s.on_leave = true;
+  }
+  const today = dateOf(ctx.now),
+    leave = (d.leave ?? []).filter((l) => l.to >= today).map((l) => (l.from === l.to ? shortDate(l.from, "en") : `${shortDate(l.from, "en")} – ${shortDate(l.to, "en")}`));
+  if (leave.length) s.leave = leave;
+  return s;
+}
+
+// Words in a question about a doctor that aren't part of their name or specialty.
+const DOCTOR_WORDS = new Set(
+  "dr drg dokter doktor doctor doctors sp spesialis specialist poli clinic klinik jadwal schedule praktik praktek kapan when hari ini today".split(
+    " ",
+  ),
+);
+
+/**
+ * Doctors by name or specialty, e.g. "dr sari", "anak" or "penyakit dalam",
+ * with where they practise, their hours and whether they are in now. Also
+ * understands what search does ("children" finds the paediatrician).
+ */
+export function getDoctorSchedule(
+  ctx: AssistantContext,
+  { query, limit = 5 }: { query: string; limit?: number },
+): { doctors: DoctorSchedule[] } | ToolError {
+  const wanted = normalize(query)
+    .split(" ")
+    .filter((w) => w && !DOCTOR_WORDS.has(w));
+  const all = ctx.places.flatMap((p) => (p.info?.doctors ?? []).map((d) => ({ p, d })));
+  if (!all.length) return { error: "No doctors' schedules are on this map." };
+  const wordsOf = (d: Doctor) => normalize(`${d.name} ${d.specialty ?? ""}`).split(" ");
+  const fits = (t: string, words: string[]) =>
+    words.some((w) => w.startsWith(t) || (t.length >= 4 && editDistance(t, w, 1) <= 1));
+  // The rest of the question ("when does … see patients") is words no doctor has.
+  const everyone = all.flatMap(({ d }) => wordsOf(d)),
+    known = wanted.filter((t) => fits(t, everyone));
+  let found = wanted.length && !known.length ? [] : all.filter(({ d }) => known.every((t) => fits(t, wordsOf(d))));
+  // Words search knows but the schedule doesn't use, e.g. "children" for "Anak".
+  if (!found.length && wanted.length)
+    found = search(ctx.places, query).flatMap(({ place, via }) =>
+      (place.info?.doctors ?? []).filter((d) => via && (d.name === via || d.specialty === via)).map((d) => ({ p: place, d })),
+    );
+  const n = Math.min(Math.max(1, Math.round(limit)), 20);
+  return { doctors: found.slice(0, n).map(({ p, d }) => schedule(ctx, d, p)) };
 }
 
 /**
@@ -234,8 +307,23 @@ export const toolDefinitions: ToolDefinition[] = [
     name: "get_place_details",
     description:
       "Everything the map knows about one place: what it is, its building, description, phone number, " +
-      "opening or visiting hours, and whether it is open right now.",
+      "opening or visiting hours, whether it is open right now, and the doctors who practise there.",
     input_schema: { type: "object", properties: { place_id: id("place") }, required: ["place_id"] },
+  },
+  {
+    name: "get_doctor_schedule",
+    description:
+      "Doctors' practice schedules (jadwal praktik dokter): find doctors by name or by specialty (poli), " +
+      'e.g. "dr Sari", "anak", "penyakit dalam" or "children", and get where they practise, their days and ' +
+      "hours, whether they are practising now, and any leave (cuti). An empty query lists the doctors.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The doctor's name or the specialty, in the visitor's words." },
+        limit: { type: "integer", description: "At most this many doctors (default 5, up to 20)." },
+      },
+      required: ["query"],
+    },
   },
   {
     name: "find_nearest",
@@ -279,6 +367,7 @@ export const toolDefinitions: ToolDefinition[] = [
 const tools: Record<string, (ctx: AssistantContext, input: never) => object> = {
   search_places: searchPlaces,
   get_place_details: getPlaceDetails,
+  get_doctor_schedule: getDoctorSchedule,
   find_nearest: findNearest,
   get_directions: getDirections,
   show_on_map: showOnMap,

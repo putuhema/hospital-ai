@@ -8,7 +8,7 @@
  * @module
  */
 
-import type * as maps from "../maps.js";
+import type * as hospital from "../hospital.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +17,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  maps: typeof maps;
+  hospital: typeof hospital;
 }>;
 
 /**

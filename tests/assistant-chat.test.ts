@@ -110,9 +110,10 @@ test('Indonesian questions get Indonesian answers from the same map', () => {
 });
 
 test("the editor's Indonesian starter topics answer questions in either language", async () => {
-  const { faqTopics } = await import('../src/lib/model/faq.ts');
+  const { topics } = await import('../src/lib/model/faq.ts');
   const answers = ['Pukul 16.00–20.00.', 'Ya, BPJS diterima di loket kasir.', 'Daftar di loket pendaftaran.', 'Hubungi 118.'];
-  const hospital = faqTopics.map((t, i) => ({ question: t.question, answer: answers[i] }));
+  const first = (id: string) => topics.find((t) => t.id === id)!.starters[0];
+  const hospital = ['besuk', 'bpjs', 'pendaftaran', 'kontak'].map((id, i) => ({ question: first(id), answer: answers[i] }));
   const ask = (q: string) => text(cannedAnswer(ctx, hospital, q));
   assert.equal(ask('Jam besuk?'), answers[0]);
   assert.equal(ask('Visiting hours?'), answers[0]);

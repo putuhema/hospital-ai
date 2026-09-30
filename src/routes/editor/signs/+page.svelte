@@ -4,33 +4,27 @@
     import { api } from "../../../convex/_generated/api";
     import FloorPlan from "$lib/components/shared/FloorPlan.svelte";
     import Logo from "$lib/components/shared/Logo.svelte";
-    import { parseLayout, STORAGE_KEY } from "$lib/model/layout";
-    import { publicUrl, readPublication } from "$lib/publish";
+    import { parseLayout } from "$lib/model/layout";
+    import { publicUrl } from "$lib/publish";
     import { signLink, signablePlaces, suggestedSpots } from "$lib/signs";
     import { places, type Place } from "$lib/wayfinding/routing";
 
-    // Signs always use the published map: that is what a visitor's phone opens.
-    const publication = readPublication();
-    const published = useQuery(api.maps.get, () =>
-        publication ? { slug: publication.slug } : "skip",
-    );
+    // Signs link to the hospital's public address: what a visitor's phone opens.
+    const hospital = useQuery(api.hospital.get, {});
     let layout = $derived.by(() => {
-        if (!published.data) return null;
+        if (!hospital.data) return null;
         try {
-            return parseLayout(published.data.layout);
+            return parseLayout(hospital.data.layout);
         } catch {
             return null;
         }
     });
-    let mapUrl = $derived(published.data ? publicUrl(published.data.slug) : "");
+    let mapUrl = $derived(hospital.data ? publicUrl(hospital.data.slug) : "");
     let list = $derived(layout ? signablePlaces(places(layout.pieces, layout.network)) : []);
     let landmarks = $derived(layout?.network.nodes.filter((n) => n.name.trim()) ?? []);
-    // Nothing saved yet means the editor still shows what was published.
-    const saved = localStorage.getItem(STORAGE_KEY);
-    let outdated = $derived(!!published.data && saved !== null && saved !== published.data.layout);
 
     // The chosen spots, remembered per map so the same set can be reprinted.
-    const CHOSEN = `p-map-signs:${publication?.slug}`;
+    let CHOSEN = $derived(`p-map-signs:${hospital.data?.slug}`);
     let chosen = $state<string[] | null>(null);
     $effect(() => {
         if (chosen || !list.length) return;
@@ -66,19 +60,13 @@
             Print a sign for each entrance, lift lobby or landmark. Visitors scan it and the map
             opens with that spot as their starting point — they only choose where they're going.
         </p>
-        {#if !publication}<p class="note">
-                Publish the map first (<b>Publish</b> in the editor). Signs link to its public
-                address, so they work on any phone.
-            </p>
-        {:else if published.isLoading}<p>Loading the published map…</p>
+        {#if hospital.isLoading}<p>Loading the hospital…</p>
         {:else if !layout}<p class="note">
-                The published map could not be found. Publish it again from the editor.
+                {hospital.error
+                    ? "Could not reach the database. Check your connection and try again."
+                    : "Nothing saved yet. Open the editor to build the hospital first."}
             </p>
         {:else}
-            {#if outdated}<p class="note">
-                    The editor has unpublished changes. Signs use the published version — publish
-                    first if you've added places.
-                </p>{/if}
             <div class="bulk">
                 <button onclick={() => (chosen = suggestedSpots(list).map((p) => p.id))}
                     >Suggested</button

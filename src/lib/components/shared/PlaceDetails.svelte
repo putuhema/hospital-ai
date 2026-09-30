@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import { hoursLines, hoursStatus, type PlaceInfo } from "$lib/model/place-info";
     import { useLocale } from "$lib/i18n/locale.svelte";
+    import { dateOf, doctorStatus, shortDate } from "$lib/model/doctors";
     let { info }: { info: PlaceInfo } = $props();
     // The visitor's own clock: they are at the hospital, so it is the hospital's
     // time too. Unknown during server rendering, so the badge waits for the browser.
@@ -13,6 +14,8 @@
     });
     const locale = useLocale();
     let status = $derived(now && hoursStatus(info, now, locale.lang));
+    // Leave that isn't over yet, to show beside the doctor.
+    let today = $derived(now && dateOf(now));
 </script>
 
 <section class="place-details" aria-label={locale.t("aboutPlace")}>
@@ -22,6 +25,22 @@
     {#if info.hours?.length}<div class="hours">
             <small>{locale.t(info.visiting ? "visitingHours" : "openingHours")}</small>
             {#each hoursLines(info.hours, locale.lang) as line}<span>{line}</span>{/each}
+        </div>{/if}
+    {#if info.doctors?.length}<div class="doctors">
+            <small>{locale.t("doctorSchedule")}</small>
+            {#each info.doctors as d (d.name)}
+                {@const s = now && doctorStatus(d, now, locale.lang)}
+                <div class="doctor">
+                    <b>{d.name}</b>{#if d.specialty}<span class="specialty">{d.specialty}</span>{/if}
+                    {#if s}<em class:in={s.practising} class:away={s.onLeave}>{s.text}</em>{/if}
+                    {#each hoursLines(d.hours, locale.lang) as line}<span class="line">{line}</span>{/each}
+                    {#each (d.leave ?? []).filter((l) => today && l.to >= today) as l}<span class="line leave"
+                            >{l.from === l.to
+                                ? locale.t("leaveDay", { date: shortDate(l.from, locale.lang) })
+                                : locale.t("leaveDates", { from: shortDate(l.from, locale.lang), to: shortDate(l.to, locale.lang) })}</span
+                        >{/each}
+                </div>
+            {/each}
         </div>{/if}
 </section>
 
@@ -77,6 +96,51 @@
         text-transform: uppercase;
         color: #7b8c70;
         margin-bottom: 2px;
+    }
+    .doctors {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .doctors > small {
+        font-size: 10px;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: #7b8c70;
+        margin-bottom: -4px;
+    }
+    .doctor {
+        display: flex;
+        flex-direction: column;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: white;
+    }
+    .doctor b {
+        font-weight: 600;
+        color: #1f3a2b;
+    }
+    .specialty,
+    .line {
+        color: #6a7a66;
+    }
+    .doctor em {
+        align-self: flex-start;
+        margin: 3px 0 2px;
+        font-style: normal;
+        font-weight: 600;
+        font-size: 11.5px;
+        color: #9a3b2e;
+    }
+    .doctor em.in {
+        color: #2f6b3a;
+    }
+    .doctor em.away {
+        color: #9a6a1e;
+    }
+    .leave {
+        color: #9a6a1e;
     }
     .place-details > :last-child {
         margin-bottom: 0;

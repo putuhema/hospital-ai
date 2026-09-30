@@ -1,82 +1,87 @@
 <script lang="ts">
-    import { faqTopics, MAX_ANSWER, MAX_FAQ, MAX_QUESTION, type FaqEntry } from "$lib/model/faq";
+    import { MAX_ANSWER, MAX_FAQ, MAX_QUESTION, topicOf, topics, type FaqEntry, type TopicId } from "$lib/model/faq";
     let {
         faq,
+        topic,
         onchange,
     }: {
+        /** All the questions; only this topic's are shown. */
         faq: FaqEntry[];
+        topic: TopicId;
         onchange: (faq: FaqEntry[]) => void;
     } = $props();
-    // Topics not asked yet, offered as one-click starts.
-    let topics = $derived(faqTopics.filter((t) => !faq.some((e) => e.question === t.question)));
+    let info = $derived(topics.find((t) => t.id === topic)!);
+    // Indexes into `faq`, so edits keep the order of the other topics.
+    let shown = $derived(faq.flatMap((e, i) => (topicOf(e) === topic ? [i] : [])));
+    // Starter questions not asked yet, offered as one-click starts.
+    let starters = $derived(info.starters.filter((q) => !faq.some((e) => e.question === q)));
     const setEntry = (i: number, patch: Partial<FaqEntry>) =>
         onchange(faq.map((e, j) => (j === i ? { ...e, ...patch } : e)));
     function add(question = "") {
-        if (faq.length < MAX_FAQ) onchange([...faq, { question, answer: "" }]);
+        if (faq.length < MAX_FAQ) onchange([...faq, { question, answer: "", topic }]);
     }
-    function move(i: number, by: number) {
-        const next = [...faq];
-        [next[i], next[i + by]] = [next[i + by], next[i]];
+    /** Swap with the previous or next question of the same topic. */
+    function move(n: number, by: number) {
+        const next = [...faq],
+            [a, b] = [shown[n], shown[n + by]];
+        [next[a], next[b]] = [next[b], next[a]];
         onchange(next);
     }
 </script>
 
 <div class="faq-editor">
-    <p class="hint">
-        General questions the map can't answer. Visitors find them under <b>Hospital information</b>,
-        and they go online when you publish. Questions without an answer stay hidden.
-    </p>
-    {#each faq as entry, i}<div class="entry">
+    {#each shown as i, n (i)}{@const entry = faq[i]}<div class="entry">
             <div class="entry-head">
-                <small>Question {i + 1}</small>
-                <button aria-label="Move question {i + 1} up" disabled={i === 0} onclick={() => move(i, -1)}>↑</button
+                <small>Question {n + 1}</small>
+                <select
+                    aria-label="Topic of question {n + 1}"
+                    value={topic}
+                    onchange={(e) => setEntry(i, { topic: e.currentTarget.value as TopicId })}
+                    >{#each topics as t}<option value={t.id}>{t.name.id}</option>{/each}</select
+                ><button aria-label="Move question {n + 1} up" disabled={n === 0} onclick={() => move(n, -1)}>↑</button
                 ><button
-                    aria-label="Move question {i + 1} down"
-                    disabled={i === faq.length - 1}
-                    onclick={() => move(i, 1)}>↓</button
+                    aria-label="Move question {n + 1} down"
+                    disabled={n === shown.length - 1}
+                    onclick={() => move(n, 1)}>↓</button
                 ><button
                     class="remove"
-                    aria-label="Remove question {i + 1}"
+                    aria-label="Remove question {n + 1}"
                     onclick={() => onchange(faq.filter((_, j) => j !== i))}>×</button
                 >
             </div>
             <input
-                aria-label="Question {i + 1}"
+                aria-label="Question {n + 1}"
                 maxlength={MAX_QUESTION}
                 placeholder="e.g. Bolehkah anak-anak ikut menjenguk?"
                 value={entry.question}
                 onchange={(e) => setEntry(i, { question: e.currentTarget.value })}
             /><textarea
-                aria-label="Answer {i + 1}"
-                rows="3"
+                aria-label="Answer {n + 1}"
+                rows="4"
                 maxlength={MAX_ANSWER}
-                placeholder="The answer visitors see"
+                placeholder="The answer visitors see. Phone numbers can be tapped to call."
                 value={entry.answer}
                 onchange={(e) => setEntry(i, { answer: e.currentTarget.value })}
             ></textarea>
-        </div>{/each}
-    {#if topics.length && faq.length < MAX_FAQ}<div class="topics">
-            {#each topics as t}<button class="chip" onclick={() => add(t.question)}>+ {t.label}</button>{/each}
+            {#if !entry.question.trim() || !entry.answer.trim()}<p class="draft">
+                    Hidden from visitors until it has both a question and an answer.
+                </p>{/if}
+        </div>{:else}<p class="empty">No questions about {info.name.en.toLowerCase()} yet.</p>{/each}
+    {#if starters.length && faq.length < MAX_FAQ}<div class="starters">
+            <small>Common questions</small>
+            {#each starters as q}<button class="chip" onclick={() => add(q)}>+ {q}</button>{/each}
         </div>{/if}
     <button class="btn add" disabled={faq.length >= MAX_FAQ} onclick={() => add()}>+ Add question</button>
+    {#if faq.length >= MAX_FAQ}<p class="draft">That's the most questions a map can hold ({MAX_FAQ}).</p>{/if}
 </div>
 
 <style>
-    .hint {
-        font-size: 11px;
-        color: #738466;
-        line-height: 1.5;
-        margin: 0 0 10px;
-    }
-    .hint b {
-        color: #3f5a45;
-    }
     .entry {
         border: 1px solid #dfe6d8;
-        border-radius: 8px;
-        padding: 8px;
-        margin-bottom: 8px;
-        background: #fbfcf8;
+        border-radius: 10px;
+        padding: 10px 12px 12px;
+        margin-bottom: 10px;
+        background: white;
     }
     .entry-head {
         display: flex;
@@ -85,12 +90,22 @@
     }
     .entry-head small {
         flex: 1;
-        font-size: 10px;
+        font-size: 11px;
         color: #738466;
     }
+    .entry-head select {
+        margin-right: 6px;
+        padding: 3px 6px;
+        border: 1px solid #dce3d4;
+        border-radius: 5px;
+        background: white;
+        font: inherit;
+        font-size: 11px;
+        color: #52664a;
+    }
     .entry-head button {
-        width: 24px;
-        height: 24px;
+        width: 26px;
+        height: 26px;
         border-radius: 50%;
         font-size: 12px;
         color: #52664a;
@@ -100,41 +115,59 @@
     }
     .entry-head .remove {
         color: #9a4d3c;
-        font-size: 15px;
+        font-size: 16px;
     }
     input,
     textarea {
         display: block;
         width: 100%;
-        padding: 7px;
+        padding: 8px 10px;
         border: 1px solid #dce3d4;
-        border-radius: 5px;
-        margin: 5px 0 0;
+        border-radius: 6px;
+        margin: 6px 0 0;
         background: white;
         font: inherit;
-        font-size: 12px;
+        font-size: 13px;
+        line-height: 1.5;
         resize: vertical;
     }
     input {
         font-weight: 600;
     }
-    .topics {
+    .draft,
+    .empty {
+        margin: 6px 0 0;
+        font-size: 11px;
+        color: #9a7a3c;
+    }
+    .empty {
+        margin: 0 0 12px;
+        color: #738466;
+    }
+    .starters {
         display: flex;
         flex-wrap: wrap;
-        gap: 5px;
-        margin-bottom: 8px;
+        gap: 6px;
+        margin: 4px 0 10px;
+    }
+    .starters small {
+        width: 100%;
+        font-size: 10px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #7b8c70;
     }
     .chip {
-        padding: 5px 9px;
+        padding: 6px 10px;
         border: 1px dashed #c9d4c0;
         border-radius: 14px;
-        font-size: 11px;
+        font-size: 12px;
         color: #3f5a45;
+        text-align: left;
     }
     .add {
         width: 100%;
         justify-content: center;
-        font-size: 11px;
-        margin-bottom: 8px;
+        font-size: 12px;
     }
 </style>

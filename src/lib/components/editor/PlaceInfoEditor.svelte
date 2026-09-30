@@ -34,14 +34,17 @@
         ></textarea></label
     >
     <label
-        >Other names &amp; doctors<textarea
+        >Other names<textarea
             rows="2"
-            placeholder={"One per line, e.g.\nDr. Sari Wijaya\nX-ray\nPoli Anak"}
+            placeholder={"One per line, e.g.\nX-ray\nPoli Anak\nRuang laktasi"}
             value={info?.keywords?.join("\n") ?? ""}
             onchange={(e) => set({ keywords: e.currentTarget.value.split("\n").slice(0, 40).map((k) => k.slice(0, 80)) })}
         ></textarea></label
     >
-    <p class="hint tight">Visitors who search for these find this place.</p>
+    <p class="hint tight">
+        Visitors who search for these find this place. Doctors and their schedules are on
+        <a href="/editor/info#doctors">Hospital info</a>{info?.doctors?.length ? ` (${info.doctors.length} here)` : ""}.
+    </p>
     <label
         >Phone<input
             type="tel"
@@ -106,6 +109,10 @@
     }
     .hint.tight {
         margin-top: -5px;
+    }
+    .hint a {
+        color: #3f5a45;
+        font-weight: 600;
     }
     .hint b {
         color: #3f5a45;

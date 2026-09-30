@@ -135,6 +135,12 @@
 .saved i.dirty {
     background: #c59a50;
 }
+.saved.failed {
+    color: #9a4b2f;
+}
+.saved.failed i {
+    background: #c4623f;
+}
 .project-bar p {
     margin: 7px 0 0;
     color: #8a9384;

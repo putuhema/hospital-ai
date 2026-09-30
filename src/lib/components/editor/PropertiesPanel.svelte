@@ -1,13 +1,12 @@
 <script lang="ts">
     import type { Piece } from "$lib/model/layout";
-    import type { FaqEntry } from "$lib/model/faq";
+    import { answered, type FaqEntry } from "$lib/model/faq";
     import { isArea, isBarrier, isBuilding, isGate, isParking, isPath, pieceType } from "$lib/model/interiors";
     import ColorField from "$lib/components/shared/ColorField.svelte";
     import InteriorEditor from "./InteriorEditor.svelte";
     import DestinationsEditor from "./DestinationsEditor.svelte";
     import EntranceEditor from "./EntranceEditor.svelte";
     import PlaceInfoEditor from "./PlaceInfoEditor.svelte";
-    import FaqEditor from "./FaqEditor.svelte";
     import PositionFields from "./PositionFields.svelte";
     import ProjectOverview from "./ProjectOverview.svelte";
     import Icon from "./Icon.svelte";
@@ -19,8 +18,6 @@
         canvasHeight,
         hidden,
         faq,
-        faqOpen = $bindable(false),
-        onfaqchange,
         update,
         edit,
         onrotate,
@@ -38,10 +35,8 @@
         canvasWidth: number;
         canvasHeight: number;
         hidden: boolean;
-        /** Hospital information, edited when nothing is selected. */
+        /** Hospital information, edited on its own page (/editor/info). */
         faq: FaqEntry[];
-        faqOpen?: boolean;
-        onfaqchange: (faq: FaqEntry[]) => void;
         /** Set one property, with the editor's checks (sizes, doors, rooms). */
         update: (key: keyof Piece, value: string | number | undefined) => void;
         /** Apply changes to the selected piece as they are. */
@@ -237,9 +232,31 @@
             </ol>
             <button class="btn" onclick={onguide}>Open quick guide</button>
         </div>
-        <details class="section" bind:open={faqOpen}>
-            <summary>Hospital information <span class="badge">{faq.length}</span></summary>
-            <FaqEditor {faq} onchange={onfaqchange} />
-        </details>{/if}
+        <a class="section info-link" href="/editor/info"
+            ><b>Hospital information</b><span
+                >Questions & answers and doctors' schedules · {answered(faq).length} live</span
+            ></a
+        >{/if}
     <ProjectOverview {pieces} {canvasWidth} {canvasHeight} {onexportmodel} />
 </aside>
+
+<style>
+    .info-link {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 12px 0;
+        border-top: 1px solid #e9ece3;
+        text-decoration: none;
+        font-size: 12px;
+        color: #33473a;
+    }
+    .info-link span {
+        font-size: 11px;
+        color: #738466;
+    }
+    .info-link b::after {
+        content: " →";
+        color: #9ba58e;
+    }
+</style>

@@ -1,22 +1,40 @@
 <script lang="ts">
-    import { answerParts, type FaqEntry } from "$lib/model/faq";
+    import { answerParts, byTopic, type FaqEntry } from "$lib/model/faq";
+    import { useLocale } from "$lib/i18n/locale.svelte";
     let { faq }: { faq: FaqEntry[] } = $props();
+    const locale = useLocale();
+    let groups = $derived(byTopic(faq));
 </script>
 
 <div class="hospital-info">
-    {#each faq as entry, i (i)}<details>
-            <summary>{entry.question}</summary>
-            <p>
-                {#each answerParts(entry.answer) as part}{#if part.tel}<a href={`tel:${part.tel}`}>{part.text}</a
-                        >{:else}{part.text}{/if}{/each}
-            </p>
-        </details>{/each}
+    {#each groups as g (g.topic.id)}<section aria-label={g.topic.name[locale.lang]}>
+            {#if groups.length > 1}<h3>{g.topic.name[locale.lang]}</h3>{/if}
+            {#each g.entries as entry, i (i)}<details>
+                    <summary>{entry.question}</summary>
+                    <p>
+                        {#each answerParts(entry.answer) as part}{#if part.tel}<a href={`tel:${part.tel}`}
+                                    >{part.text}</a
+                                >{:else}{part.text}{/if}{/each}
+                    </p>
+                </details>{/each}
+        </section>{/each}
 </div>
 
 <style>
     .hospital-info {
         display: flex;
         flex-direction: column;
+    }
+    h3 {
+        margin: 14px 0 0;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: #7b8c70;
+    }
+    section:first-child h3 {
+        margin-top: 0;
     }
     details {
         border-bottom: 1px solid #eef2ea;

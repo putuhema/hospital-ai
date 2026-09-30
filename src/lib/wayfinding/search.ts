@@ -2,7 +2,7 @@ import { categories } from "../model/categories.ts";
 import type { Place } from "./routing.ts";
 
 // Search the way visitors ask: "x-ray" finds Radiology, "blood test" the
-// Laboratory, "dr sari" her clinic (from the place's other names), and
+// Laboratory, "dr sari" her clinic (from its doctors or other names), and
 // "pharmcy" still finds the pharmacy.
 
 /** Words that mean the same thing to a visitor, in English and Indonesian. */
@@ -107,6 +107,8 @@ function fields(p: Place): Field[] {
   list = [
     ...field(p.name, 10),
     ...(p.info?.keywords ?? []).flatMap((k) => field(k, 8, k)),
+    // Doctors who practise here: "dr sari" or "poli anak" finds their clinic.
+    ...(p.info?.doctors ?? []).flatMap((d) => [...field(d.name, 8, d.name), ...field(d.specialty, 6, d.specialty)]),
     ...field(p.detail, 6),
     ...field(p.building, 3),
     ...field(p.info?.description, 2),

@@ -1,37 +1,45 @@
 <script lang="ts">
     import Icon from "./Icon.svelte";
-    import PublishMenu from "./PublishMenu.svelte";
+    import ShareMenu from "./ShareMenu.svelte";
+    import type { SaveStatus } from "$lib/editor/saving.svelte";
     let {
         title = $bindable(),
         exportOpen = $bindable(false),
-        saved,
-        layout,
+        status,
+        problem = "",
+        slug,
         onnotify,
         onedit,
         onguide,
         oncanvassize,
-        onfaq,
         onopenmap,
         ondownload,
         onexportmodel,
     }: {
         title: string;
         exportOpen?: boolean;
-        saved: boolean;
-        /** The current layout, as autosave stores it; published on request. */
-        layout: string;
+        /** Saving to the database, which visitors' maps read from. */
+        status: SaveStatus;
+        /** Why saving failed, while it is retried. */
+        problem?: string;
+        /** The hospital's public address. */
+        slug: string | null;
         onnotify: (message: string) => void;
         /** The title is being typed. */
-        onedit: () => void;
+        onedit?: () => void;
         onguide: () => void;
         oncanvassize: () => void;
-        /** Open the hospital information (general questions for visitors). */
-        onfaq: () => void;
         onopenmap: () => void;
         ondownload: (format: "json" | "obj") => void;
         onexportmodel: () => void;
     } = $props();
     let publishOpen = $state(false);
+    const label: Record<SaveStatus, string> = {
+        loading: "Loading…",
+        saving: "Saving…",
+        saved: "Saved · live for visitors",
+        failed: "Not saved — retrying",
+    };
     // Only one menu open at a time.
     $effect(() => {
         if (exportOpen) publishOpen = false;
@@ -60,16 +68,16 @@
                 aria-label="Project name"
                 bind:value={title}
                 oninput={onedit}
-            /><span class="saved"
-                ><i class:dirty={!saved}></i>{saved ? "Saved on this device" : "Saving…"}</span
+            /><span class="saved" class:failed={status === "failed"} title={problem}
+                ><i class:dirty={status !== "saved"}></i>{label[status]}</span
             >
         </div>
         <p>Build the campus, add rooms — directions are generated for you.</p>
     </div>
     <div class="project-actions">
-        <button class="btn" onclick={oncanvassize}>Canvas size</button><button
+        <button class="btn" onclick={oncanvassize}>Canvas size</button><a
             class="btn"
-            onclick={onfaq}>Hospital info</button
+            href="/editor/info">Hospital info</a
         ><button
             class="btn"
             onclick={onopenmap}>Open wayfinding map ↗</button
@@ -87,6 +95,6 @@
                     >
                 </div>{/if}
         </div>
-        <PublishMenu {layout} bind:open={publishOpen} {onnotify} />
+        <ShareMenu {slug} bind:open={publishOpen} {onnotify} />
     </div>
 </div>

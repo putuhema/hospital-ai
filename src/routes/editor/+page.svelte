@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { goto } from "$app/navigation";
-    import { assets, starterPieces, parseLayout, pieceFrom, STORAGE_KEY, type Piece } from "$lib/model/layout";
+    import { assets, starterPieces, parseLayout, pieceFrom, type Piece } from "$lib/model/layout";
     import { emptyNetwork, type WalkingNetwork } from "$lib/wayfinding/navigation";
     import type { FaqEntry } from "$lib/model/faq";
     import {
@@ -18,6 +18,7 @@
     } from "$lib/editor/operations";
     import { downloadFile, fileName, layoutJson, layoutObj, layoutSnapshot } from "$lib/editor/export";
     import { History } from "$lib/editor/history.svelte";
+    import { HospitalStore } from "$lib/editor/saving.svelte";
     import HospitalScene from "$lib/components/shared/HospitalScene.svelte";
     import WayfindingPanel from "$lib/components/editor/WayfindingPanel.svelte";
     import EditorRail from "$lib/components/editor/EditorRail.svelte";
@@ -61,12 +62,10 @@
     });
     let assetsOpen = $state(true),
         propertiesOpen = $state(true),
-        faqOpen = $state(false),
         canvasSettings = $state(false),
         exportOpen = $state(false),
         guideOpen = $state(false),
-        toast = $state(""),
-        saved = $state(true);
+        toast = $state("");
     let current = $derived(pieces.find((p) => p.id === selected));
     let exportScene: (() => Promise<void>) | null = null;
 
@@ -81,36 +80,18 @@
     function restore(json: string | null) {
         if (json === null) return;
         ({ pieces, network, faq } = JSON.parse(json));
-        saved = false;
     }
     /** Call before every change, so it can be undone. */
     function checkpoint() {
         history.record(serialised());
-        saved = false;
     }
     const undo = () => restore(history.undo(serialised()));
     const redo = () => restore(history.redo(serialised()));
 
-    // Persistence: autosave shortly after every change, so work is never lost.
-    let loaded = false,
-        saveTimer: ReturnType<typeof setTimeout> | undefined;
+    // Persistence: every change is saved to the database shortly after it is
+    // made, and is live for visitors straight away.
+    let loaded = false;
     const snapshot = () => layoutSnapshot({ title, pieces, network, faq, width: canvasWidth, height: canvasHeight });
-    function save(announce = true) {
-        clearTimeout(saveTimer);
-        localStorage.setItem(STORAGE_KEY, snapshot());
-        saved = true;
-        if (announce) notify("Saved on this device");
-    }
-    $effect(() => {
-        snapshot();
-        if (!loaded) return;
-        saved = false;
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => save(false), 600);
-    });
-    $effect(() => {
-        if (!guideOpen && loaded) localStorage.setItem(GUIDE_SEEN, "1");
-    });
     function load(json: string) {
         const d = parseLayout(json);
         pieces = d.pieces;
@@ -120,15 +101,18 @@
         canvasWidth = d.grid.width;
         canvasHeight = d.grid.height;
     }
+    // The hospital information page, or another device, saved a change.
+    const store = new HospitalStore(snapshot, load, () => history.clear());
+    async function save() {
+        await store.save();
+        notify(store.status === "failed" ? store.problem : "Saved — live for visitors");
+    }
+    $effect(() => {
+        if (!guideOpen && loaded) localStorage.setItem(GUIDE_SEEN, "1");
+    });
     onMount(() => {
         if (!localStorage.getItem(GUIDE_SEEN)) guideOpen = true;
         if (window.matchMedia("(max-width: 900px)").matches) assetsOpen = propertiesOpen = false;
-        try {
-            const data = localStorage.getItem(STORAGE_KEY);
-            if (data) load(data);
-        } catch {
-            notify("Could not restore the saved project");
-        }
         loaded = true;
     });
 
@@ -211,7 +195,6 @@
         network = next.network;
         canvasWidth = w;
         canvasHeight = h;
-        saved = false;
         canvasSettings = false;
         history.clear();
         notify("Canvas resized");
@@ -291,19 +274,14 @@
         <ProjectBar
             bind:title
             bind:exportOpen
-            {saved}
-            layout={snapshot()}
+            status={store.status}
+            problem={store.problem}
+            slug={store.slug}
             onnotify={notify}
-            onedit={() => (saved = false)}
             onguide={() => (guideOpen = true)}
             oncanvassize={() => (canvasSettings = !canvasSettings)}
-            onfaq={() => {
-                active = null;
-                selected = null;
-                propertiesOpen = faqOpen = true;
-            }}
-            onopenmap={() => {
-                save(false);
+            onopenmap={async () => {
+                await store.save();
                 goto("/");
             }}
             ondownload={download}
@@ -403,11 +381,6 @@
                 {canvasHeight}
                 hidden={!propertiesOpen}
                 {faq}
-                bind:faqOpen
-                onfaqchange={(next) => {
-                    checkpoint();
-                    faq = next;
-                }}
                 {update}
                 {edit}
                 onrotate={rotate}
@@ -423,3 +396,6 @@
 <input id="import" type="file" accept=".json" hidden onchange={importFile} />
 {#if guideOpen}<GuideDialog onclose={() => (guideOpen = false)} />{/if}
 {#if toast}<div class="toast" role="status"><span>✓</span>{toast}</div>{/if}
+{#if store.status === "loading"}<div class="loading-hospital" role="status">
+        <p>{store.problem || "Loading the hospital…"}</p>
+    </div>{/if}

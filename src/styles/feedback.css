@@ -20,3 +20,22 @@
     font-size: 12px;
     line-height: 1.7;
 }
+
+/* The editor waits for the hospital from the database before anything can be changed. */
+.loading-hospital {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    background: #f3f5efcc;
+    backdrop-filter: blur(3px);
+}
+.loading-hospital p {
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: white;
+    box-shadow: 0 8px 25px #253a2215;
+    color: #52664a;
+    font-size: 13px;
+}

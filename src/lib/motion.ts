@@ -1,5 +1,5 @@
-// Motion shared by the map's mobile layout. The same curves are in CSS as
-// custom properties on `.mobile-map` (see MobileMap.svelte).
+// Motion shared by the visitor app. The same curves are written out in its CSS
+// (see MapViewer.svelte and ChatPanel.svelte).
 
 /** A CSS `cubic-bezier()` as an easing function for Svelte transitions. */
 export function bezier(x1: number, y1: number, x2: number, y2: number) {

@@ -78,3 +78,14 @@ test('landmarks keep their kind, and shortcuts offer the kinds on the map', () =
   assert.equal(nearestOfType(buildGrid([], 10, 10), found, 'Parking', null)?.name, 'Car park');
   assert.deepEqual(shortcuts(list).slice(0, 3).map((s) => s.name), ['Toilets', 'Café', 'Pharmacy']);
 });
+
+test('a clinic is found by its doctors and their specialties', () => {
+  const clinic: Place = {
+    id: 'r:9', name: 'Room 7', kind: 'room', detail: 'Examination room', building: 'Clinic', point: at,
+    info: { doctors: [{ name: 'dr. Budi Santoso, Sp.PD', specialty: 'Penyakit Dalam', hours: [] }] },
+  };
+  const [hit] = search([...list, clinic], 'dr budi');
+  assert.equal(hit.place.name, 'Room 7');
+  assert.equal(hit.via, 'dr. Budi Santoso, Sp.PD');
+  assert.equal(search([...list, clinic], 'penyakit dalam')[0].place.name, 'Room 7');
+});

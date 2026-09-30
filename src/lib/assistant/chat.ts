@@ -6,12 +6,14 @@
  * be built and tried with real answers.
  */
 import { answered, type FaqEntry } from "../model/faq.ts";
-import { hoursStatus } from "../model/place-info.ts";
+import { hoursLines, hoursStatus } from "../model/place-info.ts";
+import { doctorStatus } from "../model/doctors.ts";
 import { DEFAULT_LANG, type Lang } from "../i18n/lang.ts";
 import { typeInline, typeName } from "../i18n/places.ts";
 import { normalize } from "../wayfinding/search.ts";
 import {
   findNearest,
+  getDoctorSchedule,
   placeTypes,
   searchPlaces,
   showOnMap,
@@ -146,6 +148,38 @@ const SAY = {
   },
 };
 
+const DOCTOR = /\b(dr|drg|dokter|doktor|doctor|jadwal|praktik|praktek|spesialis|specialist|schedule)\b/;
+
+/** Doctors the question is about, in the reply's language, with a card for where the first one practises. */
+function doctorAnswer(ctx: AssistantContext, question: string, lang: Lang, from?: string): ReplyEvent[] | null {
+  const found = getDoctorSchedule(ctx, { query: question, limit: 3 });
+  if (!("doctors" in found)) return null;
+  if (!found.doctors.length)
+    return [
+      {
+        type: "text",
+        text:
+          lang === "id"
+            ? "Saya tidak menemukan dokter itu di jadwal praktik. Silakan tanya ke bagian informasi."
+            : "I couldn't find that doctor in the practice schedules. Please ask at the information desk.",
+      },
+    ];
+  const lines = found.doctors.map((s) => {
+    const place = ctx.places.find((p) => p.id === s.place!.id)!,
+      doctor = place.info!.doctors!.find((d) => d.name === s.name)!,
+      where = place.building ? `${place.name}, ${place.building}` : place.name,
+      hours = hoursLines(doctor.hours, lang).join("; "),
+      status = doctorStatus(doctor, ctx.now, lang)?.text.replace(" · ", ", ");
+    const who = `${doctor.name}${doctor.specialty ? ` (${doctor.specialty})` : ""}`;
+    return (
+      (lang === "id" ? `${who} praktik di ${where}` : `${who} practises at ${where}`) +
+      (hours ? `: ${hours}.` : ".") +
+      (status ? ` ${status}.` : "")
+    );
+  });
+  return [{ type: "text", text: lines.join("\n") }, ...card(ctx, found.doctors[0].place!.id, from)];
+}
+
 /** Open-now in the reply's language, e.g. " Buka, sampai 16.00." */
 function status(ctx: AssistantContext, id: string, lang: Lang) {
   const info = ctx.places.find((p) => p.id === id)?.info,
@@ -181,6 +215,10 @@ export function cannedAnswer(
         ...card(ctx, p.id, from),
       ];
     }
+  }
+  if (DOCTOR.test(q)) {
+    const reply = doctorAnswer(ctx, question, lang, from);
+    if (reply) return reply;
   }
   const entry = WHERE.test(q) ? null : faqFor(faq, question);
   if (entry) return [{ type: "text", text: entry.answer }];
