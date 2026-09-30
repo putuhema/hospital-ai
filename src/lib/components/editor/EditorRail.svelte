@@ -11,9 +11,10 @@
     ><button title="Import layout" onclick={onimport}><Icon name="building" /></button>
     <div class="rail-spacer"></div>
     <span class="rail-line"></span><button
-        title="Stored in this browser"
+        title="Saved to the database"
         aria-label="Where is my work saved?"
-        onclick={() => onnotify("Your map is saved in this browser. Use Export to back it up.")}
+        onclick={() =>
+            onnotify("Every change is saved to the database and is live for visitors. Use Export for a copy.")}
         ><Icon name="save" /></button
     >
 </nav>

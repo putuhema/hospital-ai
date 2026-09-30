@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 /** Size of a label as a fraction of the viewport height. */
-export const LABEL_SIZE = { building: 0.024, room: 0.017 };
+export const LABEL_SIZE = { building: 0.016, room: 0.012 };
 
 /** A rounded name tag drawn to a canvas, kept at a constant on-screen size. */
 export function createLabel(text: string, kind: keyof typeof LABEL_SIZE) {

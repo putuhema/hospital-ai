@@ -10,15 +10,18 @@
         places,
         onshow,
         shown = false,
+        doctor,
     }: {
         /** What the assistant's show_on_map returned. */
         selection: MapSelection;
-        /** The places on the map now, so the card follows the published layout. */
+        /** The places on the map now, so the card follows the saved layout. */
         places: Place[];
         /** Called when the card is followed, e.g. to close the chat on phones. */
         onshow?: () => void;
         /** This place or route is the one on the map now. */
         shown?: boolean;
+        /** The card is about this doctor, who practises there: it shows their schedule. */
+        doctor?: string;
     } = $props();
     // The visitor's own clock, as on the place details; the badge waits for the browser.
     let now = $state<Date | null>(null);
@@ -28,7 +31,7 @@
         return () => clearInterval(timer);
     });
     const locale = useLocale();
-    let card = $derived(mapCard(selection, places, now ?? new Date(), locale.lang));
+    let card = $derived(mapCard(selection, places, now ?? new Date(), locale.lang, doctor));
 </script>
 
 {#if card}<a
@@ -43,6 +46,7 @@
         <span class="text">
             <b>{card.place.name}</b>
             <small>{card.detail}</small>
+            {#if card.schedule}<small>{card.schedule}</small>{/if}
             {#if now && card.status}<small class="status" class:open={card.status.open}><i></i>{card.status.text}</small>{/if}
         </span>
         <span class="action"

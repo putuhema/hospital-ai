@@ -1,7 +1,7 @@
 import type { Place } from "./wayfinding/routing.ts";
 
 /**
- * "You are here" signs: a printed QR code that opens the published map with
+ * "You are here" signs: a printed QR code that opens the hospital map with
  * the sign's spot already set as the starting point.
  */
 

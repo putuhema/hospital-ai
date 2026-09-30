@@ -122,3 +122,14 @@ test("the editor's Indonesian starter topics answer questions in either language
   assert.equal(ask('Cara daftar pasien baru?'), answers[2]);
   assert.equal(ask('emergency number'), answers[3]);
 });
+
+test('a question that only shares a broad word with an entry is not answered by it', () => {
+  const hospital = [
+    { question: 'Can children visit?', answer: 'With a parent.' },
+    { question: 'Apakah ada Wi-Fi untuk pengunjung?', answer: 'Ada.' },
+  ];
+  assert.deepEqual(suggestions(ctx, hospital, 'id'), ['Di mana apotek?', 'Can children visit?', 'Parkir terdekat']);
+  assert.notEqual(text(cannedAnswer(ctx, hospital, 'Jam besuk?')), 'With a parent.');
+  assert.equal(text(cannedAnswer(ctx, hospital, 'anak boleh besuk?')), 'With a parent.');
+  assert.equal(text(cannedAnswer(ctx, hospital, 'wifi?')), 'Ada.');
+});

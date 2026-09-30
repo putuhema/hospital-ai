@@ -56,3 +56,17 @@ test('cards speak Indonesian on an Indonesian map', () => {
   assert.equal(route.detail, `Dari Main reception · ${shown.kind === 'route' && shown.minutes} menit jalan kaki`);
   assert.equal(route.action, 'Lihat rute');
 });
+
+test("a card about a doctor shows their schedule and whether they are practising", () => {
+  const withDoctor = structuredClone(pieces);
+  withDoctor.find((p) => p.name === 'Pharmacy & lab')!.roomAssets![1].info!.doctors = [
+    { name: 'dr. Sari', hours: [{ days: [1, 2, 3, 4, 5], open: '08:00', close: '12:00' }] },
+  ];
+  const places = assistantContext(parseLayout(JSON.stringify({ pieces: withDoctor })), at('10:00')).places;
+  const show = selection({ place_id: idOf('Laboratory') });
+  const card = mapCard(show, places, at('10:00'), 'id', 'dr. Sari')!;
+  assert.equal(card.schedule, 'Sen–Jum 08.00–12.00');
+  assert.deepEqual(card.status, { open: true, text: 'Praktik · sampai 12.00' });
+  // Without the doctor, the card keeps the place's opening hours.
+  assert.equal(mapCard(show, places, at('10:00'), 'id')!.schedule, undefined);
+});

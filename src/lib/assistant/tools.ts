@@ -20,7 +20,7 @@ import { editDistance, normalize, search } from "../wayfinding/search.ts";
 import { dateOf, doctorStatus, shortDate, type Doctor } from "../model/doctors.ts";
 import { shortcuts } from "../wayfinding/shortcuts.ts";
 
-/** What the tools know: the published map and the time at the hospital. */
+/** What the tools know: the hospital map and the time at the hospital. */
 export type AssistantContext = {
   places: Place[];
   grid: NavGrid;
@@ -182,13 +182,19 @@ export function getDoctorSchedule(
     .filter((w) => w && !DOCTOR_WORDS.has(w));
   const all = ctx.places.flatMap((p) => (p.info?.doctors ?? []).map((d) => ({ p, d })));
   if (!all.length) return { error: "No doctors' schedules are on this map." };
-  const wordsOf = (d: Doctor) => normalize(`${d.name} ${d.specialty ?? ""}`).split(" ");
-  const fits = (t: string, words: string[]) =>
-    words.some((w) => w.startsWith(t) || (t.length >= 4 && editDistance(t, w, 1) <= 1));
-  // The rest of the question ("when does … see patients") is words no doctor has.
-  const everyone = all.flatMap(({ d }) => wordsOf(d)),
-    known = wanted.filter((t) => fits(t, everyone));
-  let found = wanted.length && !known.length ? [] : all.filter(({ d }) => known.every((t) => fits(t, wordsOf(d))));
+  // A doctor is found by their name, specialty or the clinic they practise in ("poli paru").
+  const wordsOf = (d: Doctor, p: Place) => normalize(`${d.name} ${d.specialty ?? ""} ${p.name}`).split(" ");
+  // Words as written first, then allowing a typo: "gigi" is Poli Gigi, not Poli Gizi.
+  const exact = (t: string, words: string[]) => words.some((w) => w.startsWith(t)),
+    typo = (t: string, words: string[]) => exact(t, words) || (t.length >= 4 && words.some((w) => editDistance(t, w, 1) <= 1));
+  const everyone = all.flatMap(({ d, p }) => wordsOf(d, p));
+  function matching(fits: (t: string, words: string[]) => boolean) {
+    // The rest of the question ("when does … see patients") is words no doctor has.
+    const known = wanted.filter((t) => fits(t, everyone));
+    return wanted.length && !known.length ? [] : all.filter(({ d, p }) => known.every((t) => fits(t, wordsOf(d, p))));
+  }
+  let found = matching(exact);
+  if (!found.length) found = matching(typo);
   // Words search knows but the schedule doesn't use, e.g. "children" for "Anak".
   if (!found.length && wanted.length)
     found = search(ctx.places, query).flatMap(({ place, via }) =>

@@ -34,3 +34,22 @@ test('by specialty, in English, and a doctor who isn\'t on the schedule', () => 
   );
   assert.match(text(cannedAnswer(ctx('2026-09-28T09:00:00'), [], 'jadwal dr Andi')), /tidak menemukan dokter itu/);
 });
+
+test('by the clinic they practise in, when the specialty is not written out', () => {
+  const clinics = structuredClone(starterPieces);
+  const rooms = clinics.find((p) => p.name === 'Outpatient clinic')!.roomAssets!;
+  rooms[0].name = 'Poli Paru';
+  rooms[0].info = { doctors: [{ name: 'dr. Nur Zam Zam, Sp.P', hours: [{ days: [1], open: '08:00', close: '12:00' }] }] };
+  const at = assistantContext(parseLayout(JSON.stringify({ pieces: clinics })), new Date('2026-09-28T09:00:00'));
+  assert.match(text(cannedAnswer(at, [], 'dokter poli paru')), /^dr\. Nur Zam Zam, Sp\.P praktik di Poli Paru/);
+  assert.match(text(cannedAnswer(at, [], 'jadwal dokter paru')), /^dr\. Nur Zam Zam/);
+  // A word as written beats a near-miss: "gigi" is the dental clinic, not "Gizi".
+  rooms[1].name = 'Poli Gizi';
+  rooms[1].info = { doctors: [{ name: 'dr. Nur Fitriana, Sp.GK', hours: [{ days: [1], open: '08:00', close: '12:00' }] }] };
+  const lab = clinics.find((p) => p.name === 'Pharmacy & lab')!.roomAssets![0];
+  lab.name = 'Poli Gigi';
+  lab.info = { doctors: [{ name: 'drg. Masita', hours: [{ days: [1], open: '08:00', close: '12:00' }] }] };
+  const both = assistantContext(parseLayout(JSON.stringify({ pieces: clinics })), new Date('2026-09-28T09:00:00'));
+  assert.match(text(cannedAnswer(both, [], 'dokter gigi')), /^drg\. Masita/);
+  assert.match(text(cannedAnswer(both, [], 'dokter gizi')), /^dr\. Nur Fitriana/);
+});

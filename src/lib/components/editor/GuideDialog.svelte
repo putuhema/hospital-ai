@@ -47,7 +47,8 @@
             <span><kbd>⇧⌘Z</kbd> redo</span>
         </div>
         <p class="guide-note">
-            Changes save automatically in this browser. Use Export to back up or move a project.
+            Every change is saved to the database as you work and is live for visitors straight away.
+            Use Export for a copy of the layout.
         </p>
         <button class="btn primary" onclick={onclose}>Start building</button>
     </div>

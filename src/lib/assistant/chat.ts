@@ -22,7 +22,10 @@ import {
   type PlaceSummary,
 } from "./tools.ts";
 
-export type ReplyEvent = { type: "text"; text: string } | { type: "card"; show: MapSelection };
+export type ReplyEvent =
+  | { type: "text"; text: string }
+  /** `doctor`: the card is about this doctor, who practises at the place; it shows their schedule. */
+  | { type: "card"; show: MapSelection; doctor?: string };
 export type ChatPart = ReplyEvent;
 export type ChatMessage = {
   role: "user" | "assistant";
@@ -60,7 +63,9 @@ export function suggestions(ctx: AssistantContext, faq: FaqEntry[], lang: Lang =
   const place = ["Pharmacy", "Emergency", "Laboratory", "Radiology", "Reception desk"].find((t) => types.includes(t)) ?? types[0];
   if (place) out.push(lang === "id" ? `Di mana ${typeInline(place, lang)}?` : `Where is the ${typeInline(place, lang)}?`);
   const questions = answered(faq);
-  if (questions.some((q) => /visit|besuk|jenguk/i.test(q.question))) out.push(lang === "id" ? "Jam besuk?" : "Visiting hours?");
+  // Only offered when it gets the visiting hours, not any question that mentions visitors.
+  const visiting = lang === "id" ? "Jam besuk?" : "Visiting hours?";
+  if (faqFor(faq, visiting)) out.push(visiting);
   else if (questions[0]) out.push(questions[0].question);
   const near = ["Parking", "Toilets", "Café"].find((t) => types.includes(t));
   if (near) out.push(lang === "id" ? `${typeName(near, lang)} terdekat` : `Nearest ${typeInline(near, lang)}`);
@@ -100,12 +105,15 @@ const SAME: Record<string, string> = {
   bayar: "pay", membayar: "pay", pembayaran: "pay", payment: "pay", biaya: "pay", cost: "pay", price: "pay", harga: "pay",
   daftar: "register", mendaftar: "register", pendaftaran: "register", registration: "register",
   darurat: "emergency", gawat: "emergency", ugd: "emergency", igd: "emergency",
-  parkir: "park", parking: "park", jam: "hour", hours: "hour", nomor: "number", telepon: "phone",
+  parkir: "park", parking: "park", jam: "hour", hours: "hour", waktu: "hour", time: "hour", times: "hour",
+  anak: "child", children: "child", kids: "child", kid: "child",
+  rule: "hour", rules: "hour", aturan: "hour", peraturan: "hour", nomor: "number", telepon: "phone",
   dokter: "doctor", jadwal: "schedule", asuransi: "insurance", fasilitas: "facility", facilities: "facility",
 };
 /** Words that carry meaning, singular, in one vocabulary. */
 const words = (text: string) =>
   normalize(text)
+    .replace(/\bwi fi\b/g, "wifi")
     .split(" ")
     .filter((w) => w.length > 2 && !STOP.has(w))
     .map((w) => SAME[w] ?? (w.length > 4 && w.endsWith("s") ? w.slice(0, -1) : w));
@@ -115,16 +123,24 @@ const NEAREST = /\b(nearest|closest|terdekat)\b/;
 const FILLER =
   /\b(where|wheres|is|are|the|a|an|di ?mana|letak(nya)?|arah|jalan|ke|ada|how (do|can) i (get|go) to|way to|find|cari|lokasi|nearest|closest|terdekat|please|tolong|yang|mau|saya|dong)\b/g;
 
+/**
+ * Words most hospital questions share: alone they don't say which question it
+ * is ("Jam besuk?" is not answered by "Can children visit?"), so they need another.
+ */
+const BROAD = new Set(["visit", "hour", "patient", "pasien", "rumah", "sakit", "hospital", "room", "ruang"]);
+
 /** The hospital information entry the question is about, if any. */
 function faqFor(faq: FaqEntry[], question: string): FaqEntry | null {
   const asked = new Set(words(question));
   let best: FaqEntry | null = null,
     score = 0;
   for (const entry of answered(faq)) {
-    const s = words(entry.question).filter((w) => asked.has(w)).length;
+    const s = words(entry.question)
+      .filter((w) => asked.has(w))
+      .reduce((n, w) => n + (BROAD.has(w) ? 0.5 : 1), 0);
     if (s > score) [best, score] = [entry, s];
   }
-  return best;
+  return score >= 1 ? best : null;
 }
 
 const SAY = {
@@ -177,7 +193,8 @@ function doctorAnswer(ctx: AssistantContext, question: string, lang: Lang, from?
       (status ? ` ${status}.` : "")
     );
   });
-  return [{ type: "text", text: lines.join("\n") }, ...card(ctx, found.doctors[0].place!.id, from)];
+  const first = found.doctors[0];
+  return [{ type: "text", text: lines.join("\n") }, ...card(ctx, first.place!.id, from, first.name)];
 }
 
 /** Open-now in the reply's language, e.g. " Buka, sampai 16.00." */
@@ -186,9 +203,9 @@ function status(ctx: AssistantContext, id: string, lang: Lang) {
     s = info && hoursStatus(info, ctx.now, lang);
   return s ? ` ${s.text.replace(" · ", ", ")}.` : "";
 }
-function card(ctx: AssistantContext, place: string, from?: string): ReplyEvent[] {
+function card(ctx: AssistantContext, place: string, from?: string, doctor?: string): ReplyEvent[] {
   const shown = showOnMap(ctx, { place_id: place, ...(from && from !== place && { from_place_id: from }) });
-  return "show" in shown ? [{ type: "card", show: shown.show }] : [];
+  return "show" in shown ? [{ type: "card", show: shown.show, ...(doctor && { doctor }) }] : [];
 }
 
 /** An answer from the map and the hospital information, without a model. */

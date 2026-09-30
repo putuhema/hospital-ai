@@ -13,11 +13,9 @@
         suggestions,
         title,
         context,
-        topics = [],
         shown = null,
         here = null,
         onshow,
-        ontopic,
         onhere,
     }: {
         chat: Chat;
@@ -27,15 +25,12 @@
         title: string;
         /** Where the visitor is, for "nearest" and routes. */
         context: () => ReplyContext;
-        /** Topics of the hospital information, offered on the welcome screen. */
-        topics?: { id: string; name: string }[];
         /** The place on the map now, so its card says so. */
         shown?: string | null;
         /** Where the visitor said they are, if they did. */
         here?: string | null;
         /** A card was followed to the map. */
         onshow?: () => void;
-        ontopic?: (id: string) => void;
         /** Set or change where the visitor is. */
         onhere?: () => void;
     } = $props();
@@ -57,7 +52,8 @@
         const last = chat.messages.at(-1);
         void last?.parts.length;
         void (last?.parts.at(-1) as { text?: string } | undefined)?.text;
-        if (!stick || !log) return;
+        // The welcome reads from its top; a conversation from its latest reply.
+        if (!last || !stick || !log) return;
         tick().then(() => log && (log.scrollTop = log.scrollHeight));
     });
     const scrolled = () => {
@@ -105,10 +101,6 @@
                                 <i aria-hidden="true">→</i>
                             </button>{/each}
                     </div>{/if}
-                {#if topics.length}<div class="topics" in:rise={{ delay: 260 + suggestions.length * 55 }}>
-                        <small>{t("hospitalInfo")}</small>
-                        {#each topics as topic}<button onclick={() => ontopic?.(topic.id)}>{topic.name}</button>{/each}
-                    </div>{/if}
             </div>{/if}
         {#each chat.messages as m, i (i)}
             {#if m.role === "user"}<p class="user" in:rise={{ y: 8, duration: 280 }}>{(m.parts[0] as { text: string }).text}</p>
@@ -118,7 +110,13 @@
                             ><i></i><i></i><i></i></span
                         >{/if}
                     {#each m.parts as part}{#if part.type === "text"}<p>{part.text}</p>{:else}<div class="card" in:rise={{ y: 8 }}>
-                                <MapCard selection={part.show} {places} {onshow} shown={cardShown(part.show.to)} />
+                                <MapCard
+                                    selection={part.show}
+                                    {places}
+                                    {onshow}
+                                    shown={cardShown(part.show.to)}
+                                    doctor={part.doctor}
+                                />
                             </div>{/if}{/each}
                     {#if m.error}<p class="error">{t("replyFailed")}</p>{/if}
                 </div>{/if}
@@ -219,7 +217,8 @@
     h2 {
         margin: 0;
         font-family: var(--display);
-        font-size: clamp(30px, 3.1vw, 40px);
+        /* Smaller on narrow or short screens, so the welcome fits above the composer. */
+        font-size: clamp(26px, min(3.1vw, 4.3vh), 40px);
         line-height: 1.06;
         font-weight: 480;
         font-variation-settings: "opsz" 96;
@@ -243,7 +242,7 @@
         text-wrap: pretty;
     }
     .label {
-        margin: 26px 0 10px;
+        margin: clamp(16px, 2.8vh, 26px) 0 10px;
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.12em;
@@ -300,33 +299,6 @@
     }
     .signs button:active {
         transform: scale(0.985);
-    }
-    .topics {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: 4px 12px;
-        margin-top: 22px;
-        padding-top: 16px;
-        border-top: 1px dashed #1d2b2224;
-    }
-    .topics small {
-        width: 100%;
-        margin-bottom: 4px;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--muted);
-    }
-    .topics button {
-        padding: 2px 0;
-        font-size: 14px;
-        color: var(--forest);
-        text-decoration: underline;
-        text-decoration-color: #24473a44;
-        text-underline-offset: 4px;
-        transition: text-decoration-color 160ms;
     }
 
     /* Messages */
@@ -534,10 +506,6 @@
         .signs button:hover i {
             color: #f6f3ea;
             transform: translateX(4px);
-        }
-        .topics button:hover {
-            background: none;
-            text-decoration-color: currentColor;
         }
         .icon:hover {
             background: var(--paper-2);

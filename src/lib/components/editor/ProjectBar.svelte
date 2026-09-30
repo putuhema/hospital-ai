@@ -33,7 +33,7 @@
         ondownload: (format: "json" | "obj") => void;
         onexportmodel: () => void;
     } = $props();
-    let publishOpen = $state(false);
+    let shareOpen = $state(false);
     const label: Record<SaveStatus, string> = {
         loading: "Loading…",
         saving: "Saving…",
@@ -42,10 +42,10 @@
     };
     // Only one menu open at a time.
     $effect(() => {
-        if (exportOpen) publishOpen = false;
+        if (exportOpen) shareOpen = false;
     });
     $effect(() => {
-        if (publishOpen) exportOpen = false;
+        if (shareOpen) exportOpen = false;
     });
     /** Menu items close the menu, then act. */
     const choose = (action: () => void) => () => {
@@ -95,6 +95,6 @@
                     >
                 </div>{/if}
         </div>
-        <ShareMenu {slug} bind:open={publishOpen} {onnotify} />
+        <ShareMenu {slug} bind:open={shareOpen} {onnotify} />
     </div>
 </div>

@@ -74,6 +74,8 @@
     let buildingNames = $derived(labels && prefs.buildings),
         roomNames = $derived(labels && prefs.rooms);
     // Shown only without a route: the route's pin marks the destination then.
+    /** The visitor has dragged or zoomed the map, so the hint can go. */
+    let explored = $state(false);
     let focus = $derived(route?.length ? null : highlight);
     let focusShape = $derived(focus ? highlightShape(pieces, focus) : null);
     // A route runs indoors, and a highlighted room is inside, so roofs come off.
@@ -214,9 +216,17 @@
                 // within it; framed again when the canvas is resized.
                 if (presentation && canvasSize !== sited) {
                     sited = canvasSize;
+                    // Opens on the buildings, with a little of the grounds around them.
+                    const campus = new THREE.Box3();
+                    for (const p of pieces)
+                        campus.expandByPoint(new THREE.Vector3(p.x * 2, 0, p.y * 2)).expandByPoint(
+                            new THREE.Vector3((p.x + p.w) * 2, 0, (p.y + p.h) * 2),
+                        );
+                    if (!campus.isEmpty()) campus.expandByVector(new THREE.Vector3(4, 0, 4));
                     rig.frameSite(
                         new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(canvasWidth * 2, 0, canvasHeight * 2)),
                         zoom,
+                        campus,
                     );
                 }
             }
@@ -230,9 +240,15 @@
                 const routeBox = overlay.show(route);
                 // The pin floats over the roof, or with the roofs off, above the building's name.
                 const piece = buildings.children.find((o) => o.userData.pieceId === focus?.pieceId);
-                const top = !focusShape ? 0 : focusShape.room || inside ? 5 : piece ? new THREE.Box3().setFromObject(piece).max.y + 0.5 : 1;
+                const pieceBox = piece && new THREE.Box3().setFromObject(piece);
+                // Just over the walls with the roofs off, so the pin stays over its room.
+                const top = !focusShape ? 0 : focusShape.room || inside ? 3.4 : pieceBox ? pieceBox.max.y + 0.5 : 1;
                 const focusBox = marker.show(focusShape, top);
-                if (moved) rig.frameRoute(routeBox ?? focusBox, routeBox ? 8 : 3);
+                // A room is framed with its whole building, and a place with what is around it, to find your bearings.
+                const around = focusBox?.clone();
+                if (around && focusShape?.room && pieceBox)
+                    around.union(new THREE.Box3(pieceBox.min.clone().setY(0), pieceBox.max.clone().setY(0)));
+                if (moved) rig.frameRoute(routeBox ?? around ?? null, routeBox ? 8 : 10);
             }
             const object = buildings.children.find((o) => o.userData.pieceId === selected);
             stage.selectedBox.visible = !!object && !presentation;
@@ -343,7 +359,13 @@
     });
 </script>
 
-<div class="real-scene" bind:this={host} aria-label={t("scene3d")}>
+<div
+    class="real-scene"
+    bind:this={host}
+    aria-label={t("scene3d")}
+    onpointerdowncapture={() => (explored = presentation)}
+    onwheelcapture={() => (explored = presentation)}
+>
     {#if loading}<div class="scene-message">{t("loadingModels")}</div>{/if}
     {#if failed}<div class="scene-message">{t("sceneFailed")}</div>{/if}
     {#if prefs.info && hover && hoveredPiece && isBuilding(hoveredPiece)}<SceneTooltip
@@ -353,8 +375,8 @@
             y={hover.y}
         />{/if}
     <SceneOptions bind:prefs bind:cutaway bind:overhead routeShown={!!route?.length} {presentation} />
-    <div class="orbit-help">
-        {t(pan ? "dragToPan" : onmove ? "dragBuildings" : "dragToExplore")} · {t("zoomHelp")}
+    <div class="orbit-help" class:gone={explored || !!route?.length || !!focusShape}>
+        <span>{t(pan ? "dragToPan" : onmove ? "dragBuildings" : "dragToExplore")} · {t("zoomHelp")}</span>
     </div>
     {#if !presentation}<a class="source-link" href="/models/hospital-assets.blend" download
             >↓ Blender source</a
@@ -392,6 +414,11 @@
         font-size: 9px;
         color: #6d7b64;
         pointer-events: none;
+        transition: opacity 0.4s;
+    }
+    /* On the map, the hint goes once the visitor has moved it. */
+    .orbit-help.gone {
+        opacity: 0;
     }
     .source-link {
         position: absolute;

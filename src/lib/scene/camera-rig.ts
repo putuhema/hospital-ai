@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 /** The map renders the top of a frame this much taller, leaving room for sky. */
-const SKY_FRAME = 1.4;
+const SKY_FRAME = 1.25;
 /** Less on a portrait phone, where the search bar already covers the top. */
 const SKY_FRAME_PORTRAIT = 1.2;
 /** Normal orbit limit: never below the horizon. */
@@ -26,8 +26,10 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
 
   // Set while a route is framed, so resizing keeps the route in view.
   let routeDistance: number | null = null;
-  // On the map: the canvas, which the view opens on and never leaves.
-  let site: THREE.Box3 | null = null;
+  // On the map: the canvas, which the view never leaves, and the built
+  // campus on it, which the view opens on.
+  let site: THREE.Box3 | null = null,
+    campus: THREE.Box3 | null = null;
   let framedAs = "";
   // Bird's-eye view: the angles to glide to, and the view to return to afterwards.
   let overhead = false,
@@ -142,14 +144,35 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     controls.target.add(shift);
   }
 
+  /**
+   * Look at a long campus from its side, so it runs across a wide screen (or
+   * up a tall one) and fills it, rather than end-on and far away. Keeps the
+   * camera's height angle; used when the view opens on the campus.
+   */
+  function turnAlong(box: THREE.Box3) {
+    const extent = box.getSize(new THREE.Vector3()),
+      wide = size.width >= size.height,
+      // From the south-east, the start view; from the east-south-east when a deep campus should run across.
+      across = wide ? extent.z > extent.x * 1.2 : extent.x > extent.z * 1.2,
+      heading = across ? new THREE.Vector3(1, 0, 0.45) : new THREE.Vector3(0.6, 0, 0.8);
+    orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
+    const polar = orbit.phi,
+      radius = orbit.radius;
+    orbit.setFromVector3(heading);
+    orbit.set(radius, polar, orbit.theta);
+    camera.position.copy(controls.target).add(offset.setFromSpherical(orbit));
+    camera.lookAt(controls.target);
+  }
+
   /** Move along the current view direction to fit the canvas (or the campus, or a framed route). */
   function fit(width: number, height: number, zoom: number) {
     if (routeDistance === null && presentation && site && size.width) {
-      controls.target.copy(site.getCenter(new THREE.Vector3()).setY(0));
-      // A phone held upright opens close in, the canvas running off its
-      // sides; zooming out still shows the whole canvas (see `bound`).
-      const portrait = size.width < size.height,
-        distance = Math.max(controls.minDistance, fitDistance(site, 1, portrait)) * (100 / zoom);
+      const opening = campus ?? site;
+      controls.target.copy(opening.getCenter(new THREE.Vector3()).setY(0));
+      if (!overhead) turnAlong(opening);
+      // Opens close in, the campus filling the view and its empty corners
+      // running off it; zooming out still shows the whole canvas (see `bound`).
+      const distance = Math.max(controls.minDistance, fitDistance(opening, 1, true)) * (100 / zoom);
       camera.position.sub(controls.target).normalize().multiplyScalar(distance).add(controls.target);
       clearOfSheet(controls.target.clone());
       return;
@@ -161,9 +184,13 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     camera.position.sub(controls.target).normalize().multiplyScalar(distance).add(controls.target);
   }
 
-  /** On the map, frame this area (the canvas) and keep the view over it; null forgets it. */
-  function frameSite(box: THREE.Box3 | null, zoom: number) {
+  /**
+   * On the map, keep the view over this area (the canvas), opening on
+   * `built` (the campus) when there is one; null forgets it.
+   */
+  function frameSite(box: THREE.Box3 | null, zoom: number, built: THREE.Box3 | null = null) {
     site = box && !box.isEmpty() ? box.clone() : null;
+    campus = built && !built.isEmpty() ? built.clone() : null;
     if (site && routeDistance === null) fit(0, 0, zoom);
   }
 

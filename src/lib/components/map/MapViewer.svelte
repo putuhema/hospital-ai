@@ -1,12 +1,11 @@
 <script lang="ts">
-    import { onMount, tick, untrack } from "svelte";
+    import { onMount, untrack } from "svelte";
     import { afterNavigate, replaceState } from "$app/navigation";
     import { rise, unblur } from "$lib/motion";
     import HospitalScene from "$lib/components/shared/HospitalScene.svelte";
     import Logo from "$lib/components/shared/Logo.svelte";
     import FloorPlan from "$lib/components/shared/FloorPlan.svelte";
     import RouteFinder from "$lib/components/shared/RouteFinder.svelte";
-    import HospitalInfo from "$lib/components/shared/HospitalInfo.svelte";
     import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     import ChatPanel from "$lib/components/assistant/ChatPanel.svelte";
     import { Chat } from "$lib/assistant/chat.svelte";
@@ -15,7 +14,7 @@
     import { LANGS } from "$lib/i18n/lang";
     import type { Key } from "$lib/i18n/messages";
     import type { Piece } from "$lib/model/layout";
-    import { answered, byTopic, type FaqEntry } from "$lib/model/faq";
+    import { answered, type FaqEntry } from "$lib/model/faq";
     import { walkwayAt } from "$lib/model/interiors";
     import { hoursStatus } from "$lib/model/place-info";
     import type { Point, WalkingNetwork } from "$lib/wayfinding/navigation";
@@ -38,7 +37,7 @@
         canvasHeight: number;
         /** Hospital information: general questions the map can't answer. */
         faq?: FaqEntry[];
-        /** The public address of this map; routes are shared from it. Null when unpublished. */
+        /** The public address of this map; routes are shared from it. Null before the hospital is saved. */
         shareUrl?: string | null;
         /** Show the link back to the editor (not on the public map). */
         editable?: boolean;
@@ -46,11 +45,11 @@
         notice?: Key | null;
     } = $props();
 
-    type Tab = "chat" | "route" | "info";
+    // Everything about the hospital (hours, doctors, BPJS…) is asked in the chat.
+    type Tab = "chat" | "route";
     const TABS: { id: Tab; key: Key }[] = [
         { id: "chat", key: "tabChat" },
         { id: "route", key: "tabRoute" },
-        { id: "info", key: "tabInfo" },
     ];
     /** Width the conversation takes on wide screens; the map is framed beside it. */
     const COLUMN = 468;
@@ -72,7 +71,6 @@
         to = $state.raw<Place | null>(null),
         picking = $state(false);
     let exporter: (() => Promise<void>) | null = null;
-    let pane = $state<HTMLElement>();
     let grid = $derived(buildGrid(pieces, canvasWidth, canvasHeight));
     let placeList = $derived(places(pieces, network));
     let route = $derived(from && to ? planRoute(grid, from, to) : null);
@@ -93,7 +91,6 @@
         lang: locale.lang,
         ...(from && "id" in from && { from: from.id }),
     });
-    let topics = $derived(byTopic(questions).map((g) => ({ id: g.topic.id, name: g.topic.name[locale.lang] })));
     // While chatting, the place the latest answer is about stands out on the
     // map; otherwise the chosen destination does.
     let chatFocus = $derived.by(() => {
@@ -140,7 +137,7 @@
         if (to) tab = "route";
         ready = true;
     });
-    // When the layout changes (a new version is published or saved), keep the
+    // When the layout changes (the editor saved a change), keep the
     // chosen places but pick up where they are now.
     $effect(() => {
         const list = placeList;
@@ -234,16 +231,19 @@
         if (drag > 120 || speed > 0.5) sheetOpen = false;
         drag = 0;
     }
-    async function openTopic(id: string) {
-        open("info");
-        await tick();
-        pane?.querySelector(`#topic-${id}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
-    }
+    /** The route when there is one, else the map. Phones open their share sheet. */
     async function share() {
-        const link = shareUrl ? shareUrl + location.search : location.href;
+        const link = shareUrl ? shareUrl + (to ? location.search : "") : to ? location.href : location.origin;
+        if (!wide && navigator.share) {
+            try {
+                return await navigator.share({ title, url: link });
+            } catch (e) {
+                if ((e as Error).name === "AbortError") return;
+            }
+        }
         try {
             await navigator.clipboard.writeText(link);
-            notify(shareUrl ? t("linkCopied") : t("linkCopiedUnpublished"));
+            notify(!shareUrl ? t("linkCopiedUnpublished") : to ? t("linkCopied") : t("mapLinkCopied"));
         } catch {
             notify(t("copyAddress"));
         }
@@ -362,10 +362,13 @@
         <div class="sheet-top" role="presentation" onpointerdown={grab} onpointermove={pull} onpointerup={release} onpointercancel={release}>
             {#if ready && !wide}<span class="grabber" aria-hidden="true"></span>{/if}
             <div class="tabs">
-                <nav class="switcher" style:--at={TABS.findIndex((x) => x.id === tab)} aria-label={t("mapView")}>
+                <nav
+                    class="switcher"
+                    style:--at={TABS.findIndex((x) => x.id === tab)}
+                    style:--tabs={TABS.length} aria-label={t("mapView")}>
                     <span class="thumb" aria-hidden="true"></span>
                     {#each TABS as x}<button aria-pressed={tab === x.id} onclick={() => (tab = x.id)}
-                            >{t(x.key)}{#if x.id === "route" && to}<i class="badge"></i>{/if}</button
+                            >{t(x.key)}{#if x.id === "route" && to}<i class="to-dot"></i>{/if}</button
                         >{/each}
                 </nav>
                 {#if ready && !wide}<button class="close" aria-label={t("closeChat")} onclick={() => (sheetOpen = false)}
@@ -374,27 +377,20 @@
                     >{/if}
             </div>
         </div>
-        <div class="pane" bind:this={pane}>
+        <div class="pane">
             {#if tab === "chat"}<ChatPanel
                     {chat}
                     places={placeList}
                     suggestions={starters}
                     {title}
                     context={chatContext}
-                    {topics}
                     shown={highlight?.id ?? null}
                     {here}
                     onshow={() => (sheetOpen = false)}
-                    ontopic={openTopic}
                     onhere={() => open("route")}
-                />{:else if tab === "route"}<div class="scroll" in:unblur>
+                />{:else}<div class="scroll" in:unblur>
                     <h2>{t("directions")}</h2>
                     <RouteFinder places={placeList} {grid} {route} bind:from bind:to bind:picking />
-                </div>{:else}<div class="scroll" in:unblur>
-                    <h2>{t("hospitalInfo")}</h2>
-                    {#if questions.length}<HospitalInfo faq={questions} />{:else}<p class="empty">
-                            {t("greetingLead")}
-                        </p>{/if}
                 </div>{/if}
         </div>
     </aside>
@@ -415,7 +411,7 @@
                     ><path d="m12 4 9 5-9 5-9-5zM3 14l9 5 9-5" /></svg
                 ></button
             >{/if}
-        <button class="round" disabled={!to} aria-label={t("shareRoute")} title={t("shareRoute")} onclick={share}
+        <button class="round" aria-label={t(to ? "shareRoute" : "shareMap")} title={t(to ? "shareRoute" : "shareMap")} onclick={share}
             ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
                 ><path d="M12 15V4m-4 4 4-4 4 4M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" /></svg
             ></button
@@ -630,7 +626,7 @@
         position: relative;
         flex: 1;
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(var(--tabs), 1fr);
         padding: 4px;
         margin-bottom: 6px;
         border-radius: 14px;
@@ -641,7 +637,7 @@
         top: 4px;
         bottom: 4px;
         left: 4px;
-        width: calc((100% - 8px) / 3);
+        width: calc((100% - 8px) / var(--tabs));
         border-radius: 10px;
         background: var(--card);
         box-shadow:
@@ -663,7 +659,8 @@
     .concierge .switcher button[aria-pressed="true"]:hover {
         color: var(--ink);
     }
-    .badge {
+    /* A destination is set. (`.badge` is taken by the editor's global styles.) */
+    .to-dot {
         position: absolute;
         top: 9px;
         margin-left: 4px;
@@ -696,12 +693,166 @@
         font-variation-settings: "opsz" 72;
         letter-spacing: -0.02em;
     }
-    .scroll :global(.hospital-info section) {
-        scroll-margin-top: 8px;
+
+    /* Directions: the two places on one card, like a ticket, in the paper style. */
+    .scroll :global(.route-finder .fields) {
+        gap: 0;
+        padding-right: 0;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--card);
+        box-shadow: 0 1px 2px #1b2a210d, 0 8px 24px -14px #1b2a2140;
+        transition: box-shadow 0.2s;
     }
-    .empty {
+    .scroll :global(.route-finder .fields:focus-within) {
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--forest) 16%, transparent), 0 8px 24px -14px #1b2a2140;
+    }
+    .scroll :global(.route-finder .place-search input) {
+        padding: 16px 54px 16px 42px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        font-size: 15px;
+        color: var(--ink);
+    }
+    .scroll :global(.route-finder .place-search input::placeholder) {
+        color: var(--muted);
+    }
+    .scroll :global(.route-finder .place-search input:focus) {
+        outline: 0;
+    }
+    .scroll :global(.route-finder .place-search + .place-search) {
+        border-top: 1px dashed #1b2a2124;
+    }
+    .scroll :global(.route-finder .marker) {
+        left: 17px;
+    }
+    .scroll :global(.route-finder .marker.start) {
+        background: var(--forest);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--forest) 14%, transparent);
+    }
+    .scroll :global(.route-finder .marker.end) {
+        background: var(--signal);
+    }
+    .scroll :global(.route-finder .place-search ul) {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+    }
+    .scroll :global(.route-finder .place-search li.highlighted) {
+        background: var(--paper-2);
+    }
+    .scroll :global(.route-finder .swap) {
+        right: 12px;
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--forest);
+    }
+    .scroll :global(.route-finder .swap:hover:not(:disabled)) {
+        background: var(--paper-2);
+    }
+    .scroll :global(.route-finder .tools) {
+        gap: 8px;
+        margin: 16px 0 6px;
+    }
+    .scroll :global(.route-finder .chip) {
+        gap: 7px;
+        padding: 8px 12px 8px 9px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        font-size: 13px;
+        color: var(--ink);
+    }
+    .scroll :global(.route-finder .chip:hover) {
+        border-color: #1b2a2133;
+        background: var(--card);
+    }
+    .scroll :global(.route-finder .chip.active) {
+        border-color: var(--forest);
+        background: var(--forest);
+        color: #fff;
+    }
+    .scroll :global(.route-finder .tip),
+    .scroll :global(.route-finder .notice) {
+        margin-top: 14px;
+        font-size: 13.5px;
         color: var(--ink-2);
-        line-height: 1.55;
+    }
+    .scroll :global(.route-finder .notice) {
+        border-radius: 14px;
+        background: #f6e7d6;
+        color: #6e4a2a;
+    }
+    .scroll :global(.route-finder .result) {
+        margin-top: 18px;
+        padding: 18px 18px 8px;
+        border: 1px solid var(--line);
+        border-top: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--card);
+    }
+    .scroll :global(.route-finder .summary b) {
+        font-family: var(--display);
+        font-size: 34px;
+        font-weight: 480;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+    }
+    .scroll :global(.route-finder .summary span) {
+        font-size: 13px;
+        color: var(--muted);
+    }
+    .scroll :global(.route-finder .clear) {
+        font-size: 12.5px;
+        color: var(--forest);
+    }
+    .scroll :global(.route-finder ol li) {
+        gap: 12px;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 14px;
+        color: var(--ink);
+    }
+    .scroll :global(.route-finder ol li:last-child) {
+        border-bottom: 0;
+    }
+    .scroll :global(.route-finder .glyph) {
+        width: 28px;
+        height: 28px;
+        background: color-mix(in srgb, var(--forest) 10%, transparent);
+        color: var(--forest);
+    }
+    .scroll :global(.route-finder ol li:last-child .glyph) {
+        background: color-mix(in srgb, var(--signal) 16%, transparent);
+        color: var(--signal);
+    }
+    .scroll :global(.route-finder .place-details) {
+        margin-top: 16px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--paper-2);
+        font-size: 13.5px;
+        color: var(--ink);
+    }
+    .scroll :global(.route-finder .place-details small) {
+        color: var(--muted);
+    }
+    .scroll :global(.route-finder .place-details .doctor) {
+        padding: 11px 12px;
+        border-radius: 12px;
+        background: var(--card);
+    }
+    .scroll :global(.route-finder .place-details .phone) {
+        color: var(--forest);
+    }
+    .scroll :global(.route-finder .step small) {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
     }
 
     /* Over the map */
@@ -803,9 +954,17 @@
     }
     .concierge :global(.orbit-help) {
         left: var(--column);
-        bottom: 22px;
-        font-size: 10.5px;
-        color: #5d6c5c;
+        bottom: 18px;
+        font-size: 11px;
+        color: var(--ink-2);
+    }
+    .concierge :global(.orbit-help span) {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--card) 88%, transparent);
+        box-shadow: 0 2px 10px #1b2a2114;
+        backdrop-filter: blur(6px);
     }
 
     /* Where the visitor is heading, over the map. */
@@ -972,6 +1131,17 @@
         box-shadow:
             0 0 0 1px var(--line),
             0 10px 28px -14px #1b2a2150;
+    }
+    /* It steps back while the sheet is up, so nothing half-shows behind the sheet's top edge. */
+    .mobile .masthead {
+        transition:
+            opacity 300ms ease,
+            transform 460ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .sheet-open .masthead {
+        opacity: 0;
+        transform: translateY(-14px) scale(0.98);
+        pointer-events: none;
     }
     .mobile h1 {
         font-size: 17px;

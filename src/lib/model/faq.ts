@@ -1,7 +1,7 @@
 /**
  * Hospital information: general questions the map can't answer (visiting
  * rules, BPJS and payment, registration, the emergency number), grouped
- * into topics and published with the map.
+ * into topics and saved with the hospital.
  */
 import type { Lang } from "../i18n/lang.ts";
 
