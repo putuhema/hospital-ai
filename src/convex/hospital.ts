@@ -58,6 +58,15 @@ export const get = query({
   },
 });
 
+/** Which version of the hospital is saved, without its contents: for caches that keep the rest. */
+export const version = query({
+  args: { slug: v.optional(v.string()) },
+  handler: async (ctx, { slug }) => {
+    const h = await find(ctx, slug);
+    return h && { slug: h.slug, revision: h.revision };
+  },
+});
+
 /** Writes only the rows that changed; true when anything did. */
 async function sync<T extends Rows>(
   ctx: MutationCtx,

@@ -144,3 +144,24 @@ test('replies show bold and bullets, not Markdown marks', async () => {
   // Still being written: the opening marks wait, plain.
   assert.deepEqual(runs('Ada **Farm'), [{ text: 'Ada **Farm', bold: false }]);
 });
+
+test('an answer that arrives all at once is revealed a little at a time, in order', async () => {
+  const { nextReveal, withEvent } = await import('../src/lib/assistant/chat.ts');
+  const card = { type: 'card' as const, show: { kind: 'place' as const, to: 'b:1', link: '?to=b:1' } };
+  const queue: ReplyEvent[] = [{ type: 'text', text: 'x'.repeat(600) }, card, { type: 'text', text: 'Selesai.' }];
+  const steps: ReplyEvent[] = [];
+  for (let e = nextReveal(queue); e; e = nextReveal(queue)) steps.push(e);
+  const texts = steps.filter((e) => e.type === 'text') as { text: string }[];
+  // Several frames, none too long, and nothing lost or reordered.
+  assert.ok(texts.length > 10 && texts.every((t) => t.text.length <= 48));
+  assert.equal(texts.map((t) => t.text).join(''), 'x'.repeat(600) + 'Selesai.');
+  assert.equal(steps.findIndex((e) => e.type === 'card'), texts.findIndex((t) => t.text.startsWith('S')) );
+  // A status shows until the text starts, and never becomes part of the message.
+  let m: ChatMessage = { role: 'assistant', parts: [] };
+  m = withEvent(m, { type: 'status', tool: 'get_doctor_schedule' });
+  assert.equal(m.status, 'get_doctor_schedule');
+  assert.equal(m.parts.length, 0);
+  m = withEvent(m, { type: 'text', text: 'dr. Sari' });
+  assert.equal(m.status, undefined);
+  assert.deepEqual(m.parts, [{ type: 'text', text: 'dr. Sari' }]);
+});

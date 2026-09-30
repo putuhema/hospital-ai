@@ -7,9 +7,9 @@ import { ConvexHttpClient } from "convex/browser";
 import { env } from "$env/dynamic/private";
 import { PUBLIC_CONVEX_URL } from "$env/static/public";
 import { api } from "../../../convex/_generated/api";
-import { parseLayout } from "$lib/model/layout";
-import { assistantContext } from "$lib/assistant/tools";
-import type { ChatMessage, ReplyContext, ReplyEvent } from "$lib/assistant/chat";
+import { normalize } from "$lib/wayfinding/search";
+import { hospitalFor } from "$lib/server/hospital-cache";
+import { messageText, type ChatMessage, type ReplyContext, type ReplyEvent } from "$lib/assistant/chat";
 import { hospitalNow, reply, type ReplyInput } from "$lib/server/assistant";
 import { replyZai, ZAI_BASE_URL, ZAI_MODEL } from "$lib/server/assistant-zai";
 
@@ -41,17 +41,23 @@ function valid(messages: unknown): messages is ChatMessage[] {
  * `ZAI_API_KEY`, else Claude with `ANTHROPIC_API_KEY`. `ASSISTANT_MODEL`
  * picks another model of that provider. Null when neither key is set.
  */
-function assistant(): ((input: ReplyInput) => AsyncGenerator<ReplyEvent>) | null {
+function assistant(): { model: string; run: (input: ReplyInput) => AsyncGenerator<ReplyEvent> } | null {
   if (env.ZAI_API_KEY) {
-    const client = new OpenAI({ apiKey: env.ZAI_API_KEY, baseURL: env.ZAI_BASE_URL || ZAI_BASE_URL });
-    return (input) => replyZai(client, env.ASSISTANT_MODEL || ZAI_MODEL, input);
+    const client = new OpenAI({ apiKey: env.ZAI_API_KEY, baseURL: env.ZAI_BASE_URL || ZAI_BASE_URL }),
+      model = env.ASSISTANT_MODEL || ZAI_MODEL;
+    return { model, run: (input) => replyZai(client, model, input) };
   }
   if (env.ANTHROPIC_API_KEY) {
-    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-    return (input) => reply(client, input, env.ASSISTANT_MODEL || undefined);
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }),
+      model = env.ASSISTANT_MODEL || "claude-opus-5-5";
+    return { model, run: (input) => reply(client, input, model) };
   }
   return null;
 }
+
+const encoder = new TextEncoder();
+const line = (event: object) => encoder.encode(JSON.stringify(event) + "\n");
+const NDJSON = { "content-type": "application/x-ndjson", "cache-control": "no-store" };
 
 /**
  * The assistant's replies, streamed as one JSON event per line. Without an
@@ -67,10 +73,35 @@ export async function POST({ request, getClientAddress }) {
     lang: body.context?.lang === "en" ? "en" : "id",
   };
   const slug = typeof body.slug === "string" ? body.slug : undefined;
-  const convex = new ConvexHttpClient(PUBLIC_CONVEX_URL);
+  const convex = new ConvexHttpClient(PUBLIC_CONVEX_URL),
+    secret = env.CHAT_LIMIT_SECRET;
+  if (!secret && !dev) {
+    // Never answer without limits in production.
+    console.error("CHAT_LIMIT_SECRET is not set: the assistant stays off.");
+    return json({ error: "The assistant is not set up." }, { status: 503 });
+  }
+
+  // The hospital as saved in the database, never what the browser sends; parsed once per version.
+  const hospital = await hospitalFor(convex, slug);
+  if (!hospital) return json({ error: "No such hospital." }, { status: 404 });
+
+  // A conversation's first question, asked recently by someone else in the same spot, is answered
+  // from the cache: instantly, and without counting against the limits or the model bill.
+  const messages = body.messages as ChatMessage[];
+  const cacheKey =
+    secret && messages.length === 1
+      ? createHash("sha256")
+          .update(
+            JSON.stringify([hospital.slug, hospital.revision, answer.model, context.lang, context.from ?? "", normalize(messageText(messages[0]))]),
+          )
+          .digest("hex")
+      : null;
+  if (secret && cacheKey) {
+    const kept = await convex.query(api.answers.get, { secret, key: cacheKey });
+    if (kept) return new Response(kept.map((e) => JSON.stringify(e) + "\n").join(""), { headers: NDJSON });
+  }
 
   // Each question counts against the visitor's limits and the hospital's daily one (lib/assistant/limits.ts).
-  const secret = env.CHAT_LIMIT_SECRET;
   if (secret) {
     // Anonymous: only a keyed hash of the address is stored.
     const visitor = createHash("sha256").update(`${secret}:${getClientAddress()}`).digest("hex").slice(0, 32);
@@ -80,38 +111,26 @@ export async function POST({ request, getClientAddress }) {
         { error: limit.everyone ? "The assistant is busy today." : "Too many questions.", retryAfter: Math.ceil(limit.retryAfterMs / 1000) },
         { status: 429, headers: { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) } },
       );
-  } else if (!dev) {
-    // Never answer without limits in production.
-    console.error("CHAT_LIMIT_SECRET is not set: the assistant stays off.");
-    return json({ error: "The assistant is not set up." }, { status: 503 });
   }
 
-  // The hospital as saved in the database, never what the browser sends.
-  const hospital = await convex.query(api.hospital.get, slug ? { slug } : {});
-  if (!hospital) return json({ error: "No such hospital." }, { status: 404 });
-  const layout = parseLayout(hospital.layout);
-  const ctx = assistantContext(layout, hospitalNow(env.HOSPITAL_TIME_ZONE));
-
-  const encoder = new TextEncoder(),
-    abort = new AbortController();
+  const ctx = { ...hospital.map, now: hospitalNow(env.HOSPITAL_TIME_ZONE) };
+  const abort = new AbortController();
   request.signal.addEventListener("abort", () => abort.abort());
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: object) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      const sent: ReplyEvent[] = [];
       try {
-        for await (const event of answer({
-          title: layout.title,
-          faq: layout.faq,
-          ctx,
-          messages: body.messages,
-          context,
-          signal: abort.signal,
-        }))
-          send(event);
+        for await (const event of answer.run({ title: hospital.title, faq: hospital.faq, ctx, messages, context, signal: abort.signal })) {
+          controller.enqueue(line(event));
+          if (event.type !== "status") sent.push(event);
+        }
+        // Kept for the next visitor who asks the same, when it is a whole answer.
+        if (secret && cacheKey && sent.some((e) => e.type === "text" && e.text.trim()))
+          await convex.mutation(api.answers.put, { secret, key: cacheKey, events: merged(sent) }).catch((err) => console.error("Could not keep the answer:", err));
       } catch (err) {
         if (!abort.signal.aborted) {
           console.error("Assistant reply failed:", err);
-          send({ type: "error" });
+          controller.enqueue(line({ type: "error" }));
         }
       } finally {
         controller.close();
@@ -121,5 +140,16 @@ export async function POST({ request, getClientAddress }) {
       abort.abort();
     },
   });
-  return new Response(stream, { headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" } });
+  return new Response(stream, { headers: NDJSON });
+}
+
+/** Text events joined into runs, so a kept answer is a few events, not one per word. */
+function merged(events: ReplyEvent[]): ReplyEvent[] {
+  const out: ReplyEvent[] = [];
+  for (const e of events) {
+    const last = out.at(-1);
+    if (e.type === "text" && last?.type === "text") out[out.length - 1] = { type: "text", text: last.text + e.text };
+    else out.push(e);
+  }
+  return out;
 }

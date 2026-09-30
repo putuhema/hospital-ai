@@ -54,7 +54,14 @@ test('GLM calls the tools with arguments sent in pieces, then answers with a car
   const last = requests.at(-1);
   assert.equal(last.model, 'glm-5');
   assert.equal(last.messages[0].role, 'system');
-  assert.match(last.messages[0].content, /RS Uji[\s\S]*Now at the hospital/);
+  assert.match(last.messages[0].content, /RS Uji/);
+  // The time and place follow the question, so the instructions before it stay cached.
+  assert.equal(requests[0].messages.length, 3);
+  assert.deepEqual(requests[0].messages.map((m: any) => m.role), ['system', 'user', 'system']);
+  assert.match(requests[0].messages[2].content, /Now at the hospital/);
+  assert.doesNotMatch(last.messages[0].content, /Now at the hospital/);
+  // While GLM reads what it found, the chat says what it looked up.
+  assert.deepEqual(events.filter((e) => e.type === 'status').map((e) => e.type === 'status' && e.tool), ['search_places', 'show_on_map']);
   assert.deepEqual(last.thinking, { type: 'disabled' });
   assert.ok(last.tools.every((t: any) => t.type === 'function' && t.function.parameters.type === 'object'));
   // The search went back to the model as a tool message for its call.

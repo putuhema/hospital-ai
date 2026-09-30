@@ -70,4 +70,15 @@ export default defineSchema({
   })
     .index("by_key", ["key", "window"])
     .index("by_window", ["window"]),
+
+  /** Recent answers to a conversation's first question, replayed instead of asking the model again. */
+  chatAnswers: defineTable({
+    /** A hash of the hospital version, the question, the language, where the visitor is and the model. */
+    key: v.string(),
+    /** The reply's text and cards, as the chat shows them. */
+    events: v.any(),
+    expires: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_expires", ["expires"]),
 });

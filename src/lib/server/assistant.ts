@@ -105,6 +105,12 @@ export function runCalls(
   return { results, cards };
 }
 
+/** While the model reads what the tools found: what it looked up, for the chat to say ("Melihat jadwal dokter…"). */
+export function* lookingUp(calls: { name: string }[]): Generator<ReplyEvent> {
+  const tool = calls.findLast((c) => c.name !== "show_on_map") ?? calls.at(-1);
+  if (tool) yield { type: "status", tool: tool.name };
+}
+
 export const SORRY = {
   id: "Maaf, saya tidak bisa membantu dengan itu. Silakan tanya ke bagian informasi.",
   en: "Sorry, I can't help with that. Please ask at the information desk.",
@@ -183,6 +189,7 @@ export async function* reply(
     convo.push({ role: "assistant", content: message.content });
     const { results, cards } = runCalls(ctx, calls, shown);
     yield* cards;
+    yield* lookingUp(calls);
     convo.push({
       role: "user",
       content: results.map((r) => ({

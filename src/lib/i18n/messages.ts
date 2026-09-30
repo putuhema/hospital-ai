@@ -172,6 +172,12 @@ const en = {
   setWhereYouAre: "Set where you are",
   layers: "Map layers",
   guideNote: "Answers come from the hospital's map and information. In an emergency, go straight to the Emergency department.",
+  lookingPlaces: "Looking for the place…",
+  lookingDetails: "Checking the details…",
+  lookingDoctors: "Checking the doctors' schedules…",
+  lookingNearest: "Finding the nearest one…",
+  lookingRoute: "Working out the route…",
+  lookingMap: "Marking it on the map…",
 } as const;
 
 export type Key = keyof typeof en;
@@ -337,6 +343,12 @@ const id: Record<Key, string> = {
   setWhereYouAre: "Atur lokasi Anda",
   layers: "Lapisan peta",
   guideNote: "Jawaban berasal dari peta dan informasi rumah sakit. Dalam keadaan darurat, langsung ke IGD.",
+  lookingPlaces: "Mencari tempatnya…",
+  lookingDetails: "Memeriksa informasinya…",
+  lookingDoctors: "Melihat jadwal dokter…",
+  lookingNearest: "Mencari yang terdekat…",
+  lookingRoute: "Menyiapkan rute…",
+  lookingMap: "Menandai di peta…",
 };
 
 export const messages: Record<Lang, Record<Key, string>> = { en, id };

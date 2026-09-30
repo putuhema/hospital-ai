@@ -1,4 +1,7 @@
-import { withEvent, type ChatMessage, type Replier, type ReplyContext } from "./chat.ts";
+import { nextReveal, withEvent, type ChatMessage, type Replier, type ReplyContext, type ReplyEvent } from "./chat.ts";
+
+/** A frame: text is revealed at most this often. */
+const FRAME_MS = 16;
 
 /** One conversation: the messages, and the reply being written. */
 export class Chat {
@@ -20,18 +23,48 @@ export class Chat {
     const at = this.messages.length - 1,
       abort = (this.#abort = new AbortController());
     this.busy = true;
-    try {
-      for await (const event of this.#replier(history, context, abort.signal)) {
-        if (abort.signal.aborted) break;
-        this.messages[at] = withEvent(this.messages[at], event);
+
+    // Events are read as they arrive and shown at a readable pace (see `nextReveal`).
+    const queue: ReplyEvent[] = [];
+    let finished = false,
+      failed = false,
+      wake = () => {};
+    const woken = () => new Promise<void>((resolve) => (wake = resolve));
+    const reading = (async () => {
+      try {
+        for await (const event of this.#replier(history, context, abort.signal)) {
+          if (abort.signal.aborted) break;
+          queue.push(event);
+          wake();
+        }
+      } catch {
+        failed = !abort.signal.aborted;
+      } finally {
+        finished = true;
+        wake();
       }
-    } catch {
-      this.messages[at] = { ...this.messages[at], error: "failed" };
-    } finally {
-      if (this.#abort === abort) {
-        this.#abort = null;
-        this.busy = false;
+    })();
+    const show = (event: ReplyEvent) => (this.messages[at] = withEvent(this.messages[at], event));
+
+    while (!abort.signal.aborted) {
+      const event = nextReveal(queue);
+      if (!event) {
+        if (finished) break;
+        await woken();
+        continue;
       }
+      show(event);
+      if (event.type === "text" && queue.some((e) => e.type === "text"))
+        await new Promise((resolve) => setTimeout(resolve, FRAME_MS));
+    }
+    // Stopped: what has arrived stays, shown at once.
+    for (let event = nextReveal(queue); event; event = nextReveal(queue)) show(event);
+    await reading;
+    if (failed) this.messages[at] = { ...this.messages[at], error: "failed" };
+    if (this.messages[at].status) this.messages[at] = withEvent(this.messages[at], { type: "text", text: "" });
+    if (this.#abort === abort) {
+      this.#abort = null;
+      this.busy = false;
     }
   }
 

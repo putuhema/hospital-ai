@@ -4,6 +4,7 @@
     import type { ReplyContext } from "$lib/assistant/chat";
     import type { Place } from "$lib/wayfinding/routing";
     import { rise } from "$lib/motion";
+    import type { Key } from "$lib/i18n/messages";
     import { runs } from "$lib/assistant/format";
     import MapCard from "./MapCard.svelte";
     import Logo from "$lib/components/shared/Logo.svelte";
@@ -37,6 +38,16 @@
     } = $props();
     const locale = useLocale();
     const t = locale.t;
+    // What the assistant is looking up, while it waits on a tool.
+    const LOOKING: Record<string, Key> = {
+        search_places: "lookingPlaces",
+        get_place_details: "lookingDetails",
+        get_doctor_schedule: "lookingDoctors",
+        find_nearest: "lookingNearest",
+        get_directions: "lookingRoute",
+        show_on_map: "lookingMap",
+    };
+    const looking = (tool: string): Key => LOOKING[tool] ?? "writingReply";
     let draft = $state(""),
         log = $state<HTMLElement>(),
         input = $state<HTMLInputElement>();
@@ -107,8 +118,11 @@
             {#if m.role === "user"}<p class="user" in:rise={{ y: 8, duration: 280 }}>{(m.parts[0] as { text: string }).text}</p>
             {:else}<div class="reply" in:rise={{ y: 6, duration: 300 }}>
                     <span class="who" aria-hidden="true"><Logo size={15} title="" />{t("guide")}</span>
-                    {#if !m.parts.length && chat.busy && i === chat.messages.length - 1}<span class="typing" aria-label={t("writingReply")}
-                            ><i></i><i></i><i></i></span
+                    {#if (m.status || !m.parts.length) && chat.busy && i === chat.messages.length - 1}<span
+                            class="typing"
+                            role="status"
+                            aria-label={m.status ? t(looking(m.status)) : t("writingReply")}
+                            ><i></i><i></i><i></i>{#if m.status}<small in:rise={{ y: 4 }}>{t(looking(m.status))}</small>{/if}</span
                         >{/if}
                     {#each m.parts as part}{#if part.type === "text"}<p>{#each runs(part.text) as run}{#if run.bold}<b>{run.text}</b>{:else}{run.text}{/if}{/each}</p>{:else}<div class="card" in:rise={{ y: 8 }}>
                                 <MapCard
@@ -352,7 +366,13 @@
         border-radius: 14px;
         background: var(--paper-2);
     }
+    .typing small {
+        margin-left: 6px;
+        font-size: 13px;
+        color: var(--ink-2);
+    }
     .typing i {
+        align-self: center;
         width: 6px;
         height: 6px;
         border-radius: 50%;

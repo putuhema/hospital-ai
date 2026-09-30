@@ -25,11 +25,15 @@ import {
 export type ReplyEvent =
   | { type: "text"; text: string }
   /** `doctor`: the card is about this doctor, who practises at the place; it shows their schedule. */
-  | { type: "card"; show: MapSelection; doctor?: string };
-export type ChatPart = ReplyEvent;
+  | { type: "card"; show: MapSelection; doctor?: string }
+  /** What the assistant is doing while it looks something up: the tool it is using. */
+  | { type: "status"; tool: string };
+export type ChatPart = Exclude<ReplyEvent, { type: "status" }>;
 export type ChatMessage = {
   role: "user" | "assistant";
   parts: ChatPart[];
+  /** The tool the reply is waiting on, until its text starts. */
+  status?: string;
   /** The reply stopped with a problem, e.g. no connection; the chat says so in the visitor's language. */
   error?: "failed";
 };
@@ -46,10 +50,34 @@ export type Replier = (
 
 /** A message with an event added; text runs on in the text part it continues. */
 export function withEvent(message: ChatMessage, event: ReplyEvent): ChatMessage {
-  const last = message.parts.at(-1);
+  if (event.type === "status") return { ...message, status: event.tool };
+  const { status: _, ...rest } = message,
+    last = rest.parts.at(-1);
   if (event.type === "text" && last?.type === "text")
-    return { ...message, parts: [...message.parts.slice(0, -1), { type: "text", text: last.text + event.text }] };
-  return { ...message, parts: [...message.parts, event] };
+    return { ...rest, parts: [...rest.parts.slice(0, -1), { type: "text", text: last.text + event.text }] };
+  return { ...rest, parts: [...rest.parts, event] };
+}
+
+/**
+ * The next thing to show from the events that have arrived, taking it off
+ * `queue`. Text comes out a few characters at a time, more when a lot is
+ * waiting, so an answer that arrives all at once still reads as it is written
+ * and never falls far behind; cards and statuses come out whole, in order.
+ */
+export function nextReveal(queue: ReplyEvent[]): ReplyEvent | undefined {
+  const first = queue[0];
+  if (!first || first.type !== "text") return queue.shift();
+  const waiting = queue.reduce((n, e) => n + (e.type === "text" ? e.text.length : 0), 0),
+    budget = Math.min(48, Math.max(3, Math.ceil(waiting / 24)));
+  let text = "";
+  while (queue[0]?.type === "text" && text.length < budget) {
+    const head = queue[0] as { type: "text"; text: string },
+      take = head.text.slice(0, budget - text.length);
+    text += take;
+    if (take.length === head.text.length) queue.shift();
+    else queue[0] = { type: "text", text: head.text.slice(take.length) };
+  }
+  return { type: "text", text };
 }
 
 /** A message's text, without its cards. */
@@ -266,7 +294,7 @@ export function cannedReplier(
     await pause(thinkMs, signal);
     for (const event of events) {
       if (signal.aborted) return;
-      if (event.type === "card") {
+      if (event.type !== "text") {
         yield event;
         continue;
       }

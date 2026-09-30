@@ -6,7 +6,7 @@
 import OpenAI from "openai";
 import { toolDefinitions } from "../assistant/tools.ts";
 import type { ReplyEvent } from "../assistant/chat.ts";
-import { history, MAX_ROUNDS, runCalls, situation, SORRY, systemPrompt, type ReplyInput } from "./assistant.ts";
+import { history, lookingUp, MAX_ROUNDS, runCalls, situation, SORRY, systemPrompt, type ReplyInput } from "./assistant.ts";
 
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4/";
 export const ZAI_MODEL = "glm-5";
@@ -23,9 +23,10 @@ export async function* replyZai(
   { title, faq, ctx, messages, context, signal }: ReplyInput,
 ): AsyncGenerator<ReplyEvent> {
   const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    // The time and where the visitor is go with the instructions, which every compatible API reads first.
-    { role: "system", content: `${systemPrompt(title, faq, ctx)}\n\n${situation(ctx, context)}` },
+    { role: "system", content: systemPrompt(title, faq, ctx) },
     ...history(messages, ctx).map((m) => ({ role: m.role as "user" | "assistant", content: m.content as string })),
+    // After the question, so everything before it stays the same between questions and Z.ai reuses it from its cache.
+    { role: "system", content: situation(ctx, context) },
   ];
   const shown = new Set<string>();
   let wrote = false;
@@ -94,6 +95,7 @@ export async function* replyZai(
     yield* cards;
     // GLM may write its answer alongside the show_on_map calls; asking again would only repeat it.
     if (text.trim() && calls.every((c) => c.name === "show_on_map")) return;
+    yield* lookingUp(calls);
     for (const c of parsed)
       convo.push({
         role: "tool",
