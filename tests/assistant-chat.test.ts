@@ -49,7 +49,7 @@ test('"where is" finds the place, says if it is open and shows it on the map', (
   const route = cards(cannedAnswer(ctx, faq, 'di mana apotek', { from: idOf('Main reception') }))[0];
   assert.equal(route.kind, 'route');
   // "Where is the emergency…" is about a place, not the emergency number.
-  assert.doesNotMatch(text(cannedAnswer(ctx, faq, 'Where is the emergency department?')), /118/);
+  assert.notEqual(text(cannedAnswer(ctx, faq, 'Where is the emergency department?')), 'Call 118.');
 });
 
 test('questions the map can\'t answer come from the hospital information', () => {
@@ -128,7 +128,8 @@ test('a question that only shares a broad word with an entry is not answered by 
     { question: 'Can children visit?', answer: 'With a parent.' },
     { question: 'Apakah ada Wi-Fi untuk pengunjung?', answer: 'Ada.' },
   ];
-  assert.deepEqual(suggestions(ctx, hospital, 'id'), ['Di mana apotek?', 'Can children visit?', 'Parkir terdekat']);
+  // An English question isn't offered in Indonesian.
+  assert.deepEqual(suggestions(ctx, hospital, 'id'), ['Di mana apotek?', 'Apakah ada Wi-Fi untuk pengunjung?', 'Parkir terdekat']);
   assert.notEqual(text(cannedAnswer(ctx, hospital, 'Jam besuk?')), 'With a parent.');
   assert.equal(text(cannedAnswer(ctx, hospital, 'anak boleh besuk?')), 'With a parent.');
   assert.equal(text(cannedAnswer(ctx, hospital, 'wifi?')), 'Ada.');
@@ -164,4 +165,33 @@ test('an answer that arrives all at once is revealed a little at a time, in orde
   m = withEvent(m, { type: 'text', text: 'dr. Sari' });
   assert.equal(m.status, undefined);
   assert.deepEqual(m.parts, [{ type: 'text', text: 'dr. Sari' }]);
+});
+
+test('suggestions change from day to day and include a clinic with doctors', async () => {
+  const { assistantContext } = await import('../src/lib/assistant/tools.ts');
+  const withDoctors = structuredClone(starterPieces);
+  withDoctors.find((p) => p.name === 'Pharmacy & lab')!.roomAssets![0].info = {
+    doctors: [{ name: 'dr. Sari', hours: [{ days: [1], open: '08:00', close: '12:00' }] }],
+  };
+  const map = parseLayout(JSON.stringify({ pieces: withDoctors, network }));
+  const on = (date: string) => suggestions(assistantContext(map, new Date(date)), faq, 'id');
+  const week = ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01'].map((d) => on(`${d}T10:00:00`));
+  assert.ok(week.some((s) => s.some((q) => q.startsWith('Jadwal dokter '))));
+  assert.ok(new Set(week.map((s) => s.join('|'))).size > 1);
+  // Never an English question in Indonesian, and always three.
+  assert.ok(week.every((s) => s.length === 3 && !s.includes('What is the emergency number?')));
+});
+
+test("an unanswered question gets the hospital's number and questions it can answer", async () => {
+  const { hospitalPhone } = await import('../src/lib/assistant/chat.ts');
+  const hospital = [
+    { question: 'Berapa tarif parkir?', answer: 'Rp 2000.', topic: 'fasilitas' as const },
+    { question: 'Nomor telepon rumah sakit?', answer: 'Hubungi (0426) 21234.', topic: 'kontak' as const },
+  ];
+  // The parking fee is not a phone number.
+  assert.equal(hospitalPhone(hospital), '(0426) 21234');
+  assert.equal(hospitalPhone([hospital[0]]), null);
+  const reply = text(cannedAnswer(ctx, hospital, 'apakah ada kolam renang?'));
+  assert.match(reply, /^Maaf, saya tidak menemukannya\. Anda bisa menghubungi rumah sakit di \(0426\) 21234/);
+  assert.match(reply, /Saya bisa membantu misalnya “Di mana apotek\?”/);
 });

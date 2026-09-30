@@ -115,3 +115,13 @@ test("the hospital's own time zone", () => {
   const wita = hospitalNow('Asia/Makassar'), jakarta = hospitalNow('Asia/Jakarta');
   assert.equal(Math.round((wita.getTime() - jakarta.getTime()) / 3_600_000), 1);
 });
+
+test('long hospital information is sent as its questions, for search_hospital_info to answer', async () => {
+  const { MAX_INFO } = await import('../src/lib/server/assistant.ts');
+  const long = Array.from({ length: 80 }, (_, i) => ({ question: `Pertanyaan nomor ${i}?`, answer: 'Jawaban panjang. '.repeat(12), topic: 'lainnya' as const }));
+  const s = systemPrompt('RS Uji', long, ctx);
+  assert.ok(long.map((e) => e.answer).join('').length > MAX_INFO);
+  assert.match(s, /search_hospital_info before you reply/);
+  assert.match(s, /\[Lainnya\] Pertanyaan nomor 79\?/);
+  assert.doesNotMatch(s, /Jawaban panjang/);
+});

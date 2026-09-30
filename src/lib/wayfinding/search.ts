@@ -92,8 +92,14 @@ function tokens(query: string): Token[] {
     if (!found) out.push({ text: words[i++] });
     else out.push(found);
   }
-  return out;
+  // Words that describe any place ("tempat sholat", "the café") don't have to match, when others do.
+  const meaningful = out.filter((t) => t.groups || !FILLER.has(t.text));
+  return meaningful.length ? meaningful : out;
 }
+
+const FILLER = new Set(
+  "tempat lokasi area ruang ruangan bagian yang untuk buat di ke dan the a an place area location room for to".split(" "),
+);
 
 type Field = { text: string; words: string[]; weight: number; keyword?: string };
 const cache = new WeakMap<Place, Field[]>();

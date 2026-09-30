@@ -44,19 +44,14 @@ export async function* replyZai(
       { signal },
     );
     let text = "",
-      finish: string | null = null,
-      started = false;
+      finish: string | null = null;
     const calls: { id: string; name: string; args: string }[] = [];
     for await (const chunk of stream) {
       const choice = chunk.choices[0];
       if (!choice) continue;
-      if (choice.delta?.content) {
-        // Text from a later round starts a new paragraph.
-        if (!started && wrote) yield { type: "text", text: "\n\n" };
-        started = wrote = true;
-        text += choice.delta.content;
-        yield { type: "text", text: choice.delta.content };
-      }
+      // A round's text is held until the round ends (Z.ai sends GLM-5's in one burst anyway):
+      // text before a lookup only announces it ("Saya cari … untuk Anda") and is dropped.
+      if (choice.delta?.content) text += choice.delta.content;
       // Tool calls arrive in pieces, by index.
       for (const piece of choice.delta?.tool_calls ?? []) {
         const call = (calls[piece.index] ??= { id: "", name: "", args: "" });
@@ -72,12 +67,19 @@ export async function* replyZai(
       if (!wrote) yield { type: "text", text: SORRY[context.lang ?? "id"] };
       return;
     }
+    const announcing = calls.some((c) => c.name !== "show_on_map");
+    if (text.trim() && !announcing) {
+      // Text from a later round starts a new paragraph.
+      if (wrote) yield { type: "text", text: "\n\n" };
+      wrote = true;
+      yield { type: "text", text };
+    }
     // Done, or a tool call cut off at the token limit, which must not run.
     if (!calls.length || finish === "length") return;
 
     convo.push({
       role: "assistant",
-      content: text || null,
+      content: (!announcing && text) || null,
       tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args } })),
     });
     const parsed = calls.map((c) => {

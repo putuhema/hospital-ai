@@ -20,11 +20,6 @@ What's done, and what can still be improved, for hospital visitors and for the p
 
 - [ ] **Quality check (next).** 30–50 real visitor questions, mostly Indonesian with some English, including tricky ones (closed clinics, emergencies, medical questions, places that don't exist); rerun after every prompt or model change, and to compare models.
 - [ ] **Faster first words.** GLM-5 on Z.ai sends each answer in one burst after 4–8 s (the chat reveals it gradually and shows what it is looking up). Try `glm-4.5-air`, which truly streams, or another provider, against the quality check.
-- [ ] **GLM habits.** It sometimes opens with "Saya cari … untuk Anda." and asks where the visitor is instead of showing a doctor's clinic on the map. Tune the prompt with the quality check.
-- [ ] **Keep the conversation on reload.** Store it for the browser session; visitors switch apps a lot.
-- [ ] **No dead ends.** When it can't answer, suggest related questions and the hospital's phone number, not only the information desk.
-- [ ] **Better suggestions.** Rotate the starting questions through what the hospital has (doctors, BPJS, visiting hours); today one is an English FAQ question.
-- [ ] **`search_hospital_info` tool.** Once the questions & answers are too long to send whole with every question, find the relevant ones instead.
 - [ ] **Voice input.** Speak the question in Indonesian (browser speech recognition), for older visitors.
 - [ ] **Time zone per hospital.** Store it with the hospital instead of `HOSPITAL_TIME_ZONE`, so each hospital's "practising now" is right.
 
@@ -58,6 +53,7 @@ What's done, and what can still be improved, for hospital visitors and for the p
 - [x] **Chat-first visitor app.** The chat beside the map on desktop and as a sheet over it on phones, Indonesian first with English; directions on their own tab; everything else is asked in the chat.
 - [x] **Assistant on a model.** `/api/chat` answers with GLM-5 on Z.ai (or Claude) using the map's tools, with map cards (a doctor's schedule on theirs), follow-up questions, ground rules in the prompt, and the built-in replies when no key is set.
 - [x] **Launch safeguards.** Rate limits (6 a minute and 60 a day per visitor, 1000 a day for the hospital) counted in Convex; over a limit the built-in reply answers.
+- [x] **Assistant polish.** No "Saya cari … untuk Anda" preambles (GLM's text before a lookup is dropped) and a doctor's clinic is shown on the map straight away; the conversation is kept for the browser session (only the recent part is sent); unanswered questions get the hospital's phone number and questions it can answer; starting questions rotate daily through places, a clinic's doctors and the hospital's own questions in the visitor's language; `search_hospital_info` reads the answers once the questions & answers are too long to send whole; search ignores words like "tempat" ("tempat sholat" finds the Mushola).
 - [x] **Streaming and caching.** Gradual reveal and "Melihat jadwal dokter…" status while it works; repeated first questions answered from a 10-minute cache; the hospital parsed once per version; prompts laid out for the providers' caches; a service worker for the app and models.
 
 Decided:

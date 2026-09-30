@@ -5,12 +5,15 @@
  * the assistant will use and from the hospital information, so the chat can
  * be built and tried with real answers.
  */
-import { answered, type FaqEntry } from "../model/faq.ts";
+import { answered, answerParts, topicOf, type FaqEntry } from "../model/faq.ts";
 import { hoursLines, hoursStatus } from "../model/place-info.ts";
 import { doctorStatus } from "../model/doctors.ts";
 import { DEFAULT_LANG, type Lang } from "../i18n/lang.ts";
 import { typeInline, typeName } from "../i18n/places.ts";
 import { normalize } from "../wayfinding/search.ts";
+import { faqFor, replyLang } from "./faq-match.ts";
+
+export { replyLang };
 import {
   findNearest,
   getDoctorSchedule,
@@ -84,92 +87,42 @@ export function nextReveal(queue: ReplyEvent[]): ReplyEvent | undefined {
 export const messageText = (m: ChatMessage) =>
   m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
 
-/** Questions to start with, from what this map has: a place, the hospital information, the nearest something. */
+/**
+ * Questions to start with, from what this hospital has: a place people look
+ * for, something about the hospital (visiting hours, a clinic's doctors, one of
+ * its own questions in the visitor's language) and the nearest something.
+ * They change from day to day (by `ctx.now`), so regular visitors see more.
+ */
 export function suggestions(ctx: AssistantContext, faq: FaqEntry[], lang: Lang = DEFAULT_LANG): string[] {
   const types = placeTypes(ctx),
-    out: string[] = [];
-  const place = ["Pharmacy", "Emergency", "Laboratory", "Radiology", "Reception desk"].find((t) => types.includes(t)) ?? types[0];
-  if (place) out.push(lang === "id" ? `Di mana ${typeInline(place, lang)}?` : `Where is the ${typeInline(place, lang)}?`);
-  const questions = answered(faq);
+    day = Math.floor((ctx.now.getTime() - ctx.now.getTimezoneOffset() * 60_000) / 86_400_000),
+    pick = <T>(list: T[], shift = 0): T | undefined => list[(day + shift) % list.length];
+  const where = (type: string) => (lang === "id" ? `Di mana ${typeInline(type, lang)}?` : `Where is the ${typeInline(type, lang)}?`);
+  const places = ["Pharmacy", "Emergency", "Laboratory", "Radiology", "Reception desk"].filter((t) => types.includes(t));
+  const place = pick(places.length ? places : types.slice(0, 1));
+
+  const about: string[] = [];
   // Only offered when it gets the visiting hours, not any question that mentions visitors.
   const visiting = lang === "id" ? "Jam besuk?" : "Visiting hours?";
-  if (faqFor(faq, visiting)) out.push(visiting);
-  else if (questions[0]) out.push(questions[0].question);
+  if (faqFor(faq, visiting)) about.push(visiting);
+  const clinic = pick(ctx.places.filter((p) => p.info?.doctors?.length));
+  if (clinic) about.push(lang === "id" ? `Jadwal dokter ${clinic.name}` : `Doctors at ${clinic.name}`);
+  for (const e of answered(faq))
+    if (replyLang(e.question, lang) === lang && !about.includes(e.question) && e !== faqFor(faq, visiting)) about.push(e.question);
+
   const near = ["Parking", "Toilets", "Café"].find((t) => types.includes(t));
-  if (near) out.push(lang === "id" ? `${typeName(near, lang)} terdekat` : `Nearest ${typeInline(near, lang)}`);
-  return out;
+  const out = [
+    place && where(place),
+    pick(about),
+    near ? (lang === "id" ? `${typeName(near, lang)} terdekat` : `Nearest ${typeInline(near, lang)}`) : pick(about, 1),
+  ];
+  return [...new Set(out.filter((q): q is string => !!q))];
 }
-
-// Words that tell the two languages apart, for replying in the visitor's own.
-const ENGLISH = new Set(
-  "where what whats how is are the a an nearest closest hours can i do does my to of and visiting which when number there please need find get".split(" "),
-);
-const INDONESIAN = new Set(
-  "di mana dimana apa yang jam ke terdekat bisa saya ada berapa kapan apakah bagaimana untuk dan tidak besuk letak mau tolong cari dong nya".split(" "),
-);
-
-/** The language to answer in: the one the question is written in, or the map's when it can't tell. */
-export function replyLang(question: string, fallback: Lang = DEFAULT_LANG): Lang {
-  let en = 0,
-    id = 0;
-  for (const w of normalize(question).split(" ")) {
-    if (ENGLISH.has(w)) en++;
-    if (INDONESIAN.has(w)) id++;
-  }
-  return en > id ? "en" : id > en ? "id" : fallback;
-}
-
-const STOP = new Set(
-  (
-    "a an the is are was be to of in on at for and or do does can i you we my me it its what whats when how where wheres which who please there here any with this that " +
-    "apa yang di ke dan untuk saya bisa ada bagaimana berapa kapan dengan dari ini itu mana apakah anda kami boleh"
-  ).split(" "),
-);
-// The same idea in either language, so an English question finds an Indonesian answer and back.
-const SAME: Record<string, string> = {
-  // Indonesian verbs take prefixes (me-, ber-, pe-…), so the common forms are listed.
-  besuk: "visit", jenguk: "visit", menjenguk: "visit", berkunjung: "visit", kunjungan: "visit",
-  visiting: "visit", visitor: "visit", pengunjung: "visit",
-  bayar: "pay", membayar: "pay", pembayaran: "pay", payment: "pay", biaya: "pay", cost: "pay", price: "pay", harga: "pay",
-  daftar: "register", mendaftar: "register", pendaftaran: "register", registration: "register",
-  darurat: "emergency", gawat: "emergency", ugd: "emergency", igd: "emergency",
-  parkir: "park", parking: "park", jam: "hour", hours: "hour", waktu: "hour", time: "hour", times: "hour",
-  anak: "child", children: "child", kids: "child", kid: "child",
-  rule: "hour", rules: "hour", aturan: "hour", peraturan: "hour", nomor: "number", telepon: "phone",
-  dokter: "doctor", jadwal: "schedule", asuransi: "insurance", fasilitas: "facility", facilities: "facility",
-};
-/** Words that carry meaning, singular, in one vocabulary. */
-const words = (text: string) =>
-  normalize(text)
-    .replace(/\bwi fi\b/g, "wifi")
-    .split(" ")
-    .filter((w) => w.length > 2 && !STOP.has(w))
-    .map((w) => SAME[w] ?? (w.length > 4 && w.endsWith("s") ? w.slice(0, -1) : w));
 
 const WHERE = /\b(where|wheres|di ?mana|letak(nya)?|arah ke|jalan ke|how (do|can) i (get|go)|way to|find|cari|lokasi)\b/;
 const NEAREST = /\b(nearest|closest|terdekat)\b/;
 const FILLER =
   /\b(where|wheres|is|are|the|a|an|di ?mana|letak(nya)?|arah|jalan|ke|ada|how (do|can) i (get|go) to|way to|find|cari|lokasi|nearest|closest|terdekat|please|tolong|yang|mau|saya|dong)\b/g;
-
-/**
- * Words most hospital questions share: alone they don't say which question it
- * is ("Jam besuk?" is not answered by "Can children visit?"), so they need another.
- */
-const BROAD = new Set(["visit", "hour", "patient", "pasien", "rumah", "sakit", "hospital", "room", "ruang"]);
-
-/** The hospital information entry the question is about, if any. */
-function faqFor(faq: FaqEntry[], question: string): FaqEntry | null {
-  const asked = new Set(words(question));
-  let best: FaqEntry | null = null,
-    score = 0;
-  for (const entry of answered(faq)) {
-    const s = words(entry.question)
-      .filter((w) => asked.has(w))
-      .reduce((n, w) => n + (BROAD.has(w) ? 0.5 : 1), 0);
-    if (s > score) [best, score] = [entry, s];
-  }
-  return score >= 1 ? best : null;
-}
 
 const SAY = {
   en: {
@@ -178,8 +131,10 @@ const SAY = {
     nearest: (type: string, name: string, where: string, minutes?: number) =>
       `Nearest ${type}: ${name} ${where}${minutes ? `, about ${minutes} min walk` : ""}.`,
     setStart: " Set where you are on the map to get the closest one.",
-    unknown:
-      "Sorry, I couldn't find that. I can show you places on the map and answer the hospital's common questions. For anything else, please ask at the information desk.",
+    unknown: (phone: string | null, examples: string[]) =>
+      "Sorry, I couldn't find that. " +
+      (phone ? `You can call the hospital on ${phone} or ask at the information desk.` : "Please ask at the information desk.") +
+      (examples.length ? ` I can help with things like ${examples.map((q) => `“${q}”`).join(" or ")}.` : ""),
   },
   id: {
     where: (p: PlaceSummary) => (p.building ? `di ${p.building}` : "di peta"),
@@ -187,8 +142,10 @@ const SAY = {
     nearest: (type: string, name: string, where: string, minutes?: number) =>
       `${type} terdekat: ${name} ${where}${minutes ? `, sekitar ${minutes} menit jalan kaki` : ""}.`,
     setStart: " Tentukan posisi Anda di peta untuk mencari yang paling dekat.",
-    unknown:
-      "Maaf, saya tidak menemukannya. Saya bisa menunjukkan tempat di peta dan menjawab pertanyaan umum tentang rumah sakit. Untuk hal lain, silakan tanya ke bagian informasi.",
+    unknown: (phone: string | null, examples: string[]) =>
+      "Maaf, saya tidak menemukannya. " +
+      (phone ? `Anda bisa menghubungi rumah sakit di ${phone} atau tanya ke bagian informasi.` : "Silakan tanya ke bagian informasi.") +
+      (examples.length ? ` Saya bisa membantu misalnya ${examples.map((q) => `“${q}”`).join(" atau ")}.` : ""),
   },
 };
 
@@ -272,7 +229,21 @@ export function cannedAnswer(
     const [p] = hits.results;
     return [{ type: "text", text: say.isAt(p.name, say.where(p)) + status(ctx, p.id, lang) }, ...card(ctx, p.id, from)];
   }
-  return [{ type: "text", text: say.unknown }];
+  // No dead end: the hospital's number, and questions it can answer.
+  return [{ type: "text", text: say.unknown(hospitalPhone(faq), suggestions(ctx, faq, lang).slice(0, 2)) }];
+}
+
+const CONTACT = /\b(nomor|number|telepon|telp|phone|kontak|contact|hubungi|call|darurat|emergency|igd|ugd|wa|whatsapp)\b/;
+
+/** The hospital's phone number, from its contact answers, if it wrote one. */
+export function hospitalPhone(faq: FaqEntry[]): string | null {
+  const list = answered(faq).filter((e) => topicOf(e) === "kontak" || CONTACT.test(normalize(e.question)));
+  const first = [...list.filter((e) => topicOf(e) === "kontak"), ...list];
+  for (const e of first) {
+    const tel = answerParts(e.answer).find((p) => p.tel);
+    if (tel) return tel.text.trim();
+  }
+  return null;
 }
 
 const pause = (ms: number, signal: AbortSignal) =>

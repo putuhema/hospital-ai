@@ -93,3 +93,13 @@ test('an answer written alongside show_on_map is not asked for again', async () 
   assert.equal(text(events), 'Apotek ada di Pharmacy & lab.');
   assert.equal(events.filter((e) => e.type === 'card').length, 1);
 });
+
+test('text that only announces a lookup is dropped, and not kept in the conversation', async () => {
+  const { client, requests } = fakeZai([
+    { text: 'Saya cari apoteknya untuk Anda.', calls: [{ name: 'search_places', args: JSON.stringify({ query: 'apotek' }) }] },
+    { text: 'Apotek ada di Pharmacy & lab.' },
+  ]);
+  const events = await run(client, [user('apotek')]);
+  assert.equal(text(events), 'Apotek ada di Pharmacy & lab.');
+  assert.equal(requests[1].messages.find((m: any) => m.role === 'assistant').content, null);
+});

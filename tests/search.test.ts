@@ -89,3 +89,11 @@ test('a clinic is found by its doctors and their specialties', () => {
   assert.equal(hit.via, 'dr. Budi Santoso, Sp.PD');
   assert.equal(search([...list, clinic], 'penyakit dalam')[0].place.name, 'Room 7');
 });
+
+test('words that describe any place don\'t have to match', () => {
+  const mushola: Place = { id: 'b:9', name: 'Mushola', kind: 'building', detail: 'Building', point: at };
+  assert.equal(search([mushola], 'tempat sholat')[0]?.place.id, 'b:9');
+  assert.equal(search([mushola], 'lokasi mushola')[0]?.place.id, 'b:9');
+  // A query of filler alone still searches for it.
+  assert.deepEqual(search([mushola], 'tempat'), []);
+});

@@ -2,6 +2,10 @@ import { nextReveal, withEvent, type ChatMessage, type Replier, type ReplyContex
 
 /** A frame: text is revealed at most this often. */
 const FRAME_MS = 16;
+/** Messages sent with a question: the recent conversation, within what the server takes. */
+const CONTEXT = 20;
+/** Messages kept for the browser session. */
+const KEPT = 60;
 
 /** One conversation: the messages, and the reply being written. */
 export class Chat {
@@ -9,16 +13,42 @@ export class Chat {
   busy = $state(false);
   #abort: AbortController | null = null;
   #replier: Replier;
+  #key: string | null;
 
-  constructor(replier: Replier) {
+  /** With `key`, the conversation is kept in the browser session, so a reload doesn't lose it. */
+  constructor(replier: Replier, key: string | null = null) {
     this.#replier = replier;
+    this.#key = key;
+  }
+
+  /** Bring back the conversation kept for this session; call once the page is in the browser. */
+  restore() {
+    if (!this.#key || this.messages.length) return;
+    try {
+      const kept = JSON.parse(sessionStorage.getItem(this.#key) ?? "null");
+      if (Array.isArray(kept)) this.messages = kept;
+    } catch {}
+  }
+
+  #keep() {
+    if (!this.#key) return;
+    try {
+      const done = ($state.snapshot(this.messages) as ChatMessage[])
+        .filter((m) => m.parts.length || m.error)
+        .map(({ status: _, ...m }) => m)
+        .slice(-KEPT);
+      if (done.length) sessionStorage.setItem(this.#key, JSON.stringify(done));
+      else sessionStorage.removeItem(this.#key);
+    } catch {}
   }
 
   async send(text: string, context: ReplyContext = {}) {
     const question = text.trim();
     if (!question || this.busy) return;
     this.messages.push({ role: "user", parts: [{ type: "text", text: question }] });
-    const history = $state.snapshot(this.messages) as ChatMessage[];
+    // The recent conversation, starting with a question.
+    const history = ($state.snapshot(this.messages) as ChatMessage[]).slice(-CONTEXT);
+    while (history[0]?.role === "assistant") history.shift();
     this.messages.push({ role: "assistant", parts: [] });
     const at = this.messages.length - 1,
       abort = (this.#abort = new AbortController());
@@ -66,6 +96,7 @@ export class Chat {
       this.#abort = null;
       this.busy = false;
     }
+    this.#keep();
   }
 
   /** Stop the reply being written; what has arrived stays. */
@@ -78,5 +109,6 @@ export class Chat {
   clear() {
     this.stop();
     this.messages = [];
+    this.#keep();
   }
 }

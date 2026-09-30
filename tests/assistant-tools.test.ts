@@ -117,7 +117,7 @@ test('show_on_map returns a place or a route in the map\'s own link format', () 
 });
 
 test('runTool checks the input against the tool definitions', () => {
-  assert.deepEqual(toolDefinitions.map((t) => t.name), ['search_places', 'get_place_details', 'get_doctor_schedule', 'find_nearest', 'get_directions', 'show_on_map']);
+  assert.deepEqual(toolDefinitions.map((t) => t.name), ['search_places', 'get_place_details', 'search_hospital_info', 'get_doctor_schedule', 'find_nearest', 'get_directions', 'show_on_map']);
   assert.ok('results' in runTool(ctx, 'search_places', { query: 'pharmacy' }));
   assert.deepEqual(runTool(ctx, 'book_appointment', {}), { error: 'There is no tool called "book_appointment".' });
   assert.deepEqual(runTool(ctx, 'search_places', {}), { error: '"query" is required.' });
@@ -162,4 +162,24 @@ test('get_doctor_schedule finds doctors by name or specialty, with today\'s stat
   assert.equal(details.doctors.length, 2);
   assert.equal(details.doctors[0].place, undefined);
   assert.deepEqual(getDoctorSchedule(ctx, { query: 'dr Sari' }), { error: "No doctors' schedules are on this map." });
+});
+
+test('search_hospital_info finds the hospital\'s answers in either language', async () => {
+  const { searchHospitalInfo } = await import('../src/lib/assistant/tools.ts');
+  const withFaq = {
+    ...ctx,
+    faq: [
+      { question: 'Bagaimana cara daftar pasien baru?', answer: 'Daftar di loket 1 dengan KTP.', topic: 'pendaftaran' as const },
+      { question: 'Apakah BPJS diterima?', answer: 'Ya, di loket kasir.', topic: 'bpjs' as const },
+      { question: 'Berapa tarif parkir?', answer: 'Rp 2.000.', topic: 'fasilitas' as const },
+      { question: 'Draft', answer: '' },
+    ],
+  };
+  assert.deepEqual(searchHospitalInfo(withFaq, { query: 'How do I register as a new patient?' }).results.map((r) => r.question), ['Bagaimana cara daftar pasien baru?']);
+  const bpjs = searchHospitalInfo(withFaq, { query: 'bisa pakai bpjs?' }).results;
+  assert.deepEqual(bpjs, [{ topic: 'BPJS & pembayaran', question: 'Apakah BPJS diterima?', answer: 'Ya, di loket kasir.' }]);
+  // Found by its answer too, and nothing for what the hospital hasn't written about.
+  assert.equal(searchHospitalInfo(withFaq, { query: 'KTP' }).results[0].question, 'Bagaimana cara daftar pasien baru?');
+  assert.deepEqual(searchHospitalInfo(withFaq, { query: 'wifi' }).results, []);
+  assert.deepEqual(runTool(withFaq, 'search_hospital_info', { query: 'parkir' }), searchHospitalInfo(withFaq, { query: 'parkir' }));
 });

@@ -13,24 +13,33 @@ import { typeName } from "../i18n/places.ts";
 const MODEL = "claude-opus-5-5";
 /** Tool rounds in one reply; a question needs two or three. */
 export const MAX_ROUNDS = 8;
+/** Longest hospital information sent whole with every question, in characters (a few thousand tokens). */
+export const MAX_INFO = 12_000;
 
 /** Streamed with every tool, so inputs arrive as written; each is checked before it runs (see `runTool`). */
 const tools: Anthropic.Beta.BetaTool[] = toolDefinitions.map((t) => ({ ...t, eager_input_streaming: true }));
 
 /** What doesn't change between questions, so it is cached: who the assistant is and what the hospital wrote. */
 export function systemPrompt(title: string, faq: FaqEntry[], ctx: AssistantContext): string {
-  const info = answered(faq)
-    .map((e) => `[${topics.find((t) => t.id === topicOf(e))!.name.id}] T: ${e.question}\nJ: ${e.answer}`)
-    .join("\n\n");
+  const entries = answered(faq),
+    topic = (e: FaqEntry) => topics.find((t) => t.id === topicOf(e))!.name.id;
+  const whole = entries.map((e) => `[${topic(e)}] T: ${e.question}\nJ: ${e.answer}`).join("\n\n");
+  // Sent whole while it is short; a long list sends its questions, and search_hospital_info reads the answers.
+  const info =
+    whole.length <= MAX_INFO
+      ? `Hospital information (questions and answers written by the hospital; search_hospital_info finds the same):\n${whole || "None yet."}`
+      : `The hospital has written answers to these questions; read the answer with search_hospital_info before you reply:\n${entries.map((e) => `[${topic(e)}] ${e.question}`).join("\n")}`;
   return `You are the guide (Pemandu arah) of ${title}, answering visitors in the hospital's wayfinding app. The app shows a 3D map of the hospital beside the chat; visitors are usually on their phones, often worried or in a hurry.
 
 Language: reply in the visitor's language: Indonesian, or English if they write in English. If they write in a regional language, reply in Indonesian.
 
-Facts come only from your tools and from the hospital information below. Never guess a place, opening hours, a phone number, a doctor, a fee or a rule. When you can't find something, say so plainly and suggest the information desk (bagian informasi).
+Facts come only from your tools and from the hospital information below. Never guess a place, opening hours, a phone number, a doctor, a fee or a rule.
 
-Showing the way: whenever you mention a place the visitor wants to go to, call show_on_map, with from_place_id when you know where they are; the app shows it as a card with a button. Don't write ids or links in your reply. For doctors, use get_doctor_schedule; when you show their clinic, pass doctor_name so the card shows their schedule.
+When you can't find something, say so plainly, then help them on: give the hospital's phone number if its information has one, suggest the information desk (bagian informasi), and offer one or two related things you can answer.
 
-Call the tools you need first, then write your reply once. Keep it short and plain: one to three sentences, no Markdown (no asterisks, headings or tables). A few doctors or places may go on separate lines starting with "- ".
+Showing the way: whenever you mention a place the visitor wants to go to, call show_on_map, with from_place_id when you know where they are; the app shows it as a card with a button. You don't need to know where they are to show a place. Don't write ids or links in your reply. For doctors, use get_doctor_schedule, then show their clinic with show_on_map and doctor_name, so the card shows their schedule; don't ask where they are first.
+
+Call the tools you need first, without announcing them (never "Saya cari … untuk Anda"), then write your reply once. Keep it short and plain: one to three sentences, no Markdown (no asterisks, headings or tables). A few doctors or places may go on separate lines starting with "- ".
 
 Health: don't diagnose or give medical advice. For an emergency (chest pain, heavy bleeding, fainting, trouble breathing, an accident), tell them to go to the emergency department (IGD) straight away and show it on the map.
 
@@ -38,8 +47,7 @@ Lines in [square brackets] in earlier replies record what the app showed; don't 
 
 Kinds of place on this map: ${placeTypes(ctx).join(", ") || "none yet"}.
 
-Hospital information (questions and answers written by the hospital):
-${info || "None yet."}`;
+${info}`;
 }
 
 /** Where the visitor is and the time at the hospital, sent with each question. */

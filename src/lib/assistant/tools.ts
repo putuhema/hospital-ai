@@ -19,23 +19,28 @@ import {
 import { editDistance, normalize, search } from "../wayfinding/search.ts";
 import { dateOf, doctorStatus, shortDate, type Doctor } from "../model/doctors.ts";
 import { shortcuts } from "../wayfinding/shortcuts.ts";
+import { topicOf, topics, type FaqEntry } from "../model/faq.ts";
+import { faqMatches } from "./faq-match.ts";
 
 /** What the tools know: the hospital map and the time at the hospital. */
 export type AssistantContext = {
   places: Place[];
   grid: NavGrid;
+  /** The hospital's questions & answers, for `search_hospital_info`. */
+  faq?: FaqEntry[];
   /** The hospital's local time: its day, hours and minutes are read for open-now. */
   now: Date;
 };
 
 /** The context for a layout (as `parseLayout` returns it) at a moment. */
 export function assistantContext(
-  layout: { pieces: Piece[]; network: WalkingNetwork; grid: { width: number; height: number } },
+  layout: { pieces: Piece[]; network: WalkingNetwork; grid: { width: number; height: number }; faq?: FaqEntry[] },
   now: Date,
 ): AssistantContext {
   return {
     places: places(layout.pieces, layout.network),
     grid: buildGrid(layout.pieces, layout.grid.width, layout.grid.height),
+    ...(layout.faq && { faq: layout.faq }),
     now,
   };
 }
@@ -260,6 +265,24 @@ export function getDirections(
   };
 }
 
+/**
+ * The hospital's answers about what the question is about: registration,
+ * BPJS and payment, visiting, facilities, contacts and the rest.
+ */
+export function searchHospitalInfo(
+  ctx: AssistantContext,
+  { query, limit = 3 }: { query: string; limit?: number },
+): { results: { topic: string; question: string; answer: string }[] } {
+  const n = Math.min(Math.max(1, Math.round(limit)), 10);
+  return {
+    results: faqMatches(ctx.faq ?? [], query, n).map((e) => ({
+      topic: topics.find((t) => t.id === topicOf(e))!.name.id,
+      question: e.question,
+      answer: e.answer,
+    })),
+  };
+}
+
 /** A place, or a route when there is a start, for the app to show on the map. */
 export function showOnMap(
   ctx: AssistantContext,
@@ -315,6 +338,22 @@ export const toolDefinitions: ToolDefinition[] = [
       "Everything the map knows about one place: what it is, its building, description, phone number, " +
       "opening or visiting hours, whether it is open right now, and the doctors who practise there.",
     input_schema: { type: "object", properties: { place_id: id("place") }, required: ["place_id"] },
+  },
+  {
+    name: "search_hospital_info",
+    description:
+      "The hospital's own answers to general questions: registration (pendaftaran), BPJS and payment, visiting " +
+      "hours and rules (jam besuk), facilities, services, contacts and phone numbers. Understands English and " +
+      "Indonesian. Returns the best matching questions with the hospital's answers; an empty result means the " +
+      "hospital hasn't written about it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What the visitor wants to know, in their words." },
+        limit: { type: "integer", description: "At most this many answers (default 3, up to 10)." },
+      },
+      required: ["query"],
+    },
   },
   {
     name: "get_doctor_schedule",
@@ -381,6 +420,7 @@ const tools: Record<string, (ctx: AssistantContext, input: never) => object> = {
   search_places: searchPlaces,
   get_place_details: getPlaceDetails,
   get_doctor_schedule: getDoctorSchedule,
+  search_hospital_info: searchHospitalInfo,
   find_nearest: findNearest,
   get_directions: getDirections,
   show_on_map: showOnMap,

@@ -96,6 +96,8 @@
             () => ({ slug }),
             cannedReplier(() => ({ ctx: assistant, faq: questions })),
         ),
+        // Kept for the browser session: visitors switch apps and come back. One hospital per page.
+        untrack(() => `p-map-chat:${slug ?? "home"}`),
     );
     const chatContext = (): ReplyContext => ({
         lang: locale.lang,
@@ -134,6 +136,7 @@
     }
     onMount(() => {
         locale.restore();
+        chat.restore();
         const desktop = window.matchMedia("(min-width: 761px)");
         wide = desktop.matches;
         desktop.onchange = () => (wide = desktop.matches);
