@@ -39,6 +39,7 @@
         canvasHeight={layout.grid.height}
         faq={layout.faq}
         shareUrl={publicUrl(map.data.slug, page.url.origin)}
+        slug={map.data.slug}
         {editable}
     />{:else}<main class="missing">
         {#if map.isLoading}<p>{locale.t("loadingMap")}</p>{:else if map.error}<h1>{locale.t("mapFailed")}</h1>

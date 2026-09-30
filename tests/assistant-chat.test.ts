@@ -133,3 +133,14 @@ test('a question that only shares a broad word with an entry is not answered by 
   assert.equal(text(cannedAnswer(ctx, hospital, 'anak boleh besuk?')), 'With a parent.');
   assert.equal(text(cannedAnswer(ctx, hospital, 'wifi?')), 'Ada.');
 });
+
+test('replies show bold and bullets, not Markdown marks', async () => {
+  const { runs } = await import('../src/lib/assistant/format.ts');
+  assert.deepEqual(runs('Ada dua:\n- **Farmasi** di Gedung A\n## Catatan'), [
+    { text: 'Ada dua:\n• ', bold: false },
+    { text: 'Farmasi', bold: true },
+    { text: ' di Gedung A\nCatatan', bold: false },
+  ]);
+  // Still being written: the opening marks wait, plain.
+  assert.deepEqual(runs('Ada **Farm'), [{ text: 'Ada **Farm', bold: false }]);
+});

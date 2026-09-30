@@ -60,4 +60,14 @@ export default defineSchema({
     question: v.string(),
     answer: v.string(),
   }).index("by_hospital", ["hospitalId", "order"]),
+
+  /** Questions the assistant answered, counted per window (lib/assistant/limits.ts). */
+  chatLimits: defineTable({
+    key: v.string(),
+    /** When the window started. */
+    window: v.number(),
+    count: v.number(),
+  })
+    .index("by_key", ["key", "window"])
+    .index("by_window", ["window"]),
 });

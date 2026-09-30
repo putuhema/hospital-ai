@@ -364,7 +364,14 @@ export const toolDefinitions: ToolDefinition[] = [
       "Use it whenever you mention a place the visitor wants to go to.",
     input_schema: {
       type: "object",
-      properties: { place_id: id("place"), from_place_id: id("starting place") },
+      properties: {
+        place_id: id("place"),
+        from_place_id: id("starting place"),
+        doctor_name: {
+          type: "string",
+          description: "When showing where a doctor practises, their name as get_doctor_schedule gave it, so the card shows their schedule.",
+        },
+      },
       required: ["place_id"],
     },
   },

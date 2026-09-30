@@ -10,6 +10,7 @@
     import ChatPanel from "$lib/components/assistant/ChatPanel.svelte";
     import { Chat } from "$lib/assistant/chat.svelte";
     import { cannedReplier, suggestions, type ReplyContext } from "$lib/assistant/chat";
+    import { serverReplier } from "$lib/assistant/remote";
     import { Locale, provideLocale } from "$lib/i18n/locale.svelte";
     import { LANGS } from "$lib/i18n/lang";
     import type { Key } from "$lib/i18n/messages";
@@ -27,6 +28,7 @@
         canvasHeight,
         faq = [],
         shareUrl = null,
+        slug,
         editable = false,
         notice = null,
     }: {
@@ -39,6 +41,8 @@
         faq?: FaqEntry[];
         /** The public address of this map; routes are shared from it. Null before the hospital is saved. */
         shareUrl?: string | null;
+        /** Which hospital in the database, for the assistant; the first one without it. */
+        slug?: string;
         /** Show the link back to the editor (not on the public map). */
         editable?: boolean;
         /** A problem with the layout itself, e.g. it could not be loaded. */
@@ -86,7 +90,13 @@
     // until the chat server route is built.
     let assistant = $derived({ places: placeList, grid, now: new Date() });
     let starters = $derived(suggestions(assistant, questions, locale.lang));
-    const chat = new Chat(cannedReplier(() => ({ ctx: assistant, faq: questions })));
+    // Claude on the server when it is set up; the built-in replies otherwise.
+    const chat = new Chat(
+        serverReplier(
+            () => ({ slug }),
+            cannedReplier(() => ({ ctx: assistant, faq: questions })),
+        ),
+    );
     const chatContext = (): ReplyContext => ({
         lang: locale.lang,
         ...(from && "id" in from && { from: from.id }),

@@ -26,8 +26,10 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.129.0",
 		"convex": "^1.46.0",
 		"convex-svelte": "^0.14.0",
+		"openai": "^7.25.0",
 		"three": "0.180.0",
 		"uqr": "^0.1.3"
 	}

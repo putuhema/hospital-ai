@@ -8,7 +8,9 @@
  * @module
  */
 
+import type * as crons from "../crons.js";
 import type * as hospital from "../hospital.js";
+import type * as limits from "../limits.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +19,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  crons: typeof crons;
   hospital: typeof hospital;
+  limits: typeof limits;
 }>;
 
 /**

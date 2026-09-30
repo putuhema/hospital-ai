@@ -4,6 +4,7 @@
     import type { ReplyContext } from "$lib/assistant/chat";
     import type { Place } from "$lib/wayfinding/routing";
     import { rise } from "$lib/motion";
+    import { runs } from "$lib/assistant/format";
     import MapCard from "./MapCard.svelte";
     import Logo from "$lib/components/shared/Logo.svelte";
     import { useLocale } from "$lib/i18n/locale.svelte";
@@ -109,7 +110,7 @@
                     {#if !m.parts.length && chat.busy && i === chat.messages.length - 1}<span class="typing" aria-label={t("writingReply")}
                             ><i></i><i></i><i></i></span
                         >{/if}
-                    {#each m.parts as part}{#if part.type === "text"}<p>{part.text}</p>{:else}<div class="card" in:rise={{ y: 8 }}>
+                    {#each m.parts as part}{#if part.type === "text"}<p>{#each runs(part.text) as run}{#if run.bold}<b>{run.text}</b>{:else}{run.text}{/if}{/each}</p>{:else}<div class="card" in:rise={{ y: 8 }}>
                                 <MapCard
                                     selection={part.show}
                                     {places}

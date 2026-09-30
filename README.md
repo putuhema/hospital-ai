@@ -10,7 +10,7 @@ npx convex dev   # in a second terminal: creates/uses the Convex dev deployment 
 pnpm dev
 ```
 
-Open `/editor` to build the campus and `/` for the wayfinding map. Changes save automatically in this browser; **Publish** puts the map online for visitors. The quick guide (`?` or the header button) walks through the four steps: place buildings, connect them with corridors, add rooms, check wayfinding.
+Open `/editor` to build the campus and `/` for the wayfinding map. Every change is saved to the database and is live for visitors straight away. The quick guide (`?` or the header button) walks through the four steps: place buildings, connect them with corridors, add rooms, check wayfinding.
 
 ## Building the map
 
@@ -31,21 +31,33 @@ Directions are generated from the layout — there are no paths to draw. Every b
 - The 3D map sits in a calm landscape — gradient sky, drifting clouds, woodland and a pond, with the campus set straight into the meadow — sized to the canvas and fading into haze a short way past the campus (`src/lib/scene/scenery.ts`). The display bar has *Top view* (a north-up bird's-eye view, also in the editor's 3D view), toggles *Buildings* and *Rooms* name labels separately, plus *Hover info*, and has a *Trees* slider (none → lush); these preferences are remembered. The editor keeps a plain background.
 - Links are shareable: `/?from=b:9&to=r:2:25&view=plan` (old `/map` links redirect). `/` reads the layout saved in *this browser*, so it's a preview for the editor.
 
-## Publishing
+## Saving and sharing
 
-The editor's **Publish** menu stores the layout in [Convex](https://convex.dev) and gives the map a public address, `/m/<slug>`, that opens on any phone. Publishing is deliberate: editing only autosaves locally, the menu shows *Unpublished changes* until you press **Publish changes**, and open public maps update live when you do. **Share route** on either map copies the public link with the route (`/m/<slug>?from=…&to=…`), which is what QR codes should point to.
+The hospital lives in [Convex](https://convex.dev), the source of truth for the app: the editor and *Hospital info* save each change shortly after it is made (`src/lib/editor/saving.svelte.ts`), open maps update live, and a change saved in another tab or on another device shows up in the editor. It is stored as rows (`src/convex/schema.ts`, split and joined by `src/lib/model/records.ts`): the site and walking paths (`hospitals`), one row per piece (`buildings`), place details (`places`), doctors' schedules (`doctors`) and the questions & answers (`faq`). `hospital.save` validates with the same `parseLayout` the app uses and writes only what changed. The first editor opened on an empty database moves that browser's saved layout in.
 
-The device that first publishes keeps the slug and a secret key in `localStorage`; the server stores only the key's hash, so only that browser can update or take the map offline (*Take the map offline*). The backend is `src/convex/` (a `maps` table; `maps.get`, `maps.publish`, `maps.unpublish`), and it validates layouts with the same `parseLayout` the app uses.
+Visitors open the hospital at `/` or at its public address `/m/<slug>` (**Share** in the editor). **Share route** copies the link with the route (`/m/<slug>?from=…&to=…`), which is what QR codes point to. Anyone can save for now: add sign-in or a passcode before going public.
+
+### The assistant
+
+The chat answers with a model when the server has an API key, set in `.env.local` (or the hosting environment):
+
+- `ZAI_API_KEY` — GLM-5 on [Z.ai](https://z.ai), through its OpenAI-compatible API (`src/lib/server/assistant-zai.ts`). Used when set.
+- `ANTHROPIC_API_KEY` — Claude (`claude-opus-5-5`, `src/lib/server/assistant.ts`).
+- `ASSISTANT_MODEL` — another model of that provider, e.g. `glm-5.1` or `claude-sonnet-5-5`.
+
+`src/routes/api/chat/+server.ts` loads the hospital from the database, and the model calls the tools in `src/lib/assistant/tools.ts` until it can answer, streaming the text and a card for each place it shows. Without a key the route answers 503 and the chat uses its built-in replies (`cannedReplier`).
+
+Questions are limited so nobody can run up the bill (`src/lib/assistant/limits.ts`, counted in Convex by `src/convex/limits.ts`): 6 a minute and 60 a day per visitor, and 1000 a day for the whole hospital (`npx convex env set CHAT_DAILY_LIMIT …` to change it). Over a limit, that question gets the built-in reply instead. Visitors are counted by a keyed hash of their address, never the address itself. The server and Convex share `CHAT_LIMIT_SECRET` (set it in both places, `npx convex env set CHAT_LIMIT_SECRET …`); without it the assistant runs unlimited in development and stays off in production. Set `HOSPITAL_TIME_ZONE` (e.g. `Asia/Makassar`) when the server's clock isn't in the hospital's time zone, so "practising now" and open-now are right.
 
 ### Hospital information
 
-**Hospital info** in the editor (or the Properties panel with nothing selected) holds general questions the map can't answer: visiting rules, BPJS and payment, registration, the emergency number. They are saved and published with the layout (`faq` in the layout file, `src/lib/model/faq.ts`). Visitors find them under *Hospital information*: in the side panel on desktop, and in the ••• menu on phones. Questions without an answer stay hidden, and phone numbers in answers can be tapped to call.
+**Hospital info** in the editor (or the Properties panel with nothing selected) holds general questions the map can't answer: visiting rules, BPJS and payment, registration, the emergency number. They are saved with the hospital (`faq` in the layout file, `src/lib/model/faq.ts`), with the doctors' schedules on the same page (`/editor/info`). Visitors get them by asking in the chat; questions without an answer are left out.
 
 ### "You are here" QR signs
 
-**Publish → Print "You are here" QR signs** opens `/editor/signs`: one A4 sign per spot, with the spot's name, a plan with a *You are here* marker, and a QR code to `/m/<slug>?from=<spot>`, so visitors who scan it only choose where they're going. Landmarks, reception desks, waiting areas and stairs are suggested (every building when there are none); tick any other room or building. Signs are built from the *published* layout, which is what phones open, and the chosen spots are remembered per map (`src/lib/signs.ts`).
+**Share → Print "You are here" QR signs** opens `/editor/signs`: one A4 sign per spot, with the spot's name, a plan with a *You are here* marker, and a QR code to `/m/<slug>?from=<spot>`, so visitors who scan it only choose where they're going. Landmarks, reception desks, waiting areas and stairs are suggested (every building when there are none); tick any other room or building. Signs are built from the hospital in the database, which is what phones open, and the chosen spots are remembered per map (`src/lib/signs.ts`).
 
-To deploy, run `npx convex deploy` and set `PUBLIC_CONVEX_URL` to the production deployment URL in the hosting environment.
+To deploy, run `npx convex deploy` and set `PUBLIC_CONVEX_URL` (and `ANTHROPIC_API_KEY`) in the hosting environment.
 
 Use **Canvas size** to set 8–100 tiles per side (2 m per tile). Layouts export and import as JSON.
 
@@ -68,13 +80,13 @@ The corridor GLBs now only supply materials: corridors, garden paths and L-shape
 ## Code layout
 
 - `src/routes/editor/+page.svelte` — the editor (`/editor`): project state, autosave, undo and keyboard shortcuts. Its panels live in `src/lib/components/editor/` (asset library, toolbar, plan view, properties panel and its sub-editors, guide).
-- `src/routes/+page.svelte` — the wayfinding map for the layout in this browser, the home page, with deep links (`/?from=b:9&to=r:2:25`). `src/routes/m/[slug]/` is the published map. Both render `src/lib/components/map/MapViewer.svelte`. `src/routes/map/` redirects old `/map` links.
-- `src/convex/` — the Convex backend for published maps; `src/lib/publish.ts` keeps this device's publish key.
+- `src/routes/+page.svelte` — the wayfinding map, the home page, with deep links (`/?from=b:9&to=r:2:25`); `src/routes/m/[slug]/` is the same hospital at its public address. Both load it from the database and render `src/lib/components/map/MapViewer.svelte`. `src/routes/map/` redirects old `/map` links.
+- `src/convex/` — the Convex backend: the hospital's tables and `hospital.get` / `hospital.save`.
 - `src/lib/editor/` — editing rules (`operations.ts`), JSON/OBJ export (`export.ts`) and undo history.
 - `src/lib/model/` — the layout data, assets and templates, and room/door geometry. Visitor info per place (`place-info.ts`), opening hours and open-now (`hours.ts`), and doctors' practice schedules with leave (`doctors.ts`: whether a doctor is practising now and when they are back); schedules are edited on *Hospital info* (`/editor/info`) and searchable by doctor or specialty.
 - `src/lib/wayfinding/` — walls and doors (`navigation.ts`) and grid routing with turn-by-turn steps (`routing.ts`).
-- `src/lib/assistant/tools.ts` — the planned chat assistant's tools, as plain code for now: `search_places`, `get_place_details` (with open-now), `find_nearest`, `get_directions` and `show_on_map`, with their Claude tool definitions and `runTool`, which checks the input. They answer from the published layout and return JSON, with problems as `{ error }`. `cards.ts` and `src/lib/components/assistant/MapCard.svelte` turn a `show_on_map` result into a chat card ("Laboratory · Open now · until 16:00 · Show on map") that links to `?to=…` or `?from=…&to=…`; the map follows such links on the page as well as on load.
-- `src/lib/assistant/chat.ts`, `chat.svelte.ts` and `src/lib/components/assistant/ChatPanel.svelte` — the chat: **Ask** beside the map on desktop, a sheet over it on phones, with suggested questions from the map and replies written out as they arrive. Replies come from a `Replier` (a stream of text and cards); for now `cannedReplier` answers from the tools and the hospital information without a model, and the chat server route will replace it. While the chat is open, the place its latest answer is about is highlighted on the 3D map (`src/lib/scene/highlight.ts`: a pulsing outline on its footprint or room, with a pin) and the camera moves to it; otherwise the chosen destination is, until a route shows.
+- `src/lib/assistant/tools.ts` — the chat assistant's tools, as plain code: `search_places`, `get_place_details` (with open-now), `find_nearest`, `get_directions` and `show_on_map`, with their Claude tool definitions and `runTool`, which checks the input. They answer from the hospital's layout and return JSON, with problems as `{ error }`. `cards.ts` and `src/lib/components/assistant/MapCard.svelte` turn a `show_on_map` result into a chat card ("Laboratory · Open now · until 16:00 · Show on map") that links to `?to=…` or `?from=…&to=…`; the map follows such links on the page as well as on load.
+- `src/lib/assistant/chat.ts`, `chat.svelte.ts` and `src/lib/components/assistant/ChatPanel.svelte` — the chat: **Ask** beside the map on desktop, a sheet over it on phones, with suggested questions from the map and replies written out as they arrive. Replies come from a `Replier` (a stream of text and cards); `serverReplier` (`remote.ts`) streams Claude's replies from `/api/chat`, and `cannedReplier` answers from the tools and the hospital information without a model when the server has no API key. While the chat is open, the place its latest answer is about is highlighted on the 3D map (`src/lib/scene/highlight.ts`: a pulsing outline on its footprint or room, with a pin) and the camera moves to it; otherwise the chosen destination is, until a route shows.
 - `src/lib/i18n/` — the visitor map's languages: Indonesian first, English one tap away (the switch is remembered per device). `messages.ts` holds every visitor-facing string in both, `places.ts` the Indonesian names of kinds of place (Apotek, Parkir, IGD…), and `locale.svelte.ts` gives the map's components their language; the editor has none and stays English. Opening hours (`place-info.ts`) and walking steps (`stepText` in `routing.ts`) are written in either; the canned chat replies answer in the language of the question.
 - `src/lib/scene/` — the Three.js scene in parts: camera rig, stage (lights, ground, grid), model loading, generated interiors, labels, route overlay, pointer handling and the map's scenery. `src/lib/components/shared/HospitalScene.svelte` puts them together.
 - `src/styles/` — global styles, imported in cascade order by `src/routes/layout.css`.
