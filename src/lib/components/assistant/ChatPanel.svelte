@@ -50,7 +50,14 @@
     const looking = (tool: string): Key => LOOKING[tool] ?? "writingReply";
     let draft = $state(""),
         log = $state<HTMLElement>(),
-        input = $state<HTMLInputElement>();
+        input = $state<HTMLTextAreaElement>();
+    // The box grows with the question, up to a few lines, then scrolls.
+    $effect(() => {
+        void draft;
+        if (!input) return;
+        input.style.height = "auto";
+        input.style.height = `${input.scrollHeight}px`;
+    });
 
     function ask(text: string) {
         if (!text.trim() || chat.busy) return;
@@ -148,15 +155,22 @@
                 ask(draft);
             }}
         >
-            <input
+            <textarea
                 bind:this={input}
                 bind:value={draft}
+                rows="1"
                 aria-label={t("yourQuestion")}
                 placeholder={t("askQuestion")}
                 enterkeyhint="send"
                 autocomplete="off"
                 maxlength="500"
-            />
+                onkeydown={(e) => {
+                    // Enter sends; Shift+Enter starts a new line; Enter that confirms a word (IME) does neither.
+                    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+                    e.preventDefault();
+                    ask(draft);
+                }}
+            ></textarea>
             {#if chat.messages.length && !chat.busy}<button
                     type="button"
                     class="icon"
@@ -437,7 +451,8 @@
     }
     .composer {
         display: flex;
-        align-items: center;
+        /* The buttons stay at the bottom as the question grows. */
+        align-items: flex-end;
         gap: 4px;
         padding: 6px 6px 6px 18px;
         border-radius: 22px;
@@ -454,18 +469,27 @@
             0 2px 4px #1d2b220a,
             0 18px 40px -18px #24473a66;
     }
-    input {
+    textarea {
         flex: 1;
         min-width: 0;
-        height: 44px;
-        padding: 0;
+        /* One line is as tall as the buttons; at most about six lines, then it scrolls. */
+        min-height: 44px;
+        max-height: 156px;
+        padding: 11px 0;
         border: 0;
         background: none;
         font: inherit;
         font-size: 16px; /* smaller zooms the page on iOS */
+        line-height: 22px;
         color: var(--ink);
+        resize: none;
+        overflow-y: auto;
+        scrollbar-width: thin;
     }
-    input::placeholder {
+    textarea:focus {
+        outline: none;
+    }
+    textarea::placeholder {
         color: #8b968a;
     }
     .composer svg {

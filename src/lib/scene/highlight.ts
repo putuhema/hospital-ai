@@ -63,7 +63,10 @@ export function createHighlight() {
   const group = new THREE.Group();
   let fill: THREE.Mesh | null = null,
     pin: THREE.Object3D | null = null,
-    pinY = 0;
+    pinY = 0,
+    /** The height the pin's tip floats at, and its size (1 is about 2 m tall). */
+    base = 0,
+    size = 1;
 
   /**
    * Show a shape (null clears it). `top` is the height in metres the pin
@@ -108,11 +111,27 @@ export function createHighlight() {
     dot.position.set(0, 1.25, 0.5);
     pin.add(head, tip, dot);
     pin.traverse((o) => (o.castShadow = true));
-    pinY = top + 0.6;
-    pin.position.set(shape.centre.x * 2, pinY, shape.centre.y * 2);
+    base = top;
+    pin.position.set(shape.centre.x * 2, 0, shape.centre.y * 2);
     group.add(pin);
+    resize(size);
 
     return new THREE.Box3().setFromPoints(corners).expandByPoint(pin.position);
+  }
+
+  /**
+   * Scale the pin, e.g. to stay easy to see from far away; its tip stays put.
+   * Returns the height just above it, bobbing included, for the place's name.
+   */
+  function resize(scale: number) {
+    size = scale;
+    // The tip is 0.2 below the pin's origin and the head's top 1.8 above, at size 1.
+    pinY = base + 0.2 + 0.2 * size;
+    if (pin) {
+      pin.scale.setScalar(size);
+      pin.position.y = pinY;
+    }
+    return pinY + 2.1 * size + 0.2;
   }
 
   const still = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -120,8 +139,8 @@ export function createHighlight() {
   function animate(time: number) {
     if (still) return;
     if (fill) (fill.material as THREE.MeshBasicMaterial).opacity = 0.2 + 0.18 * (0.5 + 0.5 * Math.sin(time / 420));
-    if (pin) pin.position.y = pinY + Math.sin(time / 380) * 0.25;
+    if (pin) pin.position.y = pinY + Math.sin(time / 380) * 0.25 * size;
   }
 
-  return { group, show, animate, dispose: () => clearGroup(group) };
+  return { group, show, resize, animate, dispose: () => clearGroup(group) };
 }

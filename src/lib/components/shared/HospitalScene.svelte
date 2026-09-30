@@ -179,6 +179,7 @@
                 const tag = createLabel(p.name, "building");
                 const c = center(p);
                 tag.position.set(c.x * 2, top, c.y * 2);
+                tag.userData.place = { pieceId: p.id, y: top };
                 labelGroup.add(tag);
             }
             // Rooms are only visible with the roofs off.
@@ -186,6 +187,7 @@
                 for (const r of p.roomAssets ?? []) {
                     const tag = createLabel(r.name, "room");
                     tag.position.set((p.x + r.x + r.w / 2) * 2, 1.6, (p.y + r.y + r.h / 2) * 2);
+                    tag.userData.place = { pieceId: p.id, roomId: r.id, y: 1.6 };
                     labelGroup.add(tag);
                 }
         }
@@ -239,16 +241,27 @@
                 focusShown = nextFocus;
                 const routeBox = overlay.show(route);
                 // The pin floats over the roof, or with the roofs off, above the building's name.
-                const piece = buildings.children.find((o) => o.userData.pieceId === focus?.pieceId);
-                const pieceBox = piece && new THREE.Box3().setFromObject(piece);
-                // Just over the walls with the roofs off, so the pin stays over its room.
-                const top = !focusShape ? 0 : focusShape.room || inside ? 3.4 : pieceBox ? pieceBox.max.y + 0.5 : 1;
+                // A building is its outside and its interior; the pin goes over the taller.
+                const parts = buildings.children.filter((o) => o.userData.pieceId === focus?.pieceId);
+                const pieceBox = parts.length ? parts.reduce((box, o) => box.expandByObject(o), new THREE.Box3()) : null;
+                // Just over the walls with the roofs off, so the pin stays over its room; else just over the roof.
+                const top = !focusShape ? 0 : focusShape.room || inside ? 3.4 : pieceBox ? pieceBox.max.y + 0.3 : 1;
                 const focusBox = marker.show(focusShape, top);
                 // A room is framed with its whole building, and a place with what is around it, to find your bearings.
                 const around = focusBox?.clone();
                 if (around && focusShape?.room && pieceBox)
                     around.union(new THREE.Box3(pieceBox.min.clone().setY(0), pieceBox.max.clone().setY(0)));
                 if (moved) rig.frameRoute(routeBox ?? around ?? null, routeBox ? 8 : 10);
+                // From farther away (a whole building) the pin grows, so it stays easy to spot.
+                const above = marker.resize(THREE.MathUtils.clamp(rig.focusDistance() / 40, 1, 3));
+                // The place's own name moves up onto the pin, like a map marker, instead of covering it.
+                for (const tag of labelGroup.children as THREE.Sprite[]) {
+                    const at = tag.userData.place as { pieceId: number; roomId?: number; y: number } | undefined;
+                    if (!at) continue;
+                    const named = !!focusShape && at.pieceId === focus?.pieceId && at.roomId === focus?.roomId;
+                    tag.position.y = named ? above : at.y;
+                    tag.center.set(0.5, named ? 0 : 0.5);
+                }
             }
             const object = buildings.children.find((o) => o.userData.pieceId === selected);
             stage.selectedBox.visible = !!object && !presentation;
