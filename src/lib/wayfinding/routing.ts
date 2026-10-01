@@ -41,8 +41,8 @@ export type StepSay =
   | { kind: "start"; from: string | null; heading: Heading; through?: Via; into?: Area }
   | { kind: "turn"; turn: Turn; through?: Via; into?: Area }
   | { kind: "arrive"; place: string; building?: string; listed?: boolean };
-/** One instruction; `text` is the English wording. */
-export type Step = { text: string; meters: number; say: StepSay };
+/** One instruction; `text` is the English wording, `at` the route point it starts from. */
+export type Step = { text: string; meters: number; say: StepSay; at: number };
 export type Route = { points: Point[]; meters: number; steps: Step[] };
 
 /** Cells per tile. Fine enough that 0.4-tile room doors contain cell centres. */
@@ -385,7 +385,7 @@ function describe(
   fromName: string | null,
   to: Place,
 ): Step[] {
-  const says: { say: StepSay; meters: number }[] = [];
+  const says: { say: StepSay; meters: number; at: number }[] = [];
   let heading: Point | null = null;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1],
@@ -438,6 +438,7 @@ function describe(
           ? { kind: "turn", turn, ...extra }
           : { kind: "start", from: fromName, heading: compass(d), ...extra },
         meters,
+        at: i - 1,
       });
     }
     heading = d;
@@ -450,8 +451,9 @@ function describe(
       ...(to.kind === "listed" && { listed: true }),
     },
     meters: 0,
+    at: points.length - 1,
   });
-  return says.map(({ say, meters }) => ({ text: stepText(say, "en"), meters: Math.round(meters), say }));
+  return says.map(({ say, meters, at }) => ({ text: stepText(say, "en"), meters: Math.round(meters), say, at }));
 }
 
 const HEADINGS: Record<Lang, Record<Heading, string>> = {
@@ -565,6 +567,18 @@ export function stepGlyph(step: Step): string {
   if (say.kind === "start") return "●";
   if (say.kind === "arrive") return "⚑";
   return { left: "↰", right: "↱", "bear-left": "↖", "bear-right": "↗", around: "↩", straight: "↑" }[say.turn];
+}
+
+/**
+ * How far along a route the visitor is, once its first `done` steps are
+ * ticked off: the route point they have walked to, and the metres left.
+ */
+export function progress(route: Route, done: number) {
+  const n = Math.max(0, Math.min(done, route.steps.length));
+  return {
+    at: n >= route.steps.length ? route.points.length - 1 : route.steps[n].at,
+    metersLeft: route.steps.slice(n).reduce((m, s) => m + s.meters, 0),
+  };
 }
 
 /** Places that can't be reached from outside, e.g. a room whose door faces a wall. */

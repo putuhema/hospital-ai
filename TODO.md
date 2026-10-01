@@ -43,6 +43,8 @@ What's done, and what can still be improved, for hospital visitors and for the p
 
 ## Done
 
+- [x] **Follow the steps on the map.** On phones, _Langkah_ opens the steps in the card over the map, not the full sheet, and the camera keeps the route above the card. Tap a step once it's done: the walked part of the route greys (3D and plan), the dot moves on, and a bar shows the steps and metres left. Doctors not in say why: _Belum praktik_, _Jam praktik sudah habis_ or _Tidak praktik hari ini_.
+- [x] **Tap a place to see what is there.** Tapping a room or building on the map opens its card with the details: description, phone, opening hours and the doctors who practise there, with whether each is in now; a building lists its clinics. _Rute_ is one tap away and the chat stays open. The phone sheet no longer shows for a moment on first load. New room type _Perinatology_ (Perinatologi) with incubators, found by "bayi", "NICU", "inkubator".
 - [x] **Editor sign-in.** Signing in is at `/login` (Better Auth in Convex, email and password, admin plugin). `/editor` and its pages are only served to accounts with the `admin` role; anyone else is sent to `/login`, and `hospital.save` checks the same. The first account on a deployment signs up at `/login` and becomes admin; after that admins add, reset and remove accounts at `/editor/accounts`.
 - [x] **Database as the source of truth.** The editor and _Hospital info_ save every change to Convex (hospitals, buildings, places, doctors, questions & answers as rows), live for visitors at `/` and `/m/<slug>`; no publish step. _Share_ gives the public link.
 - [x] **"You are here" QR signs.** _Share → Print "You are here" QR signs_: an A4 sign per spot with the start preset.

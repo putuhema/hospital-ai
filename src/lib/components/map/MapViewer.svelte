@@ -7,6 +7,8 @@
     import FloorPlan from "$lib/components/shared/FloorPlan.svelte";
     import RouteFinder from "$lib/components/shared/RouteFinder.svelte";
     import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
+    import PlaceDetails from "$lib/components/shared/PlaceDetails.svelte";
+    import RouteSteps from "$lib/components/shared/RouteSteps.svelte";
     import ChatPanel from "$lib/components/assistant/ChatPanel.svelte";
     import { Chat } from "$lib/assistant/chat.svelte";
     import { cannedReplier, suggestions, type ReplyContext } from "$lib/assistant/chat";
@@ -20,7 +22,7 @@
     import { walkwayAt } from "$lib/model/interiors";
     import { hoursStatus } from "$lib/model/place-info";
     import type { Point, WalkingNetwork } from "$lib/wayfinding/navigation";
-    import { buildGrid, places, planRoute, walkMinutes, type Place } from "$lib/wayfinding/routing";
+    import { buildGrid, places, planRoute, progress, walkMinutes, type Place } from "$lib/wayfinding/routing";
     let {
         title,
         pieces,
@@ -77,7 +79,14 @@
         height = $state(800);
     let from = $state.raw<Place | Point | null>(null),
         to = $state.raw<Place | null>(null),
-        picking = $state(false);
+        picking = $state(false),
+        /** The destination's card is open to show what is there: hours, phone, doctors. */
+        about = $state(true),
+        /** Phones: the route's steps in the card over the map, so the map stays in sight. */
+        stepping = $state(false),
+        /** Steps of the route ticked off; the map greys the way walked. */
+        done = $state(0),
+        journeyHeight = $state(0);
     let exporter: (() => Promise<void>) | null = null;
     let grid = $derived(buildGrid(pieces, canvasWidth, canvasHeight));
     let route = $derived(from && to ? planRoute(grid, from, to) : null);
@@ -136,11 +145,38 @@
               : t("spotOn", { name: walkwayAt(pieces, from)?.name ?? t("theMap") }),
     );
     let status = $derived(to?.info ? hoursStatus(to.info, new Date(), locale.lang) : null);
+    /** A building's clinics: the rooms in it where doctors practise. */
+    let clinics = $derived(
+        to?.kind === "building"
+            ? placeList.filter((p) => p.kind === "room" && p.pieceId === to!.pieceId && p.info?.doctors?.length)
+            : [],
+    );
+    // Each new destination opens on what is there, however it was chosen.
+    $effect(() => {
+        void to?.id;
+        untrack(() => (about = true));
+    });
+    /** The destination has something to tell beyond its name. */
+    let hasAbout = $derived(!!to && (!!placeInfo(to.info) || clinics.length > 0));
+    /** Details in the card, unless the directions beside it already show them (wide screens, Rute tab). */
+    let aboutHere = $derived(hasAbout && !(wide && tab === "route" && !!placeInfo(to?.info)));
+    function placeInfo(info: Place["info"]) {
+        return info && (info.description || info.phone || info.hours?.length || info.doctors?.length) ? info : null;
+    }
 
     // How much of the screen the conversation covers, so the camera frames the rest.
     let insetLeft = $derived(wide ? COLUMN : 0);
     // On phones, the chat bar (and the destination above it) cover the bottom.
-    let insetBottom = $derived(wide ? 0 : to ? 170 : 90);
+    let insetBottom = $derived(wide ? 0 : to && journeyHeight ? journeyHeight + 92 : 90);
+    // Steps belong to one route; a new one starts from the first.
+    $effect(() => {
+        if (!route || wide) stepping = false;
+    });
+    $effect(() => {
+        route;
+        done = 0;
+    });
+    let walked = $derived(route ? progress(route, done).at : 0);
 
     const encode = (p: Place | Point) => ("id" in p ? p.id : `${p.x.toFixed(2)},${p.y.toFixed(2)}`);
     function decode(value: string | null): Place | Point | null {
@@ -226,10 +262,9 @@
             tab = "route";
             sheetOpen = true;
         } else if (place) {
-            // Tapped on the map: that place, not the chat's.
+            // Tapped on the map: that place, not the chat's, with what is there (a clinic's doctors, opening hours).
             carried = chatFocus?.id ?? null;
             to = place;
-            tab = "route";
         }
     }
     function open(next: Tab) {
@@ -327,6 +362,7 @@
                     {canvasWidth}
                     {canvasHeight}
                     route={route?.points ?? null}
+                    {walked}
                     {highlight}
                     {insetLeft}
                     {insetBottom}
@@ -344,6 +380,7 @@
                         width={canvasWidth}
                         height={canvasHeight}
                         route={route?.points ?? null}
+                        {walked}
                         {landmarks}
                         destination={highlight}
                         {picking}
@@ -428,7 +465,7 @@
                     }}
                 />{:else}<div class="scroll" in:unblur>
                     <h2>{t("whereTo")}</h2>
-                    <RouteFinder places={placeList} {grid} {route} bind:from bind:to bind:picking />
+                    <RouteFinder places={placeList} {grid} {route} bind:from bind:to bind:picking bind:done />
                 </div>{/if}
         </div>
     </aside>
@@ -465,22 +502,61 @@
             >
         </button>{/if}
 
-    {#if to}{#key to.id}<div class="journey" in:rise={{ y: 10 }}>
-                <PlaceIcon of={to} size={34} />
-                <div class="where">
-                    <b>{t("headingTo", { name: to.name })}</b>
-                    <small
-                        >{#if route}{t("minutes", { n: walkMinutes(route.meters) })} · {t("metresWalk", {
-                                m: route.meters,
-                            })}{:else if status}<span class:open={status.open}>{status.text}</span>{:else}{to.building ??
-                                locale.type(to.detail)}{/if}</small
+    {#if to}{#key to.id}<div
+                class="journey"
+                class:open={(about && aboutHere) || stepping}
+                bind:clientHeight={journeyHeight}
+                in:rise={{ y: 10 }}
+            >
+                <div class="journey-head">
+                    <PlaceIcon of={to} size={34} />
+                    <button
+                        class="where"
+                        disabled={!aboutHere}
+                        aria-expanded={aboutHere ? about && !stepping : undefined}
+                        title={aboutHere ? t(about && !stepping ? "hideDetails" : "showDetails") : undefined}
+                        onclick={() => {
+                            about = stepping || !about;
+                            stepping = false;
+                        }}
+                    >
+                        <b>{t("headingTo", { name: to.name })}</b>
+                        <small
+                            >{#if route}{t("minutes", { n: walkMinutes(route.meters) })} · {t("metresWalk", {
+                                    m: route.meters,
+                                })}{:else if status}<span class:open={status.open}>{status.text}</span>{:else}{to.building ??
+                                    locale.type(to.detail)}{/if}{#if aboutHere}<i class="more-info" class:up={about && !stepping} aria-hidden="true"
+                                    ><svg viewBox="0 0 24 24" width="14" height="14"><path d="m6 9 6 6 6-6" /></svg></i
+                                >{/if}</small
+                        >
+                    </button>
+                    {#if route && !wide}<button class="go" aria-pressed={stepping} onclick={() => (stepping = !stepping)}
+                            >{t("steps")}</button
+                        >{:else}<button class="go" onclick={() => open("route")}>{route ? t("steps") : t("directions")}</button>{/if}
+                    <button class="x" aria-label={t("clearDestination")} onclick={() => (to = null)}
+                        ><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg
+                        ></button
                     >
                 </div>
-                <button class="go" onclick={() => open("route")}>{route ? t("steps") : t("directions")}</button>
-                <button class="x" aria-label={t("clearDestination")} onclick={() => (to = null)}
-                    ><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg
-                    ></button
-                >
+                {#if stepping && route}<div class="about steps"><RouteSteps {route} bind:done /></div>
+                {:else if about && aboutHere}
+                    {@const info = placeInfo(to.info)}
+                    <div class="about">
+                        {#if info}<PlaceDetails {info} />{/if}
+                        {#if clinics.length}<div class="clinics">
+                                <small>{t("clinicsHere")}</small>
+                                {#each clinics as c (c.id)}<button onclick={() => (to = c)}>
+                                        <PlaceIcon of={c} size={28} />
+                                        <span><b>{c.name}</b><em
+                                                >{(c.info?.doctors?.length ?? 0) === 1
+                                                    ? t("doctorOne")
+                                                    : t("doctorCount", { n: c.info?.doctors?.length ?? 0 })}</em
+                                            ></span>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+                                    </button>{/each}
+                            </div>{/if}
+                    </div>
+                {/if}
             </div>{/key}{/if}
 
     {#if picking}<div class="pick-banner" role="status">
@@ -1025,10 +1101,10 @@
         left: calc(var(--column) + (100% - var(--column)) / 2);
         translate: -50% 0;
         display: flex;
-        align-items: center;
-        gap: 12px;
+        flex-direction: column;
         width: max-content;
         max-width: min(520px, calc(100% - var(--column) - 40px));
+        max-height: calc(100% - 120px);
         padding: 8px 8px 8px 10px;
         border-radius: 18px;
         background: var(--card);
@@ -1036,11 +1112,78 @@
             0 0 0 1px var(--line),
             0 22px 48px -18px #1b2a2166;
     }
+    /* Open on what is there: wide enough to read a doctors' schedule. */
+    .journey.open {
+        width: min(440px, calc(100% - var(--column) - 40px));
+    }
+    .journey-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
     .where {
+        flex: 1;
         display: flex;
         flex-direction: column;
         min-width: 0;
-        padding-right: 6px;
+        padding: 0 6px 0 0;
+        text-align: left;
+        color: inherit;
+    }
+    .where:disabled {
+        opacity: 1;
+        cursor: default;
+    }
+    .more-info {
+        display: inline-grid;
+        vertical-align: -3px;
+        margin-left: 4px;
+        transition: transform 200ms ease;
+    }
+    .more-info.up {
+        transform: rotate(180deg);
+    }
+    .about {
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        margin: 4px -2px 0 0;
+        padding: 0 2px 4px 0;
+    }
+    .about :global(.place-details) {
+        margin-top: 8px;
+    }
+    .clinics {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 10px;
+    }
+    .clinics small {
+        font-size: 10px;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+    .clinics button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: #f5f8f1;
+        text-align: left;
+        color: inherit;
+    }
+    .clinics button span {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .clinics em {
+        font-style: normal;
+        font-size: 12px;
+        color: var(--muted);
     }
     .where b {
         font-family: var(--display);
@@ -1075,6 +1218,10 @@
     }
     .concierge .go:hover {
         background: var(--forest-2);
+    }
+    .concierge .go[aria-pressed="true"] {
+        background: var(--paper-2);
+        color: var(--forest);
     }
     .x {
         display: grid;
@@ -1312,6 +1459,19 @@
         translate: none;
         width: auto;
         max-width: none;
+        max-height: calc(100% - var(--top) - var(--bottom) - 150px);
+    }
+    /* Following the steps: the card stays low, the route on the map above it. */
+    .mobile .journey:has(.steps) {
+        max-height: 44%;
+    }
+    /* Before the page has worked out it is on a phone, the sheet already waits closed below the screen,
+       so it doesn't show for a moment and then slide away. */
+    @media (max-width: 760px) {
+        .concierge:not(.mobile) .column {
+            transform: translateY(calc(100% + 24px));
+            transition: none;
+        }
     }
     .mobile :global(.orbit-help) {
         display: none;

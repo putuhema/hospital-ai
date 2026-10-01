@@ -111,3 +111,16 @@ test('rooms the editor named by default read in Indonesian; names the hospital w
   assert.equal(corridor, pieces[1]);
   assert.equal(localizeRooms(pieces, 'en'), pieces);
 });
+
+test('ticking off steps moves along the route', async () => {
+  const { progress } = await import('../src/lib/wayfinding/routing.ts');
+  const g = buildGrid(starterPieces, 24, 20), list = places(starterPieces);
+  const route = planRoute(g, find(list, 'Main reception'), find(list, 'Laboratory'))!;
+  // Each step starts where the last one left off, from the first point to the last.
+  assert.equal(route.steps[0].at, 0);
+  assert.equal(route.steps.at(-1)!.at, route.points.length - 1);
+  for (let i = 1; i < route.steps.length; i++) assert.ok(route.steps[i].at > route.steps[i - 1].at);
+  assert.deepEqual(progress(route, 0), { at: 0, metersLeft: route.steps.reduce((m, s) => m + s.meters, 0) });
+  assert.deepEqual(progress(route, 1), { at: route.steps[1].at, metersLeft: route.steps.slice(1).reduce((m, s) => m + s.meters, 0) });
+  assert.deepEqual(progress(route, 99), { at: route.points.length - 1, metersLeft: 0 });
+});

@@ -22,6 +22,7 @@ const ID: Record<string, string> = {
   Storage: "Gudang",
   Radiology: "Radiologi",
   Emergency: "IGD",
+  Perinatology: "Perinatologi",
   "Entrance & exit": "Pintu masuk & keluar",
   "Information desk": "Pusat informasi",
   Parking: "Parkir",

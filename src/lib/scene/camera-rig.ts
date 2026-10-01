@@ -42,7 +42,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   // floats over the map, which only leaves room for it when framing a place.
   let size = { width: 0, height: 0 },
     target = { left: 0, bottom: 0 };
-  // The last place or route framed, framed again if a sheet rises just after.
+  // The last place or route framed, framed again if a sheet rises just after or grows.
   let framed: { bounds: THREE.Box3; pad: number; at: number } | null = null;
   const ray = new THREE.Raycaster(),
     ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -75,13 +75,14 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   function frame(width: number, height: number, insetLeft = 0, insetBottom = 0) {
     const key = `${width}:${height}:${insetLeft}:${insetBottom}:${overhead}`;
     if (!width || !height || key === framedAs) return false;
-    const risen = insetBottom !== target.bottom;
+    const risen = insetBottom !== target.bottom,
+      grew = insetBottom > target.bottom;
     framedAs = key;
     size = { width, height };
     target = { left: insetLeft, bottom: insetBottom };
     project();
-    // A sheet opening with the place it shows: keep the place above it.
-    if (risen && framed && performance.now() - framed.at < 700) frameRoute(framed.bounds, framed.pad);
+    // A sheet opening with the place it shows, or growing over it (a route's steps): keep the place above it.
+    if (risen && framed && (grew || performance.now() - framed.at < 700)) frameRoute(framed.bounds, framed.pad);
     return true;
   }
 

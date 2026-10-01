@@ -30,7 +30,7 @@ test('by specialty, in English, and a doctor who isn\'t on the schedule', () => 
   assert.match(text(cannedAnswer(ctx('2026-09-28T09:00:00'), [], 'jadwal dokter penyakit dalam')), /^dr\. Budi Santoso, Sp\.PD \(Penyakit Dalam\) praktik di/);
   assert.equal(
     text(cannedAnswer(ctx('2026-09-28T09:00:00'), [], 'When does dr Budi see patients?')),
-    'dr. Budi Santoso, Sp.PD (Penyakit Dalam) practises at Exam room 1, Outpatient clinic: Tue, Thu 13:00–16:00. Not practising, from tomorrow 13:00.',
+    'dr. Budi Santoso, Sp.PD (Penyakit Dalam) practises at Exam room 1, Outpatient clinic: Tue, Thu 13:00–16:00. Not practising today, from tomorrow 13:00.',
   );
   assert.match(text(cannedAnswer(ctx('2026-09-28T09:00:00'), [], 'jadwal dr Andi')), /tidak menemukan dokter itu/);
 });

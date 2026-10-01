@@ -15,7 +15,8 @@ export type RoomType =
   | "stairs"
   | "storage"
   | "radiology"
-  | "emergency";
+  | "emergency"
+  | "perinatology";
 export type RoomAsset = {
   id: number;
   name: string;
@@ -57,6 +58,8 @@ export const roomTypes: {
   { type: "storage", name: "Storage", w: 1, h: 1, color: "#dcd8cc" },
   { type: "radiology", name: "Radiology", w: 2, h: 2, color: "#d4d9e6" },
   { type: "emergency", name: "Emergency", w: 3, h: 2, color: "#ebd0cb" },
+  /** Newborn care (perinatologi): incubators for babies who need watching after birth. */
+  { type: "perinatology", name: "Perinatology", w: 3, h: 2, color: "#f1dde2" },
 ];
 export const roomType = (type: string) =>
   roomTypes.find((t) => t.type === type) ?? roomTypes[0];

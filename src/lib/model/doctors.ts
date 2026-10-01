@@ -104,12 +104,12 @@ export const shortDate = (date: string, lang: Lang) =>
 
 const WORDS = {
   en: {
-    in: "Practising", out: "Not practising", leave: "On leave", until: "until", from: "from", back: "back",
-    tomorrow: "tomorrow", none: "No practice hours",
+    in: "Practising", later: "Not in yet", done: "Practice hours are over", off: "Not practising today",
+    leave: "On leave", until: "until", from: "from", back: "back", tomorrow: "tomorrow", none: "No practice hours",
   },
   id: {
-    in: "Praktik", out: "Tidak praktik", leave: "Cuti", until: "sampai", from: "mulai", back: "praktik lagi",
-    tomorrow: "besok", none: "Belum ada jadwal praktik",
+    in: "Praktik", later: "Belum praktik", done: "Jam praktik sudah habis", off: "Tidak praktik hari ini",
+    leave: "Cuti", until: "sampai", from: "mulai", back: "praktik lagi", tomorrow: "besok", none: "Belum ada jadwal praktik",
   },
 };
 
@@ -118,7 +118,7 @@ export type DoctorStatus = {
   practising: boolean;
   /** On leave today. */
   onLeave: boolean;
-  /** e.g. "Praktik · sampai 14.00", "Cuti · praktik lagi Sen 08.00". */
+  /** e.g. "Praktik · sampai 14.00", "Jam praktik sudah habis · mulai besok 08.00", "Cuti · praktik lagi Sen 08.00". */
   text: string;
 };
 
@@ -160,7 +160,8 @@ export function doctorStatus(doctor: Doctor, now: Date, lang: Lang = "en"): Doct
     day = new Date(today.getFullYear(), today.getMonth(), today.getDate() + days),
     when =
       days === 0 ? "" : days === 1 ? `${w.tomorrow} ` : days < 7 ? `${DAYS[lang][day.getDay()]} ` : `${shortDate(dateOf(day), lang)} `;
-  return leave
-    ? { practising: false, onLeave: true, text: `${w.leave} · ${w.back} ${when}${clock(next, lang)}` }
-    : { practising: false, onLeave: false, text: `${w.out} · ${w.from} ${when}${clock(next, lang)}` };
+  if (leave) return { practising: false, onLeave: true, text: `${w.leave} · ${w.back} ${when}${clock(next, lang)}` };
+  // Later today; done for today; or no practice today at all.
+  const why = days === 0 ? w.later : periods.some(([s]) => s < DAY && s <= at) ? w.done : w.off;
+  return { practising: false, onLeave: false, text: `${why} · ${w.from} ${when}${clock(next, lang)}` };
 }

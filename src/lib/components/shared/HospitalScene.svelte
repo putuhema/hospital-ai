@@ -35,6 +35,7 @@
         onerror,
         registerExport,
         route = null,
+        walked = 0,
         highlight = null,
         labels = true,
         insetLeft = 0,
@@ -59,6 +60,8 @@
         registerExport: (fn: () => Promise<void>) => void;
         /** Walking route in tile coordinates, drawn on the ground floor. */
         route?: Point[] | null;
+        /** The route point the visitor has walked to; the line behind it greys. */
+        walked?: number;
         /** A place to pick out, e.g. the one the assistant is talking about; hidden while a route shows. */
         highlight?: HighlightTarget | null;
         labels?: boolean;
@@ -97,6 +100,7 @@
         overhead;
         inside;
         route;
+        walked;
         focusShape;
         buildingNames;
         roomNames;
@@ -266,6 +270,7 @@
                     tag.center.set(0.5, named ? 0 : 0.5);
                 }
             }
+            overlay.walk(walked);
             const object = buildings.children.find((o) => o.userData.pieceId === selected);
             stage.selectedBox.visible = !!object && !presentation;
             if (object) stage.selectedBox.box.setFromObject(object);

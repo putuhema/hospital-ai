@@ -22,6 +22,7 @@ const SYNONYMS: string[][] = [
   ["nurse station", "nurse", "nurses", "perawat"],
   ["stairs", "stairs and lift", "staircase", "tangga"],
   ["maternity", "birth", "delivery", "obstetrics", "bersalin", "kebidanan"],
+  ["perinatology", "perinatologi", "nicu", "neonatal", "neonatology", "neonatologi", "newborn", "baby", "babies", "bayi", "ruang bayi", "kamar bayi", "incubator", "inkubator"],
   ["paediatrics", "pediatrics", "children", "kids", "anak"],
   ["dental", "dentist", "gigi"],
   ["eye clinic", "eye", "ophthalmology", "mata"],

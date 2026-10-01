@@ -20,10 +20,13 @@ test('practising now, and when a doctor is next in', () => {
     practising: true, onLeave: false, text: 'Praktik · sampai 12.00',
   });
   assert.equal(doctorStatus(sari, at('2026-09-28', '09:00'))!.text, 'Practising · until 12:00');
-  assert.equal(doctorStatus(sari, at('2026-09-28', '07:00'), 'id')!.text, 'Tidak praktik · mulai 08.00');
+  assert.equal(doctorStatus(sari, at('2026-09-28', '07:00'), 'id')!.text, 'Belum praktik · mulai 08.00');
   // Wednesday and Friday are on leave, so she's next in a week today: the date, not "Sen".
-  assert.equal(doctorStatus(sari, at('2026-09-28', '13:00'), 'id')!.text, 'Tidak praktik · mulai 5 Okt 08.00');
-  assert.equal(doctorStatus({ ...sari, leave: [] }, at('2026-09-28', '13:00'), 'id')!.text, 'Tidak praktik · mulai Rab 08.00');
+  assert.equal(doctorStatus(sari, at('2026-09-28', '13:00'), 'id')!.text, 'Jam praktik sudah habis · mulai 5 Okt 08.00');
+  assert.equal(doctorStatus({ ...sari, leave: [] }, at('2026-09-28', '13:00'), 'id')!.text, 'Jam praktik sudah habis · mulai Rab 08.00');
+  // Tuesday: no practice that day at all.
+  assert.equal(doctorStatus({ ...sari, leave: [] }, at('2026-09-29', '07:00'), 'id')!.text, 'Tidak praktik hari ini · mulai besok 08.00');
+  assert.equal(doctorStatus({ ...sari, leave: [] }, at('2026-09-29', '07:00'))!.text, 'Not practising today · from tomorrow 08:00');
 });
 
 test('on leave: says so, and when the doctor is back', () => {

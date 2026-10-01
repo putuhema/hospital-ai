@@ -1,12 +1,11 @@
 <script lang="ts">
+    import { untrack } from "svelte";
     import { walkwayAt } from "$lib/model/interiors";
     import { shortcuts as shortcutsFor } from "$lib/wayfinding/shortcuts";
     import PlaceIcon from "./PlaceIcon.svelte";
     import type { Point } from "$lib/wayfinding/navigation";
     import {
         nearestOfType,
-        stepGlyph,
-        stepText,
         walkMinutes,
         type NavGrid,
         type Place,
@@ -14,6 +13,7 @@
     } from "$lib/wayfinding/routing";
     import PlaceSearch from "$lib/components/shared/PlaceSearch.svelte";
     import PlaceDetails from "$lib/components/shared/PlaceDetails.svelte";
+    import RouteSteps from "$lib/components/shared/RouteSteps.svelte";
     import { useLocale } from "$lib/i18n/locale.svelte";
     let {
         places,
@@ -22,6 +22,7 @@
         from = $bindable(null),
         to = $bindable(null),
         picking = $bindable(false),
+        done = $bindable(0),
     }: {
         places: Place[];
         grid: NavGrid;
@@ -30,6 +31,8 @@
         to?: Place | null;
         /** True while the user is choosing a start point on the map. */
         picking?: boolean;
+        /** Steps of the route the visitor has ticked off. */
+        done?: number;
     } = $props();
     const locale = useLocale();
     // A picked spot is named after the corridor or path it is on.
@@ -40,6 +43,13 @@
               ? from.name
               : locale.t("spotOn", { name: walkwayAt(grid.pieces, from)?.name ?? locale.t("theMap") }),
     );
+    // A new route starts from its first step (where this finder isn't bound to a parent that does it).
+    let seen = untrack(() => route);
+    $effect(() => {
+        if (route === seen) return;
+        seen = route;
+        done = 0;
+    });
     // Kinds of place in this layout, e.g. "Toilets" or "Parking".
     let shortcuts = $derived(shortcutsFor(places, 5));
     function nearest(detail: string) {
@@ -114,16 +124,7 @@
                         }}>{locale.t("clear")}</button
                     >
                 </div>
-                <ol>
-                    {#each route.steps as step}<li>
-                            <span class="glyph">{stepGlyph(step)}</span>
-                            <span class="step"
-                                >{stepText(step.say, locale.lang)}{#if step.meters}<small
-                                        >{step.meters} m</small
-                                    >{/if}</span
-                            >
-                        </li>{/each}
-                </ol>
+                <RouteSteps {route} bind:done />
             </section>{:else}<p class="notice" role="status">
                 <b>{locale.t("noRouteFound")}</b> {locale.t("noRouteHint")}
             </p>{/if}
@@ -213,45 +214,6 @@
         font-size: 11px;
         color: #4b6f53;
         text-decoration: underline;
-    }
-    ol {
-        list-style: none;
-        margin: 10px 0 0;
-        padding: 0;
-    }
-    li {
-        display: flex;
-        gap: 10px;
-        padding: 8px 0;
-        border-bottom: 1px solid #eef2ea;
-        font-size: 12.5px;
-        color: #2f4336;
-        line-height: 1.4;
-    }
-    li:last-child {
-        border-bottom: 0;
-        font-weight: 600;
-    }
-    .glyph {
-        flex-shrink: 0;
-        width: 24px;
-        height: 24px;
-        display: grid;
-        place-items: center;
-        border-radius: 50%;
-        background: #e8f1f9;
-        color: #2f7fc4;
-        font-size: 13px;
-    }
-    li:last-child .glyph {
-        background: #fbe6e3;
-        color: #d24b3b;
-    }
-    .step small {
-        display: block;
-        color: #7b8c70;
-        font-size: 11px;
-        font-weight: 400;
     }
     .notice,
     .tip {

@@ -24,6 +24,7 @@
         width,
         height,
         route = null,
+        walked = 0,
         landmarks = [],
         destination = null,
         selectedLandmark = "",
@@ -37,6 +38,8 @@
         width: number;
         height: number;
         route?: Point[] | null;
+        /** The route point the visitor has walked to; the line behind it greys. */
+        walked?: number;
         landmarks?: Waypoint[];
         destination?: Place | null;
         selectedLandmark?: string;
@@ -258,31 +261,39 @@
                 x={(p.x + p.w / 2) * S}
                 y={p.y * S - 12}>{p.name}</text
             >{/each}
-        {#if route && route.length > 1}<polyline
+        {#if route && route.length > 1}{@const at = Math.max(0, Math.min(walked, route.length - 1))}{@const ahead =
+                route.slice(at)}<polyline
                 points={pts(route)}
                 fill="none"
                 stroke="#fff"
                 stroke-width="14"
                 stroke-linejoin="round"
                 stroke-linecap="round"
-            /><polyline
-                points={pts(route)}
-                fill="none"
-                stroke="#2f7fc4"
-                stroke-width="8"
-                stroke-linejoin="round"
-                stroke-linecap="round"
-            /><polyline
-                class="flow"
-                points={pts(route)}
-                fill="none"
-                stroke="#ffffffcc"
-                stroke-width="3"
-                stroke-dasharray="4 18"
-                stroke-linecap="round"
-            /><circle
-                cx={route[0].x * S}
-                cy={route[0].y * S}
+            />{#if at}<polyline
+                    points={pts(route.slice(0, at + 1))}
+                    fill="none"
+                    stroke="#a9b8ae"
+                    stroke-width="8"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                />{/if}{#if ahead.length > 1}<polyline
+                    points={pts(ahead)}
+                    fill="none"
+                    stroke="#2f7fc4"
+                    stroke-width="8"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                /><polyline
+                    class="flow"
+                    points={pts(ahead)}
+                    fill="none"
+                    stroke="#ffffffcc"
+                    stroke-width="3"
+                    stroke-dasharray="4 18"
+                    stroke-linecap="round"
+                />{/if}<circle
+                cx={route[at].x * S}
+                cy={route[at].y * S}
                 r="11"
                 fill="#2f7fc4"
                 stroke="white"

@@ -4,6 +4,8 @@ import { clearGroup } from "./dispose.ts";
 
 const BLUE = "#2f7fc4",
   RED = "#d24b3b",
+  /** The part already walked. */
+  WALKED = "#a9b8ae",
   /** Height of the route line: just above room floors. */
   LINE_Y = 0.46;
 
@@ -37,10 +39,17 @@ function pinMarker() {
   return pin;
 }
 
-/** The walking route drawn in 3D: a line with moving arrows, a start dot and a destination pin. */
+/**
+ * The walking route drawn in 3D: a line with moving arrows, a dot where the
+ * visitor is and a destination pin. The part already walked turns grey.
+ */
 export function createRouteOverlay() {
   const group = new THREE.Group();
   let path: { points: THREE.Vector3[]; lengths: number[]; total: number } | null = null;
+  // Line pieces ending at each route point (index i: from i - 1 to i), and the dot that marks where the visitor is.
+  let pieces: THREE.Mesh[][] = [],
+    here: THREE.Object3D[] = [],
+    walked = 0;
   let arrows: { mesh: THREE.Mesh; offset: number }[] = [];
   let pin: THREE.Object3D | null = null;
   let halo: THREE.Mesh | null = null;
@@ -50,11 +59,15 @@ export function createRouteOverlay() {
     clearGroup(group);
     path = null;
     arrows = [];
+    pieces = [];
+    here = [];
+    walked = 0;
     pin = halo = null;
     if (!route || route.length < 2) return null;
     const points = route.map((p) => new THREE.Vector3(p.x * 2, LINE_Y, p.y * 2)),
       blue = new THREE.MeshBasicMaterial({ color: BLUE }),
       lengths = [0];
+    pieces.push([]);
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1],
         b = points[i],
@@ -66,6 +79,7 @@ export function createRouteOverlay() {
       const joint = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.06, 20), blue.clone());
       joint.position.copy(b);
       group.add(line, joint);
+      pieces.push([line, joint]);
     }
     blue.dispose();
     const total = lengths[lengths.length - 1];
@@ -102,16 +116,31 @@ export function createRouteOverlay() {
     );
     halo.rotation.x = -Math.PI / 2;
     halo.position.copy(end).setY(0.5);
+    here = [start, ring];
     group.add(ring, start, pin, halo);
     return new THREE.Box3().setFromPoints(points);
   }
 
-  /** Arrows flow along the route, the pin bobs and its halo pulses. */
+  /** The visitor has walked to route point `at`: the line behind them greys and their dot moves on. */
+  function walk(at: number) {
+    if (!path || at === walked) return;
+    walked = Math.max(0, Math.min(at, path.points.length - 1));
+    pieces.forEach((meshes, i) => {
+      for (const m of meshes) (m.material as THREE.MeshBasicMaterial).color.set(i <= walked ? WALKED : BLUE);
+    });
+    for (const o of here) o.position.set(path.points[walked].x, o.position.y, path.points[walked].z);
+  }
+
+  /** Arrows flow along the route still to walk, the pin bobs and its halo pulses. */
   function animate(time: number) {
     if (!path) return;
-    const { points, lengths, total } = path;
+    const { points, lengths, total } = path,
+      behind = lengths[walked],
+      left = total - behind;
     for (const a of arrows) {
-      const s = (a.offset + time * 0.0016) % total;
+      a.mesh.visible = a.offset < left;
+      if (!a.mesh.visible) continue;
+      const s = behind + ((a.offset + time * 0.0016) % left);
       let i = 1;
       while (i < lengths.length - 1 && lengths[i] < s) i++;
       const t = (s - lengths[i - 1]) / (lengths[i] - lengths[i - 1] || 1),
@@ -128,5 +157,5 @@ export function createRouteOverlay() {
     }
   }
 
-  return { group, show, animate, dispose: () => clearGroup(group) };
+  return { group, show, walk, animate, dispose: () => clearGroup(group) };
 }

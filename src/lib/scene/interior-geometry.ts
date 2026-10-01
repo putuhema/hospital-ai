@@ -307,6 +307,20 @@ function furnish(box: Box, type: RoomAsset["type"], W: number, D: number, name: 
       box(name + " arm column", -0.2 - 0.45, floor + 1, back + 0.3, 0.12, 2, 0.12, STEEL, { metalness: 0.5 });
       box(name + " control desk", W / 2 - 0.4, floor + 0.37, D / 2 - 0.6, 0.5, 0.74, 0.8, WOOD);
       break;
+    case "perinatology": {
+      // A row of incubators along the back wall, under clear hoods, and a nurse's counter by the door.
+      const cots = Math.max(1, Math.floor((W - 0.3) / 0.9)),
+        z = back + 0.45;
+      for (let i = 0; i < cots; i++) {
+        const x = -W / 2 + 0.15 + (i + 0.5) * ((W - 0.3) / cots);
+        box(name + " incubator stand", x, floor + 0.35, z, 0.6, 0.7, 0.45, WHITE);
+        box(name + " incubator mattress", x, floor + 0.74, z, 0.5, 0.08, 0.35, "#f4d6dc");
+        const hood = box(name + " incubator hood", x, floor + 0.93, z, 0.62, 0.3, 0.47, "#d9eef2", { roughness: 0.1, cast: false });
+        Object.assign(hood.material, { transparent: true, opacity: 0.45 });
+      }
+      if (D > 2.4 && W > 2.6) counter(W / 2 - 0.55, D / 2 - 0.75, 0.8, 0.45, 0.9);
+      break;
+    }
     case "emergency":
       bed(-W / 3);
       bed(0);

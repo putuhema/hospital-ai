@@ -18,6 +18,7 @@
         patient: '<path d="M3 18V7M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5M6.5 11.5v.01"/>',
         waiting: '<path d="M7 20v-5h10v5M7 15V6h10v9M5 11h2m10 0h2"/>',
         surgery: '<circle cx="12" cy="9" r="5"/><path d="M12 14v7M8 21h8"/>',
+        perinatology: '<path d="M10 2h4M10.5 2v3m3-3v3M9 8a3 3 0 0 1 6 0v11a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2zM9 12h3m-3 3h3"/>',
     };
 
     export type IconFor = Pick<Place, "kind" | "detail" | "category">;
