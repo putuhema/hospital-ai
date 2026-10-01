@@ -16,6 +16,7 @@
         pieces,
         canvasWidth,
         canvasHeight,
+        greenery = $bindable(),
         hidden,
         faq,
         update,
@@ -34,6 +35,8 @@
         pieces: Piece[];
         canvasWidth: number;
         canvasHeight: number;
+        /** Trees and foliage around the campus on the visitor map. */
+        greenery: number;
         hidden: boolean;
         /** Hospital information, edited on its own page (/editor/info). */
         faq: FaqEntry[];
@@ -237,7 +240,7 @@
                 >Questions & answers and doctors' schedules · {answered(faq).length} live</span
             ></a
         >{/if}
-    <ProjectOverview {pieces} {canvasWidth} {canvasHeight} {onexportmodel} />
+    <ProjectOverview {pieces} {canvasWidth} {canvasHeight} bind:greenery {onexportmodel} />
 </aside>
 
 <style>

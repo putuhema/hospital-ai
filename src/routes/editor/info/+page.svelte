@@ -17,6 +17,7 @@
     // The hospital as saved in the database. This page changes only the
     // hospital information and the doctors, and saves it back.
     let title = $state("Greenfield Hospital"),
+        greenery = $state(1),
         grid = $state({ width: 24, height: 20 }),
         pieces: Piece[] = $state(structuredClone(starterPieces)),
         network: WalkingNetwork = $state(emptyNetwork()),
@@ -28,10 +29,10 @@
         toast = $state("");
 
     const snapshot = () =>
-        layoutSnapshot({ title, pieces, network, faq, width: grid.width, height: grid.height });
+        layoutSnapshot({ title, greenery, pieces, network, faq, width: grid.width, height: grid.height });
     function load(json: string) {
         const d = parseLayout(json);
-        ({ title, pieces, network, faq } = d);
+        ({ title, greenery, pieces, network, faq } = d);
         grid = { width: d.grid.width, height: d.grid.height };
     }
     // Saved to the database as it is typed; changes from the editor show up here too.

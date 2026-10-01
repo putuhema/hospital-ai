@@ -22,6 +22,7 @@
         presentation = false,
         pan = false,
         onmove,
+        greenery = 1,
         canvasWidth = 24,
         canvasHeight = 20,
         pieces,
@@ -42,6 +43,8 @@
         presentation?: boolean;
         pan?: boolean;
         onmove?: (id: number, x: number, y: number) => void;
+        /** Trees and foliage around the campus: 0 none, 1 normal, 2 lush. */
+        greenery?: number;
         canvasWidth?: number;
         canvasHeight?: number;
         pieces: Piece[];
@@ -99,7 +102,7 @@
         roomNames;
         insetLeft;
         insetBottom;
-        prefs.greenery;
+        greenery;
         canvasWidth;
         canvasHeight;
         pieces;
@@ -204,7 +207,7 @@
             stage.grid.visible = grid;
             rig.setOverhead(overhead);
             rig.frame(host.clientWidth, host.clientHeight, insetLeft, insetBottom);
-            scenery?.update(pieces, canvasWidth * 2, canvasHeight * 2, prefs.greenery, camera);
+            scenery?.update(pieces, canvasWidth * 2, canvasHeight * 2, greenery, camera);
             if (lastZoom !== zoom) {
                 rig.zoomBy(lastZoom / zoom);
                 lastZoom = zoom;
@@ -387,7 +390,7 @@
             x={hover.x}
             y={hover.y}
         />{/if}
-    <SceneOptions bind:prefs bind:cutaway bind:overhead routeShown={!!route?.length} {presentation} />
+    <SceneOptions bind:prefs bind:cutaway bind:overhead routeShown={!!route?.length} />
     <div class="orbit-help" class:gone={explored || !!route?.length || !!focusShape}>
         <span>{t(pan ? "dragToPan" : onmove ? "dragBuildings" : "dragToExplore")} · {t("zoomHelp")}</span>
     </div>

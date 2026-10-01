@@ -6,7 +6,6 @@
         cutaway = $bindable(),
         overhead = $bindable(),
         routeShown,
-        presentation,
     }: {
         prefs: DisplayPrefs;
         cutaway: boolean;
@@ -14,8 +13,6 @@
         overhead: boolean;
         /** Roofs are always off while a route is shown. */
         routeShown: boolean;
-        /** The map also offers the trees slider. */
-        presentation: boolean;
     } = $props();
     const { t } = useLocale();
     function toggle(pref: "buildings" | "rooms" | "info") {
@@ -45,27 +42,7 @@
         aria-pressed={prefs.info}
         title={t(prefs.info ? "hideHoverInfo" : "showHoverInfo")}
         onclick={() => toggle("info")}>{t("hoverInfo")}</button
-    >{#if presentation}<label class="greenery" title={t("treesLabel")}
-            >{t("trees")}<input
-                type="range"
-                min="0"
-                max="2"
-                step="0.25"
-                aria-label={t("treesLabel")}
-                aria-valuetext={t(
-                    prefs.greenery === 0
-                        ? "treesNone"
-                        : prefs.greenery < 1
-                          ? "treesFew"
-                          : prefs.greenery > 1
-                            ? "treesLush"
-                            : "treesNormal",
-                )}
-                bind:value={prefs.greenery}
-                onchange={() => savePrefs(prefs)}
-            /></label
-        >{/if}
-</div>
+    ></div>
 
 <style>
     .scene-options {
@@ -90,17 +67,5 @@
     .scene-options button[aria-pressed="true"] {
         background: #2d4a38;
         color: white;
-    }
-    .greenery {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 0 10px 0 8px;
-        font-size: 11px;
-        color: #52664a;
-    }
-    .greenery input {
-        width: 76px;
-        accent-color: #2d4a38;
     }
 </style>

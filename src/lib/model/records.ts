@@ -11,7 +11,7 @@ import type { Doctor } from "./doctors.ts";
 import type { PlaceInfo } from "./place-info.ts";
 import type { WalkingNetwork } from "../wayfinding/navigation.ts";
 
-export type Site = { title: string; width: number; height: number; network: WalkingNetwork };
+export type Site = { title: string; greenery: number; width: number; height: number; network: WalkingNetwork };
 export type BuildingRow = { pieceId: number; order: number; piece: Piece };
 /** `place` is "b:<piece>", "r:<piece>:<room>" or "n:<waypoint>". */
 export type PlaceRow = { place: string; info: Omit<PlaceInfo, "doctors"> };
@@ -31,6 +31,7 @@ const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 /** Splits a parsed layout into database rows. */
 export function splitLayout(layout: {
   title: string;
+  greenery: number;
   grid: { width: number; height: number };
   pieces: Piece[];
   network: WalkingNetwork;
@@ -69,7 +70,7 @@ export function splitLayout(layout: {
     edges: layout.network.edges,
   };
   return {
-    site: plain({ title: layout.title, width: layout.grid.width, height: layout.grid.height, network }),
+    site: plain({ title: layout.title, greenery: layout.greenery, width: layout.grid.width, height: layout.grid.height, network }),
     buildings,
     places,
     doctors,
@@ -101,6 +102,7 @@ export function joinLayout(r: Records) {
   };
   return plain({
     title: r.site.title,
+    greenery: r.site.greenery,
     pieces,
     network,
     grid: { width: r.site.width, height: r.site.height, tileMeters: 2 },

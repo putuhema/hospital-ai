@@ -38,6 +38,7 @@
     let network: WalkingNetwork = $state(emptyNetwork());
     let faq: FaqEntry[] = $state([]);
     let title = $state("Greenfield Hospital"),
+        greenery = $state(1),
         canvasWidth = $state(24),
         canvasHeight = $state(20);
     let canvas = $derived({ width: canvasWidth, height: canvasHeight });
@@ -91,13 +92,14 @@
     // Persistence: every change is saved to the database shortly after it is
     // made, and is live for visitors straight away.
     let loaded = false;
-    const snapshot = () => layoutSnapshot({ title, pieces, network, faq, width: canvasWidth, height: canvasHeight });
+    const snapshot = () => layoutSnapshot({ title, greenery, pieces, network, faq, width: canvasWidth, height: canvasHeight });
     function load(json: string) {
         const d = parseLayout(json);
         pieces = d.pieces;
         network = d.network;
         faq = d.faq;
         title = d.title;
+        greenery = d.greenery;
         canvasWidth = d.grid.width;
         canvasHeight = d.grid.height;
     }
@@ -202,7 +204,7 @@
 
     // Import and export.
     function download(format: "json" | "obj") {
-        const project = { title, pieces, network, faq, width: canvasWidth, height: canvasHeight };
+        const project = { title, greenery, pieces, network, faq, width: canvasWidth, height: canvasHeight };
         if (format === "json") {
             downloadFile(layoutJson(project), "application/json", fileName(title, "json"));
             notify("Layout exported");
@@ -379,6 +381,7 @@
                 {pieces}
                 {canvasWidth}
                 {canvasHeight}
+                bind:greenery
                 hidden={!propertiesOpen}
                 {faq}
                 {update}

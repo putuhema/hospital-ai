@@ -42,7 +42,7 @@ export const get = query({
       (["buildings", "places", "doctors", "faq"] as const).map((t) => rowsOf(ctx, t, h._id)),
     );
     const records = {
-      site: { title: h.title, width: h.width, height: h.height, network: h.network },
+      site: { title: h.title, greenery: h.greenery ?? 1, width: h.width, height: h.height, network: h.network },
       buildings: buildings.map(fields),
       places: places.map(fields),
       doctors: doctors.map(fields),
@@ -106,7 +106,7 @@ export const save = mutation({
     } catch {
       throw new ConvexError("Invalid layout");
     }
-    const { title, width, height, network } = records.site,
+    const { title, greenery, width, height, network } = records.site,
       updatedAt = Date.now();
     let h = await find(ctx, slug);
     if (!h && slug) throw new ConvexError("This hospital no longer exists");
@@ -121,6 +121,7 @@ export const save = mutation({
       const id = await ctx.db.insert("hospitals", {
         slug: candidate,
         title,
+        greenery,
         width,
         height,
         network,
@@ -129,8 +130,8 @@ export const save = mutation({
       });
       h = (await ctx.db.get(id))!;
     }
-    const site = stableJson({ title, width, height, network }) !==
-      stableJson({ title: h.title, width: h.width, height: h.height, network: h.network });
+    const site = stableJson({ title, greenery, width, height, network }) !==
+      stableJson({ title: h.title, greenery: h.greenery ?? 1, width: h.width, height: h.height, network: h.network });
     const changed = [
       site,
       await sync(ctx, "buildings", h._id, records.buildings, (r) => String(r.pieceId)),
@@ -140,7 +141,7 @@ export const save = mutation({
     ].some(Boolean);
     if (!changed) return { slug: h.slug, revision: h.revision };
     const revision = h.revision + 1;
-    await ctx.db.patch(h._id, { title, width, height, network, revision, updatedAt });
+    await ctx.db.patch(h._id, { title, greenery, width, height, network, revision, updatedAt });
     return { slug: h.slug, revision };
   },
 });

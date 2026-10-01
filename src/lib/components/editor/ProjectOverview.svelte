@@ -6,11 +6,14 @@
         pieces,
         canvasWidth,
         canvasHeight,
+        greenery = $bindable(),
         onexportmodel,
     }: {
         pieces: Piece[];
         canvasWidth: number;
         canvasHeight: number;
+        /** Trees and foliage around the campus on the visitor map: 0 none, 1 normal, 2 lush. */
+        greenery: number;
         onexportmodel: () => void;
     } = $props();
     const count = (n: number) => n.toString().padStart(2, "0");
@@ -21,6 +24,9 @@
     let paths = $derived(pieces.filter(isPath).length);
     let parking = $derived(pieces.filter(isParking).length);
     let gates = $derived(pieces.filter((p) => isGate(p) || isBarrier(p)).length);
+    let treeAmount = $derived(
+        greenery === 0 ? "None" : greenery < 1 ? "Few" : greenery > 1 ? "Lush" : "Normal",
+    );
     let rooms = $derived(pieces.reduce((n, p) => n + (p.roomAssets?.length ?? 0), 0));
 </script>
 
@@ -43,6 +49,11 @@
     </div>
     <p>{Math.round(used)}% of available grid used</p>
 </div>
+<label class="scenery">
+    <span><b>Trees around the campus</b>{treeAmount}</span>
+    <input type="range" min="0" max="2" step="0.25" aria-label="Trees around the campus" aria-valuetext={treeAmount} bind:value={greenery} />
+    <small>Saved with the map and shown to visitors.</small>
+</label>
 <div class="blender-note">
     <span class="blender-logo">◉</span>
     <div>

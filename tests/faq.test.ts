@@ -41,7 +41,7 @@ test('questions are grouped by topic, in topic order', () => {
 });
 
 test('hospital information is saved, exported and published with the map', () => {
-  const project = { title: 'Greenfield Hospital', pieces: starterPieces, network: emptyNetwork(), width: 24, height: 20, faq: [visiting] };
+  const project = { title: 'Greenfield Hospital', greenery: 1, pieces: starterPieces, network: emptyNetwork(), width: 24, height: 20, faq: [visiting] };
   assert.deepEqual(parseLayout(layoutSnapshot(project)).faq, [visiting]);
   assert.deepEqual(parseLayout(layoutJson(project)).faq, [visiting]);
   // Layouts saved before there was hospital information.

@@ -369,6 +369,10 @@ export const starterPieces: Piece[] = [
   }),
 ];
 export const STORAGE_KEY = "hospital-layout";
+/** Trees and foliage around the campus on the map: 0 none, 1 normal, 2 lush. */
+export const parseGreenery = (value: unknown) =>
+  typeof value === "number" && value >= 0 && value <= 2 ? value : 1;
+
 export function parseLayout(text: string) {
   const d = JSON.parse(text);
   const width = d.grid?.width ?? 24,
@@ -468,6 +472,7 @@ export function parseLayout(text: string) {
   return {
     network,
     title: typeof d.title === "string" ? d.title : "Hospital map",
+    greenery: parseGreenery(d.greenery),
     pieces: d.pieces as Piece[],
     grid: { width, height, tileMeters: 2 },
     faq: parseFaq(d.faq),

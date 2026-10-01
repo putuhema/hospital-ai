@@ -13,7 +13,6 @@
         chat,
         places,
         suggestions,
-        title,
         context,
         shown = null,
         here = null,
@@ -25,7 +24,6 @@
         places: Place[];
         /** Questions to start with. */
         suggestions: string[];
-        title: string;
         /** Where the visitor is, for "nearest" and routes. */
         context: () => ReplyContext;
         /** The place on the map now, so its card says so. */
@@ -96,24 +94,12 @@
     ];
     const PIN = '<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>';
     const iconOf = (q: string) => ICONS.find(([re]) => re.test(q))?.[1] ?? PIN;
-    // "Selasa, 30 September", as a front desk would greet you.
-    let today = $derived(
-        new Date().toLocaleDateString(locale.lang === "id" ? "id-ID" : "en-GB", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-        }),
-    );
 </script>
 
 <section class="chat" aria-label={t("askAbout")}>
     <div class="log" role="log" aria-busy={chat.busy} bind:this={log} onscroll={scrolled}>
         {#if !chat.messages.length}<div class="welcome">
-                <p class="eyebrow" in:rise={{ y: 6 }}><span class="dot"></span>{today}</p>
-                <h2 in:rise={{ delay: 40, y: 10, duration: 520 }}>
-                    {t("greetingTitle", { title })}
-                    <em>{t("greetingAsk")}</em>
-                </h2>
+                <h2 in:rise={{ y: 10, duration: 520 }}>{t("greetingAsk")}</h2>
                 <p class="lead" in:rise={{ delay: 120, duration: 480 }}>{t("greetingLead")}</p>
                 {#if suggestions.length}<p class="label" in:rise={{ delay: 180 }}>{t("tryAsking")}</p>
                     <div class="signs">
@@ -238,45 +224,20 @@
         flex-direction: column;
         padding: 12px 0 4px;
     }
-    .eyebrow {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin: 0 0 14px;
-        font-size: 11.5px;
-        font-weight: 600;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--forest);
-    }
-    .dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--signal);
-        box-shadow: 0 0 0 4px #e0663d22;
-    }
     h2 {
         margin: 0;
         font-family: var(--display);
         /* Smaller on narrow or short screens, so the welcome fits above the composer. */
-        font-size: clamp(26px, min(3.1vw, 4.3vh), 40px);
-        line-height: 1.06;
-        font-weight: 480;
-        font-variation-settings: "opsz" 96;
-        letter-spacing: -0.022em;
+        font-size: clamp(24px, min(2.6vw, 3.6vh), 32px);
+        line-height: 1.15;
+        font-weight: 500;
+        font-variation-settings: "opsz" 72;
+        letter-spacing: -0.015em;
         color: var(--ink);
         text-wrap: balance;
     }
-    h2 em {
-        display: block;
-        margin-top: 4px;
-        font-style: italic;
-        font-weight: 400;
-        color: var(--forest-2);
-    }
     .lead {
-        margin: 14px 0 0;
+        margin: 10px 0 0;
         max-width: 36ch;
         font-size: 15px;
         line-height: 1.55;

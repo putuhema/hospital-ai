@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { starterPieces, type Piece } from '../src/lib/model/layout.ts';
+import { parseLayout, starterPieces, type Piece } from '../src/lib/model/layout.ts';
 import { emptyNetwork } from '../src/lib/wayfinding/navigation.ts';
 import {
   anchoredLayout,
@@ -87,9 +87,12 @@ test('entrances must fit the wall and not clash with a door', () => {
 });
 
 test('exports describe the project', () => {
-  const project = { title: 'Greenfield Hospital', pieces: [box()], network: emptyNetwork(), width: 24, height: 20 };
+  const project = { title: 'Greenfield Hospital', greenery: 1.5, pieces: [box()], network: emptyNetwork(), width: 24, height: 20 };
   const saved = JSON.parse(layoutSnapshot(project));
   assert.deepEqual(saved.grid, { width: 24, height: 20, tileMeters: 2 });
+  // The trees around the campus are part of the map, set in the editor.
+  assert.equal(parseLayout(layoutSnapshot(project)).greenery, 1.5);
+  assert.equal(parseLayout(JSON.stringify({ ...saved, greenery: undefined })).greenery, 1);
   assert.equal(JSON.parse(layoutJson(project)).version, 1);
   const obj = layoutObj(project.pieces);
   // A box: 8 vertices, floor + roof + 4 walls.

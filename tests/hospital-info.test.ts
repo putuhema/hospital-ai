@@ -20,7 +20,7 @@ test("a clinic's doctors are saved with the layout, keeping its other details", 
   // The doctor still being written stays while editing…
   assert.equal(info?.doctors?.length, 2);
   const { pieces, network } = withInfo(starterPieces, emptyNetwork(), room.id, info);
-  const saved = parseLayout(layoutSnapshot({ title: 'H', pieces, network, width: 24, height: 20 }));
+  const saved = parseLayout(layoutSnapshot({ title: 'H', greenery: 1, pieces, network, width: 24, height: 20 }));
   // …and is dropped when the layout is loaded.
   assert.deepEqual(clinics(saved.pieces).find((p) => p.id === room.id)?.info, { phone: '123', doctors: [sari] });
   assert.deepEqual(withDoctors(info, []), { phone: '123' });

@@ -25,6 +25,7 @@
         title,
         pieces,
         network,
+        greenery = 1,
         canvasWidth,
         canvasHeight,
         faq = [],
@@ -36,6 +37,8 @@
         title: string;
         pieces: Piece[];
         network: WalkingNetwork;
+        /** Trees and foliage around the campus, set in the editor. */
+        greenery?: number;
         canvasWidth: number;
         canvasHeight: number;
         /** Hospital information: general questions the map can't answer. */
@@ -320,6 +323,7 @@
                     active={null}
                     grid={false}
                     zoom={100}
+                    {greenery}
                     {canvasWidth}
                     {canvasHeight}
                     route={route?.points ?? null}
@@ -413,7 +417,6 @@
                     {chat}
                     places={placeList}
                     suggestions={starters}
-                    {title}
                     context={chatContext}
                     shown={highlight?.id ?? null}
                     {here}

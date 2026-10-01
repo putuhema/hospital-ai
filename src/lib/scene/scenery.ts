@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Piece } from "../model/layout.ts";
 
 // Calm landscape around the campus: gradient sky, drifting clouds, a meadow
-// that fades into haze, low-poly trees, a perimeter footpath and a pond.
+// that fades into haze, and low-poly trees.
 
 export const SKY = { top: "#6f9fcb", horizon: "#e2ebee", haze: "#dde7e6" };
 const GREENS = ["#7fa36a", "#6d9660", "#8fb178", "#5f8a5a", "#9bbd7f", "#86a877"];
@@ -133,19 +133,6 @@ export function createScenery(scene: THREE.Scene) {
   const cones = make(coneGeo, "#ffffff");
   const bushes = make(bushGeo, "#ffffff");
 
-  const pathMaterial = new THREE.MeshStandardMaterial({ color: "#e7e2d4", roughness: 1 });
-  const water = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 48),
-    new THREE.MeshStandardMaterial({ color: "#8fbccb", roughness: 0.12, metalness: 0.15 }),
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = 0.02;
-  water.receiveShadow = true;
-  const shore = new THREE.Mesh(new THREE.CircleGeometry(1, 48), pathMaterial);
-  shore.rotation.x = -Math.PI / 2;
-  shore.position.y = -0.02;
-  root.add(water, shore);
-
   let signature = "";
   const fog = new THREE.Fog(SKY.haze, 200, 600);
   scene.fog = fog;
@@ -180,12 +167,6 @@ export function createScenery(scene: THREE.Scene) {
     hills.scale.setScalar((hazeFar * 0.85) / 960);
 
     // No frame around the campus: the meadow runs straight under it.
-    const pond = { x: -18 - extent * 0.15, z: D + 16 + extent * 0.1, r: 9 + extent * 0.06 };
-    water.position.set(pond.x, 0.02, pond.z);
-    water.scale.setScalar(pond.r);
-    shore.position.set(pond.x, -0.02, pond.z);
-    shore.scale.setScalar(pond.r + 1.4);
-
     const rand = random(W * 131 + D * 17);
     const blocked = pieces.map((p) => ({
       x0: p.x * 2 - 2.5,
@@ -195,7 +176,6 @@ export function createScenery(scene: THREE.Scene) {
     }));
     const spots: { x: number; z: number; kind: number }[] = [];
     const free = (x: number, z: number) =>
-      Math.hypot(x - pond.x, z - pond.z) > pond.r + 3 &&
       !blocked.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1);
     // Countryside around the campus, thinning out with distance.
     // Wider spacing on big canvases keeps the tree count within budget.

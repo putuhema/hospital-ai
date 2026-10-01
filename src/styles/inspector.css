@@ -180,6 +180,32 @@ h3 span {
     color: #a3ad95;
     margin: 8px 0 17px;
 }
+.scenery {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top: 1px solid #e5e9df;
+    padding: 17px 0;
+    font-size: 10px;
+    color: #939d87;
+}
+.scenery span {
+    display: flex;
+    justify-content: space-between;
+}
+.scenery b {
+    color: #5c6d4e;
+    font-size: 11px;
+    font-weight: 500;
+}
+.scenery input {
+    width: 100%;
+    accent-color: #2d4a38;
+}
+.scenery small {
+    font-size: 9px;
+    color: #a3ad95;
+}
 .blender-note {
     display: flex;
     gap: 8px;

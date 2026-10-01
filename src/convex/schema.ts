@@ -10,6 +10,8 @@ export default defineSchema({
   hospitals: defineTable({
     slug: v.string(),
     title: v.string(),
+    /** Trees and foliage around the campus on the map: 0 none, 1 normal, 2 lush. */
+    greenery: v.optional(v.number()),
     width: v.number(),
     height: v.number(),
     /** Waypoints and the paths between them (their details are in `places`). */

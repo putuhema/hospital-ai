@@ -35,6 +35,7 @@
         title={layout.title}
         pieces={layout.pieces}
         network={layout.network}
+        greenery={layout.greenery}
         canvasWidth={layout.grid.width}
         canvasHeight={layout.grid.height}
         faq={layout.faq}

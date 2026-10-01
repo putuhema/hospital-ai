@@ -18,12 +18,13 @@ function hospital() {
     { question: 'Jam besuk?', answer: '10.00–12.00', topic: 'besuk' as const },
     { question: 'BPJS?', answer: 'Bawa kartu', topic: 'bpjs' as const },
   ];
-  return parseLayout(layoutSnapshot({ title: 'RS Sanglah', pieces, network, faq, width: 24, height: 20 }));
+  return parseLayout(layoutSnapshot({ title: 'RS Sanglah', greenery: 0.5, pieces, network, faq, width: 24, height: 20 }));
 }
 
 test('a hospital is stored as site, buildings, places, doctors and questions', () => {
   const r = splitLayout(hospital());
   assert.equal(r.site.title, 'RS Sanglah');
+  assert.equal(r.site.greenery, 0.5);
   assert.equal(r.buildings.length, starterPieces.length);
   assert.ok(r.buildings.every((b) => !('info' in b.piece) && (b.piece.roomAssets ?? []).every((room) => !('info' in room))));
   assert.ok(r.site.network.nodes.every((n) => !('info' in n)));
