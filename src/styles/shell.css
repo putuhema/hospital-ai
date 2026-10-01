@@ -96,6 +96,14 @@
     color: #7b8576;
     font-size: 12px;
 }
+.header-actions {
+    display: flex;
+    gap: 6px;
+}
+.header-actions .help {
+    padding: 6px 8px;
+    border-radius: 6px;
+}
 .project-bar {
     padding: 25px 30px;
     display: flex;

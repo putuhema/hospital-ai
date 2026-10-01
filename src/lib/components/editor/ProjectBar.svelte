@@ -2,6 +2,8 @@
     import Icon from "./Icon.svelte";
     import ShareMenu from "./ShareMenu.svelte";
     import type { SaveStatus } from "$lib/editor/saving.svelte";
+    import { goto } from "$app/navigation";
+    import { authClient } from "$lib/auth-client";
     let {
         title = $bindable(),
         exportOpen = $bindable(false),
@@ -58,7 +60,17 @@
     <div class="breadcrumb">
         <b class="product">P-Map Editor</b> <span>/</span> {title || "Untitled map"}
     </div>
-    <button class="help" onclick={onguide}>? <span>Quick guide</span></button>
+    <div class="header-actions">
+        <button class="help" onclick={onguide}>? <span>Quick guide</span></button><a class="help" href="/editor/accounts"
+            >Accounts</a
+        ><button
+            class="help"
+            onclick={async () => {
+                await authClient.signOut();
+                goto("/login");
+            }}>Sign out</button
+        >
+    </div>
 </header>
 <div class="project-bar">
     <div>

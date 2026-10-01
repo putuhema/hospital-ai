@@ -4,8 +4,7 @@ What's done, and what can still be improved, for hospital visitors and for the p
 
 ## 1. Before going public
 
-- [ ] **Editor sign-in (next).** Anyone who finds the address can change or wipe the hospital in the database (`hospital.save` takes no credentials). Add sign-in, or at least an editor passcode checked by Convex.
-- [ ] **Production deploy.** `npx convex deploy`; set `PUBLIC_CONVEX_URL`, `ZAI_API_KEY` (or `ANTHROPIC_API_KEY`), `CHAT_LIMIT_SECRET` (also on the Convex deployment) and `HOSPITAL_TIME_ZONE` on the host; choose an adapter instead of `adapter-auto`.
+- [ ] **Production deploy (next).** `npx convex deploy`; set `BETTER_AUTH_SECRET` and `SITE_URL` (the public address) on the production deployment and create the first admin at `/login`; set `PUBLIC_CONVEX_URL`, `PUBLIC_CONVEX_SITE_URL`, `ZAI_API_KEY` (or `ANTHROPIC_API_KEY`), `CHAT_LIMIT_SECRET` (also on the Convex deployment) and `HOSPITAL_TIME_ZONE` on the host; choose an adapter instead of `adapter-auto`.
 - [ ] **Real visitor addresses.** Check the host passes the visitor's IP to `getClientAddress()`; behind some proxies every visitor looks the same and they share one chat limit.
 - [ ] **Clean up.** Delete the leftover test document in the old `maps` table (Convex dashboard). Remove the leading space in `ANTHROPIC_API_KEY` in `.env.local`.
 - [ ] **Decide whether chats are stored.** Today nothing is kept except anonymous counts and 10-minute answer caches.
@@ -38,12 +37,13 @@ What's done, and what can still be improved, for hospital visitors and for the p
 
 ## 6. Editor
 
-- [ ] **Shorter doctor schedules page.** Every clinic repeats the same help text and every doctor is fully expanded with a 7-day grid; show one line per doctor ("Sen–Jum 08.00–12.00") that opens on click.
-- [ ] **Two editors at once.** The last save wins while both have unsaved changes; warn, or merge per row.
-- [ ] **Visitor map UI.** Revisit the paper gradient over the map (not liked).
+- [x] **Shorter doctor schedules page.** One line per doctor (name, specialty, "Mon–Fri 08:00–12:00", upcoming leave) that opens to edit; the help text is said once at the top.
+- [x] **Two editors at once.** A save names the version it started from and is refused if someone saved since; the editor then combines both per row (site settings, each building, waypoint, path and question, `lib/editor/merge.ts`) and saves. When both changed the same building, this editor's version is kept and the toast names it.
+- [x] **Visitor map UI.** The haze over the far side of the map starts much further out and thickens gently, so the campus and the fields around it stay clear (there was no CSS gradient left).
 
 ## Done
 
+- [x] **Editor sign-in.** Signing in is at `/login` (Better Auth in Convex, email and password, admin plugin). `/editor` and its pages are only served to accounts with the `admin` role; anyone else is sent to `/login`, and `hospital.save` checks the same. The first account on a deployment signs up at `/login` and becomes admin; after that admins add, reset and remove accounts at `/editor/accounts`.
 - [x] **Database as the source of truth.** The editor and _Hospital info_ save every change to Convex (hospitals, buildings, places, doctors, questions & answers as rows), live for visitors at `/` and `/m/<slug>`; no publish step. _Share_ gives the public link.
 - [x] **"You are here" QR signs.** _Share → Print "You are here" QR signs_: an A4 sign per spot with the start preset.
 - [x] **Search by what people say.** Synonyms in English and Indonesian, other names and doctors per destination, typo tolerance.

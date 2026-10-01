@@ -35,7 +35,16 @@ Directions are generated from the layout — there are no paths to draw. Every b
 
 The hospital lives in [Convex](https://convex.dev), the source of truth for the app: the editor and *Hospital info* save each change shortly after it is made (`src/lib/editor/saving.svelte.ts`), open maps update live, and a change saved in another tab or on another device shows up in the editor. It is stored as rows (`src/convex/schema.ts`, split and joined by `src/lib/model/records.ts`): the site and walking paths (`hospitals`), one row per piece (`buildings`), place details (`places`), doctors' schedules (`doctors`) and the questions & answers (`faq`). `hospital.save` validates with the same `parseLayout` the app uses and writes only what changed. The first editor opened on an empty database moves that browser's saved layout in.
 
-Visitors open the hospital at `/` or at its public address `/m/<slug>` (**Share** in the editor). **Share route** copies the link with the route (`/m/<slug>?from=…&to=…`), which is what QR codes point to. Anyone can save for now: add sign-in or a passcode before going public.
+Visitors open the hospital at `/` or at its public address `/m/<slug>` (**Share** in the editor). **Share route** copies the link with the route (`/m/<slug>?from=…&to=…`), which is what QR codes point to.
+
+Only admins can open the editor or save. `/editor` and its pages check on the server that an account with the `admin` role is signed in (`src/routes/editor/+layout.server.ts`) and send anyone else to `/login`; `hospital.save` refuses anyone else. Accounts are email and password, kept in Convex by [Better Auth](https://better-auth.com) with its admin plugin (`src/convex/auth.ts`, reached through `/api/auth`). On a new deployment the first person to open `/login` creates the first admin account; after that nobody can sign up, and admins add, reset and remove accounts under **Accounts** in the editor (`/editor/accounts`). Better Auth's tables are installed locally in `src/convex/betterAuth/`: after changing its options in `auth.ts`, regenerate them there with `npx auth generate --output generatedSchema.ts`. Each deployment needs:
+
+```sh
+npx convex env set BETTER_AUTH_SECRET "$(openssl rand -base64 32)"
+npx convex env set SITE_URL http://localhost:5173   # the app's address
+```
+
+The app reads `PUBLIC_CONVEX_SITE_URL` (written by `npx convex dev`) to pass sign-in on to Convex. Visitors never sign in. Changing `BETTER_AUTH_SECRET` later makes the stored token key unreadable: delete the `jwks` row of the betterAuth component in the Convex dashboard and a new one is made.
 
 ### The assistant
 
@@ -59,7 +68,7 @@ Questions are limited so nobody can run up the bill (`src/lib/assistant/limits.t
 
 **Share → Print "You are here" QR signs** opens `/editor/signs`: one A4 sign per spot, with the spot's name, a plan with a *You are here* marker, and a QR code to `/m/<slug>?from=<spot>`, so visitors who scan it only choose where they're going. Landmarks, reception desks, waiting areas and stairs are suggested (every building when there are none); tick any other room or building. Signs are built from the hospital in the database, which is what phones open, and the chosen spots are remembered per map (`src/lib/signs.ts`).
 
-To deploy, run `npx convex deploy` and set `PUBLIC_CONVEX_URL` (and `ANTHROPIC_API_KEY`) in the hosting environment.
+To deploy, run `npx convex deploy`, set `PUBLIC_CONVEX_URL`, `PUBLIC_CONVEX_SITE_URL` (and `ANTHROPIC_API_KEY`) in the hosting environment, and `BETTER_AUTH_SECRET` and `SITE_URL` (the public address) on the production deployment; then create the first admin at `/login`.
 
 Use **Canvas size** to set 8–100 tiles per side (2 m per tile). Layouts export and import as JSON.
 

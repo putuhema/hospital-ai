@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { dateOf, MAX_DOCTORS, type Doctor, type Leave } from "$lib/model/doctors";
+    import { dateOf, MAX_DOCTORS, shortDate, specialtyOf, type Doctor, type Leave } from "$lib/model/doctors";
+    import { hoursLines } from "$lib/model/hours";
     import HoursRules from "./HoursRules.svelte";
     let {
         doctors,
@@ -20,18 +21,38 @@
         const today = dateOf(new Date());
         set(i, { leave: [...(doctors[i].leave ?? []), { from: today, to: today }] });
     }
+    // One doctor is open for editing at a time; the others are a line each.
+    let open = $state<number | null>(null);
+    const today = dateOf(new Date());
+    /** Leave that hasn't ended, e.g. "Leave 3 Oct – 5 Oct". */
+    function leaveNote(d: Doctor) {
+        const next = d.leave?.find((l) => l.to >= today);
+        if (!next) return "";
+        return `Leave ${shortDate(next.from, "en")}${next.to === next.from ? "" : ` – ${shortDate(next.to, "en")}`}`;
+    }
+    function add() {
+        onchange([...doctors, { name: "", hours: [{ days: [1, 2, 3, 4, 5], open: "08:00", close: "12:00" }] }]);
+        open = doctors.length;
+    }
 </script>
 
 <div class="doctors-editor">
-    <p class="hint">
-        Practice schedules (jadwal praktik) shown to visitors with this place, and what the assistant answers
-        from. Leave (cuti) hides those days and says when the doctor is back.
-    </p>
-    {#each doctors as d, i}<div class="doctor">
+    {#each doctors as d, i}{#if open !== i}<button class="summary" aria-expanded="false" onclick={() => (open = i)}>
+                <b>{d.name || "New doctor"}</b>
+                <span
+                    >{[specialtyOf(d), hoursLines(d.hours).join(", ") || "No practice hours"].filter(Boolean).join(" · ")}</span
+                >
+                {#if leaveNote(d)}<em>{leaveNote(d)}</em>{/if}
+            </button>{:else}<div class="doctor">
             <div class="head">
-                <small>Doctor {i + 1}</small>
-                <button class="remove" aria-label="Remove {d.name || `doctor ${i + 1}`}" onclick={() => onchange(doctors.filter((_, j) => j !== i))}
-                    >×</button
+                <button class="done" aria-expanded="true" onclick={() => (open = null)}>Done</button>
+                <button
+                    class="remove"
+                    aria-label="Remove {d.name || `doctor ${i + 1}`}"
+                    onclick={() => {
+                        onchange(doctors.filter((_, j) => j !== i));
+                        open = null;
+                    }}>×</button
                 >
             </div>
             <input
@@ -67,21 +88,46 @@
                     >
                 </div>{/each}
             <button class="link" disabled={(d.leave?.length ?? 0) >= 20} onclick={() => addLeave(i)}>+ Add leave (cuti)</button>
-        </div>{/each}
-    <button
-        class="btn add"
-        disabled={doctors.length >= MAX_DOCTORS}
-        onclick={() => onchange([...doctors, { name: "", hours: [{ days: [1, 2, 3, 4, 5], open: "08:00", close: "12:00" }] }])}
-        >+ Add doctor</button
-    >
+        </div>{/if}{/each}
+    <button class="link add" disabled={doctors.length >= MAX_DOCTORS} onclick={add}>+ Add doctor</button>
 </div>
 
 <style>
-    .hint {
+    .summary {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 2px 10px;
+        width: 100%;
+        padding: 8px 10px;
+        margin-bottom: 4px;
+        border: 1px solid #e4e9de;
+        border-radius: 8px;
+        background: white;
+        text-align: left;
+    }
+    .summary:hover {
+        border-color: #c9d4bf;
+    }
+    .summary b {
+        font-size: 12px;
+        font-weight: 600;
+        color: #2c3d2f;
+    }
+    .summary span {
+        grid-column: 1;
         font-size: 11px;
         color: #738466;
-        line-height: 1.5;
-        margin: 0 0 10px;
+    }
+    .summary em {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: center;
+        font-style: normal;
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 10px;
+        background: #fff2dd;
+        color: #785e33;
     }
     .doctor {
         border: 1px solid #dfe6d8;
@@ -94,10 +140,12 @@
         display: flex;
         align-items: center;
     }
-    .head small {
+    .done {
         flex: 1;
-        font-size: 10px;
-        color: #738466;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        color: #3f6b4e;
     }
     input {
         display: block;
@@ -138,9 +186,6 @@
         color: #3f6b4e;
     }
     .add {
-        width: 100%;
-        justify-content: center;
-        font-size: 11px;
-        margin-bottom: 8px;
+        margin-top: 2px;
     }
 </style>

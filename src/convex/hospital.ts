@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import type { Doc, Id } from "./_generated/dataModel";
 import { parseLayout } from "../lib/model/layout.ts";
 import { joinLayout, splitLayout, stableJson, type Records } from "../lib/model/records.ts";
+import { requireEditor } from "./auth";
 
 /** Comfortably below what one save can write. */
 const MAX_LAYOUT = 800_000;
@@ -94,11 +95,15 @@ async function sync<T extends Rows>(
 
 /**
  * Save the hospital from the editor. It is live for visitors straight away.
- * The first save creates the hospital and its public address.
+ * The first save creates the hospital and its public address. `base` is the
+ * revision the editor started from: when someone else saved since, nothing is
+ * written and it fails with "conflict", so the editor can combine both first.
+ * Only signed-in editors may save (auth.ts).
  */
 export const save = mutation({
-  args: { layout: v.string(), slug: v.optional(v.string()) },
-  handler: async (ctx, { layout, slug }) => {
+  args: { layout: v.string(), slug: v.optional(v.string()), base: v.optional(v.number()) },
+  handler: async (ctx, { layout, slug, base }) => {
+    await requireEditor(ctx);
     if (layout.length > MAX_LAYOUT) throw new ConvexError("The hospital is too large to save");
     let records: Records;
     try {
@@ -140,6 +145,8 @@ export const save = mutation({
       await sync(ctx, "faq", h._id, records.faq, (r) => String(r.order)),
     ].some(Boolean);
     if (!changed) return { slug: h.slug, revision: h.revision };
+    // Thrown after the writes, so they are undone with it.
+    if (base !== undefined && base !== h.revision) throw new ConvexError("conflict");
     const revision = h.revision + 1;
     await ctx.db.patch(h._id, { title, greenery, width, height, network, revision, updatedAt });
     return { slug: h.slug, revision };

@@ -11,6 +11,7 @@
     import DoctorsEditor from "$lib/components/editor/DoctorsEditor.svelte";
     import ShareMenu from "$lib/components/editor/ShareMenu.svelte";
     import { HospitalStore } from "$lib/editor/saving.svelte";
+    import { mergeMessage } from "$lib/editor/merge";
 
     type Section = TopicId | "doctors";
 
@@ -36,7 +37,7 @@
         grid = { width: d.grid.width, height: d.grid.height };
     }
     // Saved to the database as it is typed; changes from the editor show up here too.
-    const store = new HospitalStore(snapshot, load);
+    const store = new HospitalStore(snapshot, load, (merged) => merged && notify(mergeMessage(merged.conflicts)));
     const status = {
         loading: "Loading…",
         saving: "Saving…",
@@ -127,7 +128,9 @@
                 <h2>Jadwal dokter</h2>
                 <p>
                     Doctors' practice days and hours per clinic, and when they are on leave (cuti). Visitors see
-                    the schedule when they choose the clinic, and find it by the doctor's name or specialty.
+                    the schedule when they choose the clinic, and find it by the doctor's name or specialty; the
+                    assistant answers from it. Leave hides those days and says when the doctor is back. Click a
+                    doctor to edit.
                 </p>
             </header>
             {#if all.length}

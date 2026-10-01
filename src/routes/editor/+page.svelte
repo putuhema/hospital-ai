@@ -19,6 +19,7 @@
     import { downloadFile, fileName, layoutJson, layoutObj, layoutSnapshot } from "$lib/editor/export";
     import { History } from "$lib/editor/history.svelte";
     import { HospitalStore } from "$lib/editor/saving.svelte";
+    import { mergeMessage } from "$lib/editor/merge";
     import HospitalScene from "$lib/components/shared/HospitalScene.svelte";
     import WayfindingPanel from "$lib/components/editor/WayfindingPanel.svelte";
     import EditorRail from "$lib/components/editor/EditorRail.svelte";
@@ -104,7 +105,10 @@
         canvasHeight = d.grid.height;
     }
     // The hospital information page, or another device, saved a change.
-    const store = new HospitalStore(snapshot, load, () => history.clear());
+    const store = new HospitalStore(snapshot, load, (merged) => {
+        history.clear();
+        if (merged) notify(mergeMessage(merged.conflicts));
+    });
     async function save() {
         await store.save();
         notify(store.status === "failed" ? store.problem : "Saved — live for visitors");
