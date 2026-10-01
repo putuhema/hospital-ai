@@ -58,12 +58,12 @@ export const get = query({
   },
 });
 
-/** Which version of the hospital is saved, without its contents: for caches that keep the rest. */
+/** Which version of the hospital is saved and its name, without its contents: for caches that keep the rest. */
 export const version = query({
   args: { slug: v.optional(v.string()) },
   handler: async (ctx, { slug }) => {
     const h = await find(ctx, slug);
-    return h && { slug: h.slug, revision: h.revision };
+    return h && { slug: h.slug, title: h.title, revision: h.revision };
   },
 });
 

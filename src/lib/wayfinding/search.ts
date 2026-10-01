@@ -1,5 +1,6 @@
 import { categories } from "../model/categories.ts";
 import type { Place } from "./routing.ts";
+import { specialtyOf } from "../model/doctors.ts";
 
 // Search the way visitors ask: "x-ray" finds Radiology, "blood test" the
 // Laboratory, "dr sari" her clinic (from its doctors or other names), and
@@ -12,6 +13,7 @@ const SYNONYMS: string[][] = [
   ["toilets", "toilet", "wc", "restroom", "bathroom", "loo", "lavatory", "washroom", "kamar mandi", "kamar kecil"],
   ["pharmacy", "chemist", "drugstore", "medicine", "medication", "prescription", "drugs", "apotek", "apotik", "farmasi", "obat", "resep"],
   ["emergency", "a and e", "er", "casualty", "urgent care", "ugd", "igd", "gawat darurat", "darurat"],
+  ["cashier", "kasir", "bayar", "pembayaran", "payment", "pay", "billing"],
   ["reception", "front desk", "registration", "check in", "admissions", "pendaftaran", "resepsionis", "loket"],
   ["operating theatre", "operating room", "surgery", "operation", "theatre", "kamar operasi", "bedah", "operasi"],
   ["waiting area", "waiting room", "ruang tunggu"],
@@ -114,7 +116,7 @@ function fields(p: Place): Field[] {
     ...field(p.name, 10),
     ...(p.info?.keywords ?? []).flatMap((k) => field(k, 8, k)),
     // Doctors who practise here: "dr sari" or "poli anak" finds their clinic.
-    ...(p.info?.doctors ?? []).flatMap((d) => [...field(d.name, 8, d.name), ...field(d.specialty, 6, d.specialty)]),
+    ...(p.info?.doctors ?? []).flatMap((d) => [...field(d.name, 8, d.name), ...field(specialtyOf(d), 6, specialtyOf(d))]),
     ...field(p.detail, 6),
     ...field(p.building, 3),
     ...field(p.info?.description, 2),

@@ -24,3 +24,4 @@ vite.config.ts.timestamp-*
 
 # Blender backups
 *.blend1
+quality/results/

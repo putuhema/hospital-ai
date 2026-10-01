@@ -17,7 +17,19 @@
     } = $props();
     // Only for the messages before the map is there; the map keeps its own.
     const locale = new Locale();
-    onMount(() => locale.restore());
+    // Without a connection the page and the hospital's data come from the phone (service-worker.ts).
+    let offline = $state(false);
+    onMount(() => {
+        locale.restore();
+        const update = () => (offline = !navigator.onLine);
+        update();
+        addEventListener("online", update);
+        addEventListener("offline", update);
+        return () => {
+            removeEventListener("online", update);
+            removeEventListener("offline", update);
+        };
+    });
     const layout = $derived.by(() => {
         if (!map.data) return null;
         try {
@@ -30,6 +42,9 @@
 
 <svelte:head>
     {#if map.data}<title>{map.data.title} — P-Map</title>{:else}<title>P-Map</title>{/if}
+    <!-- Installable: the home screen app opens on this page. -->
+    <link rel="manifest" href="/manifest.webmanifest?start={encodeURIComponent(page.url.pathname)}" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 </svelte:head>
 {#if layout && map.data}<MapViewer
         title={layout.title}
@@ -42,6 +57,7 @@
         shareUrl={publicUrl(map.data.slug, page.url.origin)}
         slug={map.data.slug}
         {editable}
+        notice={offline ? "offlineNotice" : null}
     />{:else}<main class="missing">
         {#if map.isLoading}<p>{locale.t("loadingMap")}</p>{:else if map.error}<h1>{locale.t("mapFailed")}</h1>
             <p>{locale.t("mapFailedHint")}</p>{:else}<h1>{locale.t("notPublished")}</h1>

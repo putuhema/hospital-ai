@@ -103,3 +103,10 @@ test('text that only announces a lookup is dropped, and not kept in the conversa
   assert.equal(text(events), 'Apotek ada di Pharmacy & lab.');
   assert.equal(requests[1].messages.find((m: any) => m.role === 'assistant').content, null);
 });
+
+test('a tool call written out as a note is not shown to the visitor', async () => {
+  const { client } = fakeZai([
+    { text: `Jam pendaftaran belum tersedia.\n\n[show_on_map: place ${pharmacy.id}]\n\nSilakan tanya bagian informasi.` },
+  ]);
+  assert.equal(text(await run(client, [user('pendaftaran jam berapa?')])), 'Jam pendaftaran belum tersedia.\n\nSilakan tanya bagian informasi.');
+});

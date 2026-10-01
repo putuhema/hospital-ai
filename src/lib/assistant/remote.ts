@@ -2,7 +2,8 @@
  * Replies from the assistant on the server (Claude, see routes/api/chat),
  * streamed one event per line. When the server has no assistant set up it
  * answers 503, and replies come from `fallback` (the built-in canned ones);
- * over the question limit (429), that question is answered by `fallback` too.
+ * over the question limit (429), that question is answered by `fallback` too,
+ * as is a question asked without a connection.
  */
 import type { Replier, ReplyEvent } from "./chat.ts";
 
@@ -19,9 +20,13 @@ export function serverReplier(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ messages, context, ...body() }),
         signal,
+      }).catch((err) => {
+        // Offline: the built-in replies answer from the map on the phone.
+        if (signal.aborted) throw err;
+        return null;
       });
-      if (res.status === 503) available = false;
-      else if (res.status !== 429) {
+      if (res?.status === 503) available = false;
+      else if (res && res.status !== 429) {
         if (!res.ok || !res.body) throw Error(`The assistant answered ${res.status}`);
         const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
         let buffer = "";

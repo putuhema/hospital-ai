@@ -13,6 +13,7 @@ const list: Place[] = [
   { id: 'r:3', name: 'Pharmacy', kind: 'room', detail: 'Pharmacy', building: 'Main', point: at },
   { id: 'r:4', name: 'Room 12', kind: 'room', detail: 'Examination room', building: 'Clinic', point: at,
     info: { keywords: ['Dr. Sari Wijaya', 'Poli Anak'] } },
+  { id: 'r:6', name: 'Kasir', kind: 'room', detail: 'Office', building: 'Main', point: at },
   { id: 'r:5', name: 'WC', kind: 'room', detail: 'Toilets', building: 'Main', point: at },
   { id: 'n:a', name: 'Visitor car park', kind: 'landmark', detail: 'Parking', category: 'parking', point: at },
   { id: 'n:b', name: 'Kopi corner', kind: 'landmark', detail: 'Café', category: 'cafe', point: at },
@@ -37,6 +38,7 @@ test('synonyms: what people say finds what the map calls it', () => {
   assert.equal(names('restroom')[0], 'WC');
   assert.equal(names('coffee')[0], 'Kopi corner');
   assert.equal(names('parkir')[0], 'Visitor car park');
+  assert.equal(names('kasir bayar')[0], 'Kasir', 'a word saying what it is for still finds it');
 });
 
 test("other names find a place, and say which one matched", () => {

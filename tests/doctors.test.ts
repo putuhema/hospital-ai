@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { doctorStatus, parseDoctors, shortDate, type Doctor } from '../src/lib/model/doctors.ts';
+import { doctorStatus, parseDoctors, shortDate, specialtyOf, type Doctor } from '../src/lib/model/doctors.ts';
 import { parseInfo } from '../src/lib/model/place-info.ts';
 
 // 2026-09-28 is a Monday.
@@ -55,4 +55,20 @@ test('schedules are validated and tidied', () => {
   // Stored with the place's visitor info.
   assert.equal(parseInfo({ doctors: [sari] })!.doctors![0].specialty, 'Anak');
   assert.throws(() => parseInfo({ doctors: [{ name: 'A' }] }));
+});
+
+test('the specialty is read from the title when none is written', () => {
+  const of = (name: string, specialty?: string) => specialtyOf({ name, specialty, hours: [] });
+  // As the hospital writes them, with their spacing and punctuation.
+  assert.equal(of('dr. Ida Bagus Made Andy Wiraputra, Sp.OG'), 'Kandungan & Kebidanan');
+  assert.equal(of('dr. Malik Candra Sp.PD'), 'Penyakit Dalam');
+  assert.equal(of('dr. Idham Shadiq Kawu, Sp.,pd'), 'Penyakit Dalam');
+  assert.equal(of('dr. Yulianti Pratiwi, SpB'), 'Bedah');
+  assert.equal(of('dr. Musdalifah Thahir, Sp. Rad'), 'Radiologi');
+  assert.equal(of('dr. Nur Zam Zam, Sp.P'), 'Paru');
+  assert.equal(of('drg. Desi Safitria Aziz, M.kes'), 'Gigi');
+  // A written specialty wins; a general practitioner has none.
+  assert.equal(of('dr. Kevin Cherlie, Sp.A', 'dokter spesialis anak'), 'dokter spesialis anak');
+  assert.equal(of('dr. Dwijayanti Lestari'), undefined);
+  assert.equal(of('dr. Spahn'), undefined);
 });

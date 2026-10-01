@@ -46,3 +46,12 @@ test('over the question limit, that question gets the built-in reply, and the ne
   await ask(replier);
   assert.equal(calls, 2);
 });
+
+test('without a connection, the built-in replies answer, and the next question tries the server again', async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => (calls++, Promise.reject(new TypeError('Failed to fetch')))) as typeof fetch;
+  const replier = serverReplier(() => ({}), canned);
+  assert.deepEqual(await ask(replier), [{ type: 'text', text: 'canned' }]);
+  await ask(replier);
+  assert.equal(calls, 2);
+});

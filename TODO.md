@@ -13,12 +13,11 @@ What's done, and what can still be improved, for hospital visitors and for the p
 ## 2. Hospital content (in `/editor/info`)
 
 - [ ] **Fill the empty topics.** Pendaftaran, BPJS & pembayaran, Jam besuk, Layanan and Kontak have no questions yet: what visitors ask most.
-- [ ] **Indonesian questions.** "What is the emergency number?" and "Can children visit?" are in English and filed under _Lainnya_ (belong under Kontak and Jam besuk).
 - [ ] **Doctors' specialties.** Most doctors have a blank specialty; fill it in, or derive it from the title (Sp.A → Anak, Sp.P → Paru, Sp.PD → Penyakit Dalam, Sp.OG → Kandungan, Sp.B → Bedah, Sp.GK → Gizi Klinik, Sp.Rad → Radiologi, drg → Gigi) so "dokter spesialis paru" finds every one.
 
 ## 3. The assistant (chat)
 
-- [ ] **Quality check (next).** 30–50 real visitor questions, mostly Indonesian with some English, including tricky ones (closed clinics, emergencies, medical questions, places that don't exist); rerun after every prompt or model change, and to compare models.
+- [x] **Quality check.** `pnpm quality` asks GLM-5 46 visitor questions (`quality/questions.ts`: places, doctors, closed clinics, information that isn't saved, places that don't exist, emergencies, medical questions, English, follow-ups) against the saved hospital and checks each reply; a report goes to `quality/results/`. `pnpm quality emergency` runs only those. On demand, about 250k tokens a run. Update the questions when the hospital's places, doctors or information change.
 - [ ] **Faster first words.** GLM-5 on Z.ai sends each answer in one burst after 4–8 s (the chat reveals it gradually and shows what it is looking up). Try `glm-4.5-air`, which truly streams, or another provider, against the quality check.
 - [ ] **Voice input.** Speak the question in Indonesian (browser speech recognition), for older visitors.
 - [ ] **Time zone per hospital.** Store it with the hospital instead of `HOSPITAL_TIME_ZONE`, so each hospital's "practising now" is right.
@@ -34,7 +33,7 @@ What's done, and what can still be improved, for hospital visitors and for the p
 ## 5. Speed and reliability
 
 - [ ] **Low-end phones.** Measure the 3D map on a budget Android phone; a lighter mode (fewer trees, no shadows) chosen automatically on weak devices.
-- [ ] **Works offline.** The service worker keeps the app and 3D models on the phone; also keep the last hospital data, and add a web app manifest so it can be installed.
+- [x] **Works offline.** The service worker keeps the app, 3D models, icons and fonts, and each map page as last opened (the hospital's data is in it), from the first visit; pages come from the network first and the kept copy shows without a connection or after 6 s on a weak one. The chat answers with the built-in replies offline, and the map says it is offline. Installable: a manifest per hospital (`/manifest.webmanifest?start=/m/<slug>`) opens the app on that hospital, with its name and icons.
 - [ ] **Answer cache for follow-ups.** Only a conversation's first question is cached; common follow-ups ("rute ke sana") could be too.
 
 ## 6. Editor
@@ -55,7 +54,7 @@ What's done, and what can still be improved, for hospital visitors and for the p
 - [x] **Launch safeguards.** Rate limits (6 a minute and 60 a day per visitor, 1000 a day for the hospital) counted in Convex; over a limit the built-in reply answers.
 - [x] **Assistant polish.** No "Saya cari … untuk Anda" preambles (GLM's text before a lookup is dropped) and a doctor's clinic is shown on the map straight away; the conversation is kept for the browser session (only the recent part is sent); unanswered questions get the hospital's phone number and questions it can answer; starting questions rotate daily through places, a clinic's doctors and the hospital's own questions in the visitor's language; `search_hospital_info` reads the answers once the questions & answers are too long to send whole; search ignores words like "tempat" ("tempat sholat" finds the Mushola).
 - [x] **Streaming and caching.** Gradual reveal and "Melihat jadwal dokter…" status while it works; repeated first questions answered from a 10-minute cache; the hospital parsed once per version; prompts laid out for the providers' caches; a service worker for the app and models.
-- [x] **Visitor polish.** The map stays put on phones when the keyboard opens; *Rute* starts from the place the chat just showed; without a known location the assistant points to *Atur lokasi Anda*; rooms the editor named by default read in Indonesian ("Ruang periksa 2"), on the map and in the chat; pages served as `lang="id"` (the editor `en`); a favicon.
+- [x] **Visitor polish.** The map stays put on phones when the keyboard opens; _Rute_ starts from the place the chat just showed; without a known location the assistant points to _Atur lokasi Anda_; rooms the editor named by default read in Indonesian ("Ruang periksa 2"), on the map and in the chat; pages served as `lang="id"` (the editor `en`); a favicon.
 
 Decided:
 

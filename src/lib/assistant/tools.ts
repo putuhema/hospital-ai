@@ -17,7 +17,7 @@ import {
   type Place,
 } from "../wayfinding/routing.ts";
 import { editDistance, normalize, search } from "../wayfinding/search.ts";
-import { dateOf, doctorStatus, shortDate, type Doctor } from "../model/doctors.ts";
+import { dateOf, doctorStatus, shortDate, specialtyOf, type Doctor } from "../model/doctors.ts";
 import { shortcuts } from "../wayfinding/shortcuts.ts";
 import { topicOf, topics, type FaqEntry } from "../model/faq.ts";
 import { faqMatches } from "./faq-match.ts";
@@ -152,7 +152,8 @@ export function getPlaceDetails(
 
 function schedule(ctx: AssistantContext, d: Doctor, place?: Place): DoctorSchedule {
   const s: DoctorSchedule = { name: d.name, hours: hoursLines(d.hours) };
-  if (d.specialty) s.specialty = d.specialty;
+  const specialty = specialtyOf(d);
+  if (specialty) s.specialty = specialty;
   if (place) s.place = summary(ctx, place);
   const status = doctorStatus(d, ctx.now);
   if (status) {
@@ -188,7 +189,7 @@ export function getDoctorSchedule(
   const all = ctx.places.flatMap((p) => (p.info?.doctors ?? []).map((d) => ({ p, d })));
   if (!all.length) return { error: "No doctors' schedules are on this map." };
   // A doctor is found by their name, specialty or the clinic they practise in ("poli paru").
-  const wordsOf = (d: Doctor, p: Place) => normalize(`${d.name} ${d.specialty ?? ""} ${p.name}`).split(" ");
+  const wordsOf = (d: Doctor, p: Place) => normalize(`${d.name} ${specialtyOf(d) ?? ""} ${p.name}`).split(" ");
   // Words as written first, then allowing a typo: "gigi" is Poli Gigi, not Poli Gizi.
   const exact = (t: string, words: string[]) => words.some((w) => w.startsWith(t)),
     typo = (t: string, words: string[]) => exact(t, words) || (t.length >= 4 && words.some((w) => editDistance(t, w, 1) <= 1));
@@ -203,7 +204,7 @@ export function getDoctorSchedule(
   // Words search knows but the schedule doesn't use, e.g. "children" for "Anak".
   if (!found.length && wanted.length)
     found = search(ctx.places, query).flatMap(({ place, via }) =>
-      (place.info?.doctors ?? []).filter((d) => via && (d.name === via || d.specialty === via)).map((d) => ({ p: place, d })),
+      (place.info?.doctors ?? []).filter((d) => via && (d.name === via || specialtyOf(d) === via)).map((d) => ({ p: place, d })),
     );
   const n = Math.min(Math.max(1, Math.round(limit)), 20);
   return { doctors: found.slice(0, n).map(({ p, d }) => schedule(ctx, d, p)) };

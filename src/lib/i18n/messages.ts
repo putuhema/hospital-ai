@@ -125,6 +125,7 @@ const en = {
   // The hospital from the database
   loadingMap: "Loading the map…",
   mapFailed: "The map could not be loaded",
+  offlineNotice: "You're offline. The map and doctors' schedules are from your last visit, and the guide answers with its built-in replies.",
   mapFailedHint: "Check your connection and try again.",
   notPublished: "This map isn't available",
   notPublishedHint: "The link may be mistyped, or the hospital hasn't been set up yet. Ask at reception for directions.",
@@ -289,6 +290,7 @@ const id: Record<Key, string> = {
   fitPlan: "Tampilkan seluruh denah",
   loadingMap: "Memuat peta…",
   mapFailed: "Peta tidak dapat dimuat",
+  offlineNotice: "Anda sedang offline. Peta dan jadwal dokter dari kunjungan terakhir, dan pemandu menjawab dengan jawaban bawaan.",
   mapFailedHint: "Periksa koneksi Anda dan coba lagi.",
   notPublished: "Peta ini belum tersedia",
   notPublishedHint: "Tautannya mungkin salah ketik, atau rumah sakit belum disiapkan. Tanyakan arah di bagian pendaftaran.",

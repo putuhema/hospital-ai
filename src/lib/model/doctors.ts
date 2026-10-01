@@ -17,6 +17,41 @@ export type Doctor = {
 };
 
 export const MAX_DOCTORS = 60;
+
+/** Specialist titles (Sp.A, Sp.OG, SpB…) and what visitors call the specialty. */
+const TITLES: Record<string, string> = {
+  a: "Anak",
+  og: "Kandungan & Kebidanan",
+  pd: "Penyakit Dalam",
+  p: "Paru",
+  b: "Bedah",
+  gk: "Gizi Klinik",
+  rad: "Radiologi",
+  jp: "Jantung",
+  m: "Mata",
+  tht: "THT",
+  kk: "Kulit & Kelamin",
+  dv: "Kulit & Kelamin",
+  dve: "Kulit & Kelamin",
+  n: "Saraf",
+  s: "Saraf",
+  kj: "Jiwa",
+  ot: "Ortopedi",
+  u: "Urologi",
+  an: "Anestesi",
+  pk: "Patologi Klinik",
+  kfr: "Rehabilitasi Medik",
+};
+
+/** The specialty as written, or else read from the title in the name ("dr. Sari, Sp.A" → "Anak", "drg." → "Gigi"). */
+export function specialtyOf(doctor: Doctor): string | undefined {
+  if (doctor.specialty) return doctor.specialty;
+  const name = ` ${doctor.name.toLowerCase().replace(/[^a-z]+/g, " ")} `;
+  const title = name.match(/ sp ?([a-z]+) /)?.[1];
+  if (title && TITLES[title]) return TITLES[title];
+  if (name.includes(" drg ")) return "Gigi";
+  return undefined;
+}
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 /** Validates stored doctors; drops unnamed ones and tidies the rest. */

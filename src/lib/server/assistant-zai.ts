@@ -67,6 +67,8 @@ export async function* replyZai(
       if (!wrote) yield { type: "text", text: SORRY[context.lang ?? "id"] };
       return;
     }
+    // GLM sometimes writes a tool call out as a note ("[show_on_map: place r:…]") instead of making it.
+    text = text.replace(/^[ \t]*\[(show_on_map|shown on the map)\b[^\]\n]*\][ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
     const announcing = calls.some((c) => c.name !== "show_on_map");
     if (text.trim() && !announcing) {
       // Text from a later round starts a new paragraph.
