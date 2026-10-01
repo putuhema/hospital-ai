@@ -55,6 +55,7 @@ What's done, and what can still be improved, for hospital visitors and for the p
 - [x] **Launch safeguards.** Rate limits (6 a minute and 60 a day per visitor, 1000 a day for the hospital) counted in Convex; over a limit the built-in reply answers.
 - [x] **Assistant polish.** No "Saya cari … untuk Anda" preambles (GLM's text before a lookup is dropped) and a doctor's clinic is shown on the map straight away; the conversation is kept for the browser session (only the recent part is sent); unanswered questions get the hospital's phone number and questions it can answer; starting questions rotate daily through places, a clinic's doctors and the hospital's own questions in the visitor's language; `search_hospital_info` reads the answers once the questions & answers are too long to send whole; search ignores words like "tempat" ("tempat sholat" finds the Mushola).
 - [x] **Streaming and caching.** Gradual reveal and "Melihat jadwal dokter…" status while it works; repeated first questions answered from a 10-minute cache; the hospital parsed once per version; prompts laid out for the providers' caches; a service worker for the app and models.
+- [x] **Visitor polish.** The map stays put on phones when the keyboard opens; *Rute* starts from the place the chat just showed; without a known location the assistant points to *Atur lokasi Anda*; rooms the editor named by default read in Indonesian ("Ruang periksa 2"), on the map and in the chat; pages served as `lang="id"` (the editor `en`); a favicon.
 
 Decided:
 

@@ -12,6 +12,7 @@ import { hospitalFor } from "$lib/server/hospital-cache";
 import { messageText, type ChatMessage, type ReplyContext, type ReplyEvent } from "$lib/assistant/chat";
 import { hospitalNow, reply, type ReplyInput } from "$lib/server/assistant";
 import { replyZai, ZAI_BASE_URL, ZAI_MODEL } from "$lib/server/assistant-zai";
+import type { Lang } from "$lib/i18n/lang";
 
 /** Limits on what a visitor's browser may send: a long conversation, not a document. */
 const MAX_MESSAGES = 30,
@@ -68,7 +69,7 @@ export async function POST({ request, getClientAddress }) {
   if (!answer) return json({ error: "The assistant is not set up." }, { status: 503 });
   const body = await request.json().catch(() => null);
   if (!body || !valid(body.messages)) return json({ error: "Invalid conversation." }, { status: 400 });
-  const context: ReplyContext = {
+  const context: ReplyContext & { lang: Lang } = {
     ...(typeof body.context?.from === "string" && { from: body.context.from }),
     lang: body.context?.lang === "en" ? "en" : "id",
   };
@@ -82,7 +83,7 @@ export async function POST({ request, getClientAddress }) {
   }
 
   // The hospital as saved in the database, never what the browser sends; parsed once per version.
-  const hospital = await hospitalFor(convex, slug);
+  const hospital = await hospitalFor(convex, context.lang, slug);
   if (!hospital) return json({ error: "No such hospital." }, { status: 404 });
 
   // A conversation's first question, asked recently by someone else in the same spot, is answered

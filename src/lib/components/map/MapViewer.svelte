@@ -13,6 +13,7 @@
     import { serverReplier } from "$lib/assistant/remote";
     import { Locale, provideLocale } from "$lib/i18n/locale.svelte";
     import { LANGS } from "$lib/i18n/lang";
+    import { localizeRooms } from "$lib/i18n/places";
     import type { Key } from "$lib/i18n/messages";
     import type { Piece } from "$lib/model/layout";
     import { answered, type FaqEntry } from "$lib/model/faq";
@@ -76,7 +77,6 @@
         picking = $state(false);
     let exporter: (() => Promise<void>) | null = null;
     let grid = $derived(buildGrid(pieces, canvasWidth, canvasHeight));
-    let placeList = $derived(places(pieces, network));
     let route = $derived(from && to ? planRoute(grid, from, to) : null);
     let questions = $derived(answered(faq));
     let landmarks = $derived(network.nodes.filter((n) => n.name.trim()));
@@ -85,6 +85,9 @@
     const locale = new Locale();
     provideLocale(locale);
     const t = locale.t;
+    // Rooms the editor named by default ("Examination room 2") read in the visitor's language.
+    let rooms = $derived(localizeRooms(pieces, locale.lang));
+    let placeList = $derived(places(rooms, network));
 
     // The assistant. Canned replies from the map and the hospital information
     // until the chat server route is built.
@@ -111,6 +114,16 @@
         return card?.type === "card" ? (placeList.find((p) => p.id === card.show.to) ?? null) : null;
     });
     let highlight = $derived(tab === "chat" ? (chatFocus ?? to) : to);
+    /** The chat's place last carried over to directions, so each is carried over once. */
+    let carried: string | null = null;
+    /** Switch tabs; directions start from where the chat just pointed. */
+    function show(next: Tab) {
+        if (next === "route" && chatFocus && chatFocus.id !== carried) {
+            carried = chatFocus.id;
+            to = chatFocus;
+        }
+        tab = next;
+    }
     // A picked spot is named after the corridor or path it is on.
     let here = $derived(
         !from
@@ -145,6 +158,8 @@
         from = decode(params.get("from"));
         const target = decode(params.get("to"));
         to = target && "id" in target ? target : null;
+        // A conversation from earlier in the session doesn't replace the link's destination.
+        if (to) carried = chatFocus?.id ?? null;
         if (params.get("view") === "plan") view = "Plan";
         // Someone who scanned a sign or opened a shared route wants the way.
         if (to) tab = "route";
@@ -185,6 +200,7 @@
         if (!target || !("id" in target)) return;
         if (params.has("from")) from = decode(params.get("from"));
         to = target;
+        carried = chatFocus?.id ?? null;
         picking = false;
         sheetOpen = false;
         untrack(syncUrl);
@@ -207,12 +223,14 @@
             tab = "route";
             sheetOpen = true;
         } else if (place) {
+            // Tapped on the map: that place, not the chat's.
+            carried = chatFocus?.id ?? null;
             to = place;
             tab = "route";
         }
     }
     function open(next: Tab) {
-        tab = next;
+        show(next);
         sheetOpen = true;
     }
     // Phones: the sheet follows a finger on its top edge, and goes when
@@ -297,7 +315,7 @@
     <section class="stage" aria-label={t("mapRegion")}>
         {#if ready}{#if view === "3D"}<HospitalScene
                     presentation={true}
-                    {pieces}
+                    pieces={rooms}
                     selected={null}
                     active={null}
                     grid={false}
@@ -317,7 +335,7 @@
                     registerExport={(fn) => (exporter = fn)}
                 />{:else}<div class="plan" style:--inset-bottom={`${insetBottom}px`}>
                     <FloorPlan
-                        {pieces}
+                        pieces={rooms}
                         places={placeList}
                         width={canvasWidth}
                         height={canvasHeight}
@@ -380,7 +398,7 @@
                     style:--at={TABS.findIndex((x) => x.id === tab)}
                     style:--tabs={TABS.length} aria-label={t("mapView")}>
                     <span class="thumb" aria-hidden="true"></span>
-                    {#each TABS as x}<button aria-pressed={tab === x.id} onclick={() => (tab = x.id)}
+                    {#each TABS as x}<button aria-pressed={tab === x.id} onclick={() => show(x.id)}
                             >{t(x.key)}{#if x.id === "route" && to}<i class="to-dot"></i>{/if}</button
                         >{/each}
                 </nav>
@@ -406,7 +424,7 @@
                         picking = false;
                     }}
                 />{:else}<div class="scroll" in:unblur>
-                    <h2>{t("directions")}</h2>
+                    <h2>{t("whereTo")}</h2>
                     <RouteFinder places={placeList} {grid} {route} bind:from bind:to bind:picking />
                 </div>{/if}
         </div>
@@ -488,7 +506,8 @@
         --display: "Fraunces", Georgia, serif;
         position: relative;
         height: 100dvh;
-        overflow: hidden;
+        /* Clip, not hidden: the closed sheet waits below the screen, and focus or scrollIntoView would scroll a hidden box to it, taking the map away. */
+        overflow: clip;
         background: var(--paper);
         color: var(--ink);
         font-family: "Figtree", "Avenir Next", system-ui, sans-serif;

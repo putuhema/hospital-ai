@@ -130,7 +130,7 @@ const SAY = {
     isAt: (name: string, where: string) => `${name} is ${where}.`,
     nearest: (type: string, name: string, where: string, minutes?: number) =>
       `Nearest ${type}: ${name} ${where}${minutes ? `, about ${minutes} min walk` : ""}.`,
-    setStart: " Set where you are on the map to get the closest one.",
+    setStart: " Tap “Set where you are” below to get the closest one.",
     unknown: (phone: string | null, examples: string[]) =>
       "Sorry, I couldn't find that. " +
       (phone ? `You can call the hospital on ${phone} or ask at the information desk.` : "Please ask at the information desk.") +
@@ -141,7 +141,7 @@ const SAY = {
     isAt: (name: string, where: string) => `${name} ada ${where}.`,
     nearest: (type: string, name: string, where: string, minutes?: number) =>
       `${type} terdekat: ${name} ${where}${minutes ? `, sekitar ${minutes} menit jalan kaki` : ""}.`,
-    setStart: " Tentukan posisi Anda di peta untuk mencari yang paling dekat.",
+    setStart: " Ketuk “Atur lokasi Anda” di bawah untuk mencari yang paling dekat.",
     unknown: (phone: string | null, examples: string[]) =>
       "Maaf, saya tidak menemukannya. " +
       (phone ? `Anda bisa menghubungi rumah sakit di ${phone} atau tanya ke bagian informasi.` : "Silakan tanya ke bagian informasi.") +

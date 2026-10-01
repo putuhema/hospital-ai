@@ -90,3 +90,24 @@ test('every kind of room and landmark has an Indonesian name', async () => {
   for (const name of [...roomTypes.map((t) => t.name), ...categories.map((c) => c.name), 'Building', 'Listed room'])
     assert.ok(name === 'Lift' || typeName(name, 'id') !== name, `${name} has no Indonesian name`);
 });
+
+test('rooms the editor named by default read in Indonesian; names the hospital wrote are kept', async () => {
+  const { roomName, localizeRooms } = await import('../src/lib/i18n/places.ts');
+  assert.equal(roomName('Examination room 2', 'id'), 'Ruang periksa 2');
+  assert.equal(roomName('toilets', 'id'), 'Toilet');
+  assert.equal(roomName('Exam room 1', 'id'), 'Ruang periksa 1');
+  assert.equal(roomName('Room 3', 'id'), 'Kamar 3');
+  assert.equal(roomName('Examination room 2', 'en'), 'Examination room 2');
+  assert.equal(roomName('Poli Interna', 'id'), 'Poli Interna');
+  assert.equal(roomName('Toilets near the lobby', 'id'), 'Toilets near the lobby');
+  const pieces = [
+    { id: 1, name: 'Poliklinik', roomAssets: [{ id: 1, name: 'Toilets 2' }], rooms: ['Waiting area'] },
+    { id: 2, name: 'Corridor' },
+  ];
+  const [clinic, corridor] = localizeRooms(pieces, 'id');
+  assert.equal(clinic.name, 'Poliklinik');
+  assert.equal(clinic.roomAssets?.[0].name, 'Toilet 2');
+  assert.deepEqual(clinic.rooms, ['Ruang tunggu']);
+  assert.equal(corridor, pieces[1]);
+  assert.equal(localizeRooms(pieces, 'en'), pieces);
+});

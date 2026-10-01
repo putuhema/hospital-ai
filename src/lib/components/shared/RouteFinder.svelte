@@ -91,6 +91,8 @@
             class:active={picking}
             aria-pressed={picking}
             onclick={() => (picking = !picking)}
+            ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+                ><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg
             >{locale.t(picking ? "clickTheMap" : "pickStart")}</button
         >
         {#each shortcuts as t}<button
@@ -172,6 +174,11 @@
         background: white;
         font-size: 11px;
         color: #3d5243;
+    }
+    .pick svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
     }
     .chip:hover {
         border-color: #9fb394;

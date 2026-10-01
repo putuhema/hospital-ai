@@ -62,7 +62,7 @@ test('"nearest" walks from where the visitor is', () => {
   const reply = cannedAnswer(ctx, faq, 'Nearest toilets', { from: idOf('Room 1') });
   assert.match(text(reply), /^Nearest toilets: Toilets in West patient ward, about \d+ min walk\.$/);
   assert.equal(cards(reply)[0].kind, 'route');
-  assert.match(text(cannedAnswer(ctx, faq, 'Nearest parking')), /Visitor car park on the map\. Set where you are/);
+  assert.match(text(cannedAnswer(ctx, faq, 'Nearest parking')), /Visitor car park on the map\. Tap “Set where you are”/);
 });
 
 test('anything else is sent to the information desk, never guessed', () => {
@@ -102,7 +102,7 @@ test('Indonesian questions get Indonesian answers from the same map', () => {
   assert.equal(text(cannedAnswer(ctx, faq, 'Di mana apotek?')), 'Pharmacy ada di Pharmacy & lab. Buka, sampai 16.00.');
   const near = text(cannedAnswer(ctx, faq, 'toilet terdekat', { from: idOf('Room 1') }));
   assert.match(near, /^Toilet terdekat: Toilets di West patient ward, sekitar \d+ menit jalan kaki\.$/);
-  assert.match(text(cannedAnswer(ctx, faq, 'parkir terdekat')), /Parkir terdekat: Visitor car park di peta\. Tentukan posisi Anda/);
+  assert.match(text(cannedAnswer(ctx, faq, 'parkir terdekat')), /Parkir terdekat: Visitor car park di peta\. Ketuk “Atur lokasi Anda”/);
   // The hospital information answers across languages.
   const idFaq = [{ question: 'Kapan jam besuk?', answer: 'Pukul 16.00–20.00, dua orang per pasien.' }];
   assert.equal(text(cannedAnswer(ctx, idFaq, 'Visiting hours?')), idFaq[0].answer);
