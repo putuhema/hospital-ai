@@ -18,11 +18,14 @@ export function startWalkSensor(on: {
   step: (time: number) => void;
   /** Degrees turned, positive left. */
   turn: (angle: number) => void;
+  /** As it happens: turning speed (degrees a second, positive left) over `seconds`, for the map to turn along. */
+  yaw?: (rate: number, seconds: number) => void;
   state: (state: SensorState) => void;
 }) {
   let stopped = false,
     listening = false,
-    heard = false;
+    heard = false,
+    last = 0;
   const steps = createStepDetector(),
     turns = createTurnDetector();
   // Some phones report gravity upside down. Held to be read, the screen faces
@@ -41,8 +44,11 @@ export function startWalkSensor(on: {
     if (steps(Math.hypot(g.x, g.y, g.z), time)) on.step(time);
     upright += ((g.y + g.z) - upright) * 0.02;
     if (r && r.alpha !== null && r.beta !== null && r.gamma !== null) {
-      const rate = yawRate({ x: g.x, y: g.y, z: g.z }, { alpha: r.alpha, beta: r.beta, gamma: r.gamma });
-      const angle = turns(upright < 0 ? -rate : rate, time);
+      const raw = yawRate({ x: g.x, y: g.y, z: g.z }, { alpha: r.alpha, beta: r.beta, gamma: r.gamma }),
+        rate = upright < 0 ? -raw : raw;
+      if (last) on.yaw?.(rate, Math.min(0.1, Math.max(0, (time - last) / 1000)));
+      last = time;
+      const angle = turns(rate, time);
       if (angle !== null) on.turn(angle);
     }
   }

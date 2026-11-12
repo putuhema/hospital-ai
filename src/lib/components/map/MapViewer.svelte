@@ -260,7 +260,16 @@
     }
     let follower = $derived(route ? createFollower(route, { scale: drawn() * untrack(savedCorrection) }) : null);
     let stopSensor: (() => void) | null = null,
-        stepTimes: number[] = [];
+        stepTimes: number[] = [],
+        /** Degrees the visitor has turned since the current stretch began (positive left). */
+        turned = 0;
+    // Each stretch starts facing its own way (see `leg`).
+    $effect(() => {
+        leg;
+        turned = 0;
+    });
+    /** For the map to turn with the visitor: only while the phone is following them. */
+    const facing = () => (stepping && sensing === "on" ? (turned * Math.PI) / 180 : null);
     /** Start following; called from the tap that opens the steps, as iOS asks for motion access only then. */
     function follow() {
         stopSensor?.();
@@ -279,6 +288,10 @@
                 onward = follower.along;
                 // Arrived: nothing left to follow.
                 if (follower.done >= (route?.steps.length ?? 0)) unfollow();
+            },
+            // Slower than this is the sensor drifting, not the visitor turning.
+            yaw: (rate, seconds) => {
+                if (Math.abs(rate) > 3) turned += rate * seconds;
             },
             turn: (angle) => {
                 if (follower?.turn(angle)) {
@@ -535,6 +548,7 @@
                     {walked}
                     {onward}
                     {leg}
+                    {facing}
                     {highlight}
                     {insetLeft}
                     {insetBottom}

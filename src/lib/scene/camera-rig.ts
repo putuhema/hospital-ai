@@ -84,10 +84,22 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   const ray = new THREE.Raycaster(),
     ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
+  // Turning with the visitor (see `steer`): not while they handle the map, and
+  // not again until `steerFrom` once they have turned it themselves.
+  let handling = false,
+    handledFrom = 0,
+    steerHeld = false;
   // A visitor's own drag or pinch takes over from any move under way.
   controls.addEventListener("start", () => {
     if (glide) finish(false);
     if (framed) framed.moved = true;
+    handling = true;
+    handledFrom = controls.getAzimuthalAngle();
+  });
+  controls.addEventListener("end", () => {
+    handling = false;
+    const turned = controls.getAzimuthalAngle() - handledFrom;
+    if (Math.abs(Math.atan2(Math.sin(turned), Math.cos(turned))) > 0.05) steerHeld = true;
   });
 
   const pose = (): Pose => ({
@@ -349,8 +361,27 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     if (presentation) glideFrom(from);
   }
 
+  /**
+   * Turn the map a little towards heading `theta` (as `aheadView` gives it):
+   * called each frame while the visitor's phone says which way they face, so
+   * the way they face points up the screen. Not during a move, while they
+   * handle the map, or once they turned it themselves. True when it moved.
+   */
+  function steer(theta: number) {
+    if (glide || handling || steerHeld || !presentation) return false;
+    orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
+    const gap = Math.atan2(Math.sin(theta - orbit.theta), Math.cos(theta - orbit.theta));
+    if (Math.abs(gap) < 0.003) return false;
+    // Smoothed, so sensor jitter doesn't shake the map, but quick enough to keep up.
+    orbit.theta += gap * 0.25;
+    camera.position.copy(controls.target).add(offset.setFromSpherical(orbit));
+    camera.lookAt(controls.target);
+    return true;
+  }
+
   /** Turn the map so north is up again, keeping its tilt. */
   function faceNorth() {
+    steerHeld = true;
     const from = begin();
     northUp();
     glideFrom(from);
@@ -405,6 +436,9 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     camera,
     setOverhead,
     faceNorth,
+    steer,
+    /** A new stretch: turning with the visitor may start again. */
+    steerFrom: () => (steerHeld = false),
     tick,
     controls,
     frame,
