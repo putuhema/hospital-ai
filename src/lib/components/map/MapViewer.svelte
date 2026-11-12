@@ -26,6 +26,7 @@
     import type { Point, WalkingNetwork } from "$lib/wayfinding/navigation";
     import { buildGrid, places, planRoute, progress, stepText, walkMinutes, type Place } from "$lib/wayfinding/routing";
     import { createFollower, STRIDE } from "$lib/wayfinding/follow";
+    import { createTurnWindow } from "$lib/wayfinding/motion";
     import { startWalkSensor, type SensorState } from "$lib/wayfinding/walk-sensor";
     let {
         title,
@@ -261,13 +262,23 @@
     let follower = $derived(route ? createFollower(route, { scale: drawn() * untrack(savedCorrection) }) : null);
     let stopSensor: (() => void) | null = null,
         stepTimes: number[] = [],
-        /** Degrees the visitor has turned since the current stretch began (positive left). */
+        /** Degrees the visitor has turned from the way the current stretch goes (positive left). */
         turned = 0;
-    // Each stretch starts facing its own way (see `leg`).
-    $effect(() => {
-        leg;
-        turned = 0;
-    });
+    const turning = createTurnWindow();
+    /** How far the route turns (degrees, positive left) from stretch `i` into the next. */
+    function routeTurn(i: number) {
+        if (!route) return 0;
+        const { points, steps } = route,
+          heading = (k: number) => {
+              const a = points[steps[k].at],
+                  b = points[steps[k + 1]?.at ?? points.length - 1];
+              return Math.atan2(b.y - a.y, b.x - a.x);
+          };
+        if (!steps[i + 2] && !steps[i + 1]) return 0;
+        const delta = heading(i + 1) - heading(i);
+        // Tiles run east and south, so this angle grows turning right: negated for "positive left".
+        return (-Math.atan2(Math.sin(delta), Math.cos(delta)) * 180) / Math.PI;
+    }
     /** For the map to turn with the visitor: only while the phone is following them. */
     const facing = () => (stepping && sensing === "on" ? (turned * Math.PI) / 180 : null);
     /** Start following; called from the tap that opens the steps, as iOS asks for motion access only then. */
@@ -276,6 +287,8 @@
         sensing = null;
         pace = null;
         stepTimes = [];
+        turned = 0;
+        turning.clear();
         stopSensor = startWalkSensor({
             step: (time) => {
                 if (!follower) return;
@@ -284,23 +297,31 @@
                 // In map metres a second, as the distances left are measured on the map.
                 if (stepTimes.length >= 6)
                     pace = (STRIDE * follower.scale * (stepTimes.length - 1)) / ((time - stepTimes[0]) / 1000);
-                if (follower.step()) done = follower.done;
+                if (follower.step(time)) {
+                    done = follower.done;
+                    turned = 0;
+                }
                 onward = follower.along;
                 // Arrived: nothing left to follow.
                 if (follower.done >= (route?.steps.length ?? 0)) unfollow();
             },
-            // Slower than this is the sensor drifting, not the visitor turning.
-            yaw: (rate, seconds) => {
+            yaw: (rate, seconds, time) => {
+                // Slower than this is the sensor drifting, not the visitor turning.
                 if (Math.abs(rate) > 3) turned += rate * seconds;
-            },
-            turn: (angle) => {
-                if (follower?.turn(angle)) {
-                    done = follower.done;
-                    onward = 0;
-                    try {
-                        localStorage.setItem(correctionKey(), (follower.scale / drawn()).toFixed(3));
-                    } catch {}
-                }
+                if (!follower) return;
+                // A turn counts while it is still under way: at a junction, not a few metres past it.
+                const recent = turning.add(rate, seconds, time),
+                    at = follower.done;
+                if (!follower.turn(recent.angle, recent.start)) return;
+                turning.clear();
+                // The map turns with them from the new stretch's way: what is left of
+                // the turn they are making is still to come.
+                turned = recent.angle - routeTurn(at);
+                done = follower.done;
+                onward = follower.along;
+                try {
+                    localStorage.setItem(correctionKey(), (follower.scale / drawn()).toFixed(3));
+                } catch {}
             },
             state: (state) => (sensing = state),
         });
@@ -314,12 +335,26 @@
     $effect(() => {
         if (!stepping || !route) untrack(unfollow);
     });
-    // Ticked by hand (or started over): follow on from there.
+    // Ticked by hand (or started over): follow on from there, facing the stretch's way.
     $effect(() => {
         if (follower && follower.done !== done) {
             follower.sync(done);
             onward = 0;
+            turned = 0;
+            turning.clear();
         }
+    });
+    /**
+     * A turn coming up within a few metres: the card says to get ready, and the
+     * phone buzzes once (where it can), so it is never news at the junction.
+     */
+    let soon = $derived.by(() => {
+        if (!route || !stepping || done >= route.steps.length - 1) return false;
+        const next = route.steps[done + 1].say;
+        return next.kind === "turn" && next.turn !== "straight" && route.steps[done].meters - onward / drawn() <= 6;
+    });
+    $effect(() => {
+        if (soon) untrack(() => navigator.vibrate?.(80));
     });
     onMount(() => () => stopSensor?.());
     /**
@@ -770,6 +805,7 @@
                             following={sensing}
                             pace={pace && pace / drawn()}
                             onward={onward / drawn()}
+                            {soon}
                             compact
                             onscan={() => (scanning = true)}
                             onask={() => open("chat")}

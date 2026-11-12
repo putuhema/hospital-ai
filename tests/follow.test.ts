@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createStepDetector, createTurnDetector, yawRate } from '../src/lib/wayfinding/motion.ts';
+import { createStepDetector, createTurnWindow, yawRate } from '../src/lib/wayfinding/motion.ts';
 import { createFollower, legLengths, STRIDE } from '../src/lib/wayfinding/follow.ts';
 import type { Route } from '../src/lib/wayfinding/routing.ts';
 
@@ -32,13 +32,22 @@ test('turning speed about the vertical, however the phone is held', () => {
   assert.equal(yawRate({ x: 0, y: 0, z: 9.81 }, { alpha: 0, beta: 50, gamma: 0 }), 0);
 });
 
-test('a turn is reported once it is over, with its angle; a wiggle is not', () => {
-  // 1 s still, a right turn at 90°/s for 1 s, then still again.
-  const right = run(3, (s) => (s >= 1 && s < 2 ? -90 : 0), createTurnDetector()) as number[];
-  assert.equal(right.length, 1);
-  assert.ok(Math.abs(right[0] + 90) < 5, `turned ${right[0]}°`);
-  const wiggle = run(3, (s) => (s >= 1 && s < 1.25 ? 60 : 0), createTurnDetector());
-  assert.deepEqual(wiggle, []);
+test('a turn is seen while it is under way, and slow drift is not a turn', () => {
+  const w = createTurnWindow();
+  let seen: { angle: number; start: number } | null = null, at = 0;
+  // Walking straight, then turning right at 90°/s: half-way into the turn it is already 45°.
+  for (let t = 0; t <= 2500; t += 1000 / 60) {
+    const rate = t >= 2000 ? -90 : 0, r = w.add(rate, 1 / 60, t);
+    if (!seen && r.angle <= -45) [seen, at] = [r, t];
+  }
+  assert.ok(seen, 'seen turning');
+  assert.ok(at - 2000 <= 520, `seen ${Math.round(at - 2000)} ms into the turn`);
+  assert.ok(Math.abs(seen!.start - 2000) < 20, 'and when it began');
+  // A slow wander of 2°/s for 10 s turns nothing.
+  const slow = createTurnWindow();
+  let last = { angle: 0 };
+  for (let t = 0; t <= 10000; t += 1000 / 60) last = slow.add(2, 1 / 60, t);
+  assert.equal(last.angle, 0);
 });
 
 // South 10 m, then a left turn (east) for 10 m, then there.
@@ -57,6 +66,19 @@ const walk = (f: ReturnType<typeof createFollower>, metres: number) => {
 
 test('stretches are measured along the route', () => {
   assert.deepEqual(legLengths(route), [10, 10, 0]);
+});
+
+test('a turn counts half-way through, and the steps taken while turning carry on', () => {
+  const f = createFollower(route);
+  let time = 0;
+  for (let m = 0; m < 9.8; m += STRIDE) f.step((time += 550));
+  const began = time + 100;
+  f.step((time += 550));
+  f.step((time += 550));
+  assert.equal(f.turn(28, began), false, 'too little yet');
+  assert.equal(f.turn(46, began), true, 'half the left turn is enough');
+  assert.equal(f.done, 1);
+  assert.ok(Math.abs(f.along - 2 * STRIDE * f.scale) < 1e-9, `two steps on into the next stretch, not back at the corner: ${f.along}`);
 });
 
 test('the turn the route expects moves the visitor on, and they arrive by walking the last stretch', () => {

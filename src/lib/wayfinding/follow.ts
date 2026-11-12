@@ -23,7 +23,8 @@ export function legLengths(route: Route) {
 
 /**
  * Follows a visitor along a route from their steps and turns, so they don't
- * have to tick off each instruction. `done` is how many steps are behind them
+ * have to tick off each instruction. A turn counts as soon as it is clearly
+ * under way, and the steps taken while turning carry on into the next stretch. `done` is how many steps are behind them
  * (as the steps list counts them) and `along` how far into the current one
  * they have walked. A turn the route expects ends a stretch, and puts them
  * exactly at that corner, clearing what step counting got wrong; with no turn
@@ -40,7 +41,9 @@ export function createFollower(route: Route, { stride = STRIDE, scale = 1 } = {}
   let done = 0,
     along = 0,
     /** Steps counted in the current stretch. */
-    taken = 0;
+    taken = 0,
+    /** When the last few steps were taken (ms), to carry those taken while turning. */
+    stepTimes: number[] = [];
 
   function advance() {
     done++;
@@ -62,9 +65,10 @@ export function createFollower(route: Route, { stride = STRIDE, scale = 1 } = {}
     get scale() {
       return scale;
     },
-    /** One step taken. Returns true when it finished a stretch. */
-    step() {
+    /** One step taken (at `time`, ms). Returns true when it finished a stretch. */
+    step(time = 0) {
       if (done >= last) return false;
+      stepTimes = [...stepTimes.slice(-7), time];
       taken++;
       along += stride * scale;
       const length = legs[done];
@@ -76,19 +80,29 @@ export function createFollower(route: Route, { stride = STRIDE, scale = 1 } = {}
       advance();
       return true;
     },
-    /** A turn felt, in degrees (positive left). Returns true when it was the route's next turn. */
-    turn(angle: number) {
+    /**
+     * A turn felt, in degrees (positive left), begun at `since` (ms): counts once
+     * it is half the turn the route makes next (at least 30°), the same way, and
+     * some way along the stretch. Steps taken since it began carry on into the
+     * next stretch. Returns true when it was that turn.
+     */
+    turn(angle: number, since = Infinity) {
       if (done >= last - 1) return false;
       const expected = expectedTurn(route.steps[done + 1]);
       if (!expected) return false;
       const sameWay = Math.abs(expected) >= 150 || Math.sign(angle) === Math.sign(expected);
-      // About the turn the route makes there, and some way along: not a turn
-      // just after the last corner, however far off the scale still is.
-      if (!sameWay || Math.abs(angle) < Math.abs(expected) * 0.5 || along < legs[done] * 0.35) return false;
+      // Not a turn just after the last corner, however far off the scale still is.
+      if (!sameWay || Math.abs(angle) < Math.max(30, Math.abs(expected) * 0.5) || along < legs[done] * 0.35) return false;
+      const turning = stepTimes.filter((t) => t >= since).length,
+        before = taken - turning;
       // The corner is where the map says: learn how many map metres a step really covers.
-      if (taken >= 4 && legs[done] >= 3)
-        scale = Math.min(2.5, Math.max(0.3, scale * 0.4 + (legs[done] / (taken * stride)) * 0.6));
+      if (before >= 4 && legs[done] >= 3)
+        scale = Math.min(2.5, Math.max(0.3, scale * 0.4 + (legs[done] / (before * stride)) * 0.6));
       advance();
+      if (done < last) {
+        taken = turning;
+        along = turning * stride * scale;
+      }
       return true;
     },
     /** The visitor ticked steps by hand: follow on from there. */
@@ -96,6 +110,7 @@ export function createFollower(route: Route, { stride = STRIDE, scale = 1 } = {}
       done = Math.max(0, Math.min(ticked, last));
       along = 0;
       taken = 0;
+      stepTimes = [];
     },
   };
 

@@ -9,6 +9,7 @@
         pace = null,
         onward = 0,
         compact = false,
+        soon = false,
         onscan,
         onask,
     }: {
@@ -23,6 +24,8 @@
         onward?: number;
         /** Over the map on a phone: just the next thing to do, the whole list a tap away. */
         compact?: boolean;
+        /** The next turn is a few metres away: get ready. */
+        soon?: boolean;
         /** On the way: scan a sign to say where you are. */
         onscan?: () => void;
         /** On the way: ask the assistant, without leaving the route. */
@@ -54,10 +57,10 @@
         {#if done >= steps.length}<p class="now arrived"><span class="glyph">⚑</span><b>{locale.t("stepsArrived")}</b></p>
         {:else}
             <!-- Tapping it says "done": on to the next step, as the full list does. -->
-            <button class="now" onclick={() => mark(done)}>
+            <button class="now" class:soon onclick={() => mark(done)}>
                 <span class="glyph">{stepGlyph(upcoming ?? current)}</span>
                 <span class="what"
-                    ><b>{stepText((upcoming ?? current).say, locale.lang)}</b>{#if upcoming}<em>{locale.t("nextIn", { m: toNext })}</em>{/if}
+                    ><b>{stepText((upcoming ?? current).say, locale.lang)}</b>{#if upcoming}<em>{locale.t(soon ? "getReady" : "nextIn", { m: toNext })}</em>{/if}
                     {#if upcoming}<small>{legText(route, Math.min(done, steps.length - 1), locale.lang)}</small>{/if}</span
                 >
             </button>
@@ -164,6 +167,17 @@
         font-size: 22px;
         background: #2f7fc4;
         color: white;
+    }
+    /* The turn is just ahead: the card says so in the signal colour. */
+    .now.soon {
+        background: #fdeee6;
+        transition: background 200ms ease;
+    }
+    .now.soon .glyph {
+        background: #e0663d;
+    }
+    .now.soon em {
+        color: #c4532c;
     }
     .now.arrived .glyph {
         background: #d24b3b;

@@ -49,34 +49,26 @@ export function yawRate(
 }
 
 /**
- * Turns from the turning speed about the vertical. A turn is reported once
- * it is over (the body steady again), as the angle turned in degrees:
- * positive left, negative right. Returns a function to feed samples to.
+ * How far the visitor has turned lately: the turning (degrees, positive left)
+ * within the last `seconds`, and when that turn began. Read while they are
+ * still turning, so a turn at a junction counts as soon as it is clear, not
+ * once they have walked on. Turning slower than `drift` (deg/s) is the sensor
+ * wandering and doesn't count.
  */
-export function createTurnDetector({
-  /** Smallest turn reported (degrees): less is a wiggle or a bend in the corridor. */
-  minAngle = 35,
-  /** Below this turning speed (deg/s) the body is steady. */
-  steady = 25,
-  /** How long (ms) it must stay steady before the turn counts as finished. */
-  settle = 400,
-} = {}) {
-  let turning = 0,
-    steadySince = -Infinity,
-    last = -Infinity;
-  return (rate: number, time: number): number | null => {
-    const dt = Math.min(0.1, Math.max(0, (time - last) / 1000));
-    last = time;
-    if (Math.abs(rate) > steady) {
-      turning += rate * dt;
-      steadySince = time;
-      return null;
-    }
-    // Slow drift adds up too, but only while a turn is under way.
-    if (turning) turning += rate * dt;
-    if (time - steadySince < settle) return null;
-    const angle = turning;
-    turning = 0;
-    return Math.abs(angle) >= minAngle ? angle : null;
+export function createTurnWindow({ seconds = 2.5, drift = 3, starting = 15 } = {}) {
+  let samples: { time: number; angle: number; fast: boolean }[] = [];
+  return {
+    /** A sample: turning speed (deg/s) over `dt` seconds, at `time` (ms). */
+    add(rate: number, dt: number, time: number) {
+      if (Math.abs(rate) > drift) samples.push({ time, angle: rate * dt, fast: Math.abs(rate) > starting });
+      samples = samples.filter((s) => time - s.time <= seconds * 1000);
+      const angle = samples.reduce((sum, s) => sum + s.angle, 0);
+      // The turn began with the first brisk turning still in the window.
+      const start = samples.find((s) => s.fast)?.time ?? time;
+      return { angle, start };
+    },
+    clear() {
+      samples = [];
+    },
   };
 }
