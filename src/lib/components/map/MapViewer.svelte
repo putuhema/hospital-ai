@@ -736,12 +736,9 @@
         </div>
     </aside>
 
+    <!-- Anchored on the right: the layers button (3D only) comes and goes on the
+         far left, so the switch and share don't move when the view changes. -->
     <div class="map-controls">
-        <div class="segmented" role="group" aria-label={t("mapView")}>
-            {#each ["3D", "Plan"] as const as v}<button aria-pressed={view === v} onclick={() => (view = v)}
-                    >{t(v === "3D" ? "view3d" : "viewPlan")}</button
-                >{/each}
-        </div>
         {#if view === "3D"}<button
                 class="round"
                 aria-pressed={layersOpen}
@@ -752,6 +749,11 @@
                     ><path d="m12 4 9 5-9 5-9-5zM3 14l9 5 9-5" /></svg
                 ></button
             >{/if}
+        <div class="segmented" role="group" aria-label={t("mapView")}>
+            {#each ["3D", "Plan"] as const as v}<button aria-pressed={view === v} onclick={() => (view = v)}
+                    >{t(v === "3D" ? "view3d" : "viewPlan")}</button
+                >{/each}
+        </div>
         <button class="round" aria-label={t(to ? "shareRoute" : "shareMap")} title={t(to ? "shareRoute" : "shareMap")} onclick={share}
             ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
                 ><path d="M12 15V4m-4 4 4-4 4 4M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" /></svg
