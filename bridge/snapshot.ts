@@ -30,6 +30,13 @@ export const QUERIES = {
       join dokter d on d.kd_dokter = j.kd_dokter
      where j.hari_kerja = elt(dayofweek(?), 'AKHAD', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU')
      group by j.kd_poli, j.kd_dokter, d.nm_dokter`,
+  /** Today's queue numbers (no_reg) still waiting, per clinic and doctor: numbers only, for "Nomor saya". */
+  waiting: `
+    select r.kd_poli, r.kd_dokter, r.no_reg
+      from reg_periksa r
+     where r.no_rawat like concat(date_format(?, '%Y/%m/%d'), '/%')
+       and r.tgl_registrasi = ?
+       and r.stts in ('Belum', 'Berkas Diterima')`,
   /** The queue number called last per clinic and doctor (antripoli holds one visit each). */
   serving: `
     select a.kd_poli, a.kd_dokter, r.no_reg
@@ -67,6 +74,7 @@ export type Rows = {
   registrations: { kd_poli: string; nm_poli: Value; kd_dokter: string; nm_dokter: Value; registered: Value; waiting: Value }[];
   quotas: { kd_poli: string | null; kd_dokter: string; nm_dokter: Value; kuota: Value }[];
   serving: { kd_poli: string | null; kd_dokter: string | null; no_reg: Value }[];
+  waiting?: { kd_poli: string | null; kd_dokter: string | null; no_reg: Value }[];
   beds: { kd_bangsal: string; nm_bangsal: Value; kelas: Value; beds: Value; empty: Value }[];
   schedules?: { kd_poli: string; kd_dokter: string; nm_dokter: Value; hari_kerja: Value; open: Value; close: Value }[];
   /** The registration counters; left out where SIMRS has no such queue. */
@@ -161,6 +169,11 @@ export function buildSnapshot(rows: Rows): Snapshot {
     const d = doctor(c, r.kd_dokter, r.nm_dokter);
     if (n(r.kuota)) d.quota = n(r.kuota);
   }
+  for (const r of rows.waiting ?? []) {
+    const d = r.kd_poli && r.kd_dokter ? clinics.get(r.kd_poli)?.byDoctor.get(r.kd_dokter) : undefined,
+      no = Number.parseInt(String(r.no_reg ?? ""), 10);
+    if (d && Number.isInteger(no) && no >= 0 && no < 100_000) (d.waitingNos ??= []).push(no);
+  }
   for (const r of rows.serving) {
     const d = r.kd_poli && r.kd_dokter ? clinics.get(r.kd_poli)?.byDoctor.get(r.kd_dokter) : undefined;
     const number = String(r.no_reg ?? "").trim();
@@ -183,7 +196,12 @@ export function buildSnapshot(rows: Rows): Snapshot {
     ...(counter && { counter }),
     ...(rows.schedules && { schedules: buildSchedules(rows.schedules) }),
     clinics: [...clinics.values()]
-      .map(({ byDoctor, ...c }) => ({ ...c, doctors: [...byDoctor.values()].sort(byName) }))
+      .map(({ byDoctor, ...c }) => ({
+        ...c,
+        doctors: [...byDoctor.values()]
+          .map((d) => (d.waitingNos ? { ...d, waitingNos: [...new Set(d.waitingNos)].sort((a, b) => a - b).slice(0, 999) } : d))
+          .sort(byName),
+      }))
       .sort(byName),
     wards: [...wards.values()]
       .map((w) => ({ ...w, classes: w.classes.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name)) }))

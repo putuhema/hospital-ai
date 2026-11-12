@@ -8,6 +8,7 @@
     import { useQuery } from "convex-svelte";
     import { api } from "../../../convex/_generated/api";
     import { provideLive } from "$lib/live.svelte";
+    import { MyTurn, provideMyTurn } from "$lib/my-turn.svelte";
 
     // The hospital from the database; it updates live as the editor saves.
     let {
@@ -21,12 +22,18 @@
     // Today's queue and the beds from SIMRS, live as the bridge at the hospital sends them (convex/live.ts).
     const live = useQuery(api.live.get, () => (map.data?.slug ? { slug: map.data.slug } : {}));
     provideLive(() => live.data);
+    // The visitor's own queue number ("Nomor saya"), kept on this phone for the day.
+    // A page shows one hospital, so its address is read once.
+    // svelte-ignore state_referenced_locally
+    const myTurn = new MyTurn(map.data?.slug ?? "default");
+    provideMyTurn(myTurn);
     // Only for the messages before the map is there; the map keeps its own.
     const locale = new Locale();
     // Without a connection the page and the hospital's data come from the phone (service-worker.ts).
     let offline = $state(false);
     onMount(() => {
         locale.restore();
+        myTurn.restore();
         const update = () => (offline = !navigator.onLine);
         update();
         addEventListener("online", update);

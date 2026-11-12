@@ -106,6 +106,8 @@ export type ClinicQueue = {
     waiting: number;
     /** The queue number called last. */
     now_serving?: string;
+    /** Today's numbers still waiting, lowest first, e.g. ["007", "009"]: a visitor's number among them tells how many are before them. */
+    waiting_numbers?: string[];
     quota?: number;
     quota_left?: number;
   }[];
@@ -213,6 +215,7 @@ export function getPlaceDetails(
 
 const linked = (ctx: AssistantContext, key: string) => ctx.places.find((p) => p.info?.simrs?.includes(key));
 
+const ticket = (n: number) => String(n).padStart(3, "0");
 function queueOf(ctx: AssistantContext, c: ClinicLive, withPlace = true): ClinicQueue {
   const place = withPlace && linked(ctx, clinicKey(c.code));
   return {
@@ -227,6 +230,7 @@ function queueOf(ctx: AssistantContext, c: ClinicLive, withPlace = true): Clinic
         registered_today: d.registered,
         waiting: d.waiting,
         ...(d.serving && { now_serving: d.serving }),
+        ...(d.waitingNos && { waiting_numbers: d.waitingNos.map(ticket) }),
         ...(d.quota !== undefined && { quota: d.quota, quota_left: quotaLeft(d) }),
       })),
   };
@@ -243,7 +247,6 @@ function bedsOf(ctx: AssistantContext, w: WardLive, withPlace = true): WardBeds 
   };
 }
 
-const ticket = (n: number) => String(n).padStart(3, "0");
 function counterOf(ctx: AssistantContext, k: CounterLive, withPlace = true): RegistrationQueue {
   const place = withPlace && linked(ctx, COUNTER_KEY);
   return {

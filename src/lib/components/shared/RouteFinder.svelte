@@ -111,7 +111,7 @@
                 ><PlaceIcon of={{ ...t, detail: t.name }} size={16} />{locale.shortcut(t.name, !!from)}</button
             >{/each}
     </div>
-    {#if to?.info}<PlaceDetails info={to.info} />{/if}
+    {#if to?.info}<PlaceDetails info={to.info} place={to.id} />{/if}
     {#if from && to}
         {#if route}<section class="result" aria-live="polite">
                 <div class="summary">

@@ -5,7 +5,8 @@
     import { dateOf, doctorStatus, shortDate } from "$lib/model/doctors";
     import { doctorToday, fresh, liveFor, quotaLeft, started } from "$lib/model/live";
     import { useLive } from "$lib/live.svelte";
-    let { info }: { info: PlaceInfo } = $props();
+    import MyNumberForm from "./MyNumberForm.svelte";
+    let { info, place }: { info: PlaceInfo; /** The place's id on the map, for "Nomor saya" to come back to. */ place?: string } = $props();
     // The visitor's own clock: they are at the hospital, so it is the hospital's
     // time too. Unknown during server rendering, so the badge waits for the browser.
     let now = $state<Date | null>(null);
@@ -51,6 +52,7 @@
                 {#each live.counter.counters as c (c.no)}<span class="line"
                         >{locale.t("liveCounterAt", { n: c.no, no: number(c.serving) })}</span
                     >{/each}
+                <MyNumberForm {place} />
             {/if}
             {#each live.clinics as c (c.code)}
                 <small>{locale.t("liveQueue")}{live.clinics.length > 1 ? ` · ${c.name}` : ""}</small>
@@ -67,6 +69,7 @@
                         >
                     </div>
                 {/each}
+                <MyNumberForm clinic={c} {place} />
             {/each}
             {#each live.wards as w (w.code)}
                 <small>{locale.t("liveBeds")}{live.wards.length > 1 ? ` · ${w.name}` : ""}</small>

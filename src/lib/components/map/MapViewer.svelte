@@ -8,6 +8,7 @@
     import RouteFinder from "$lib/components/shared/RouteFinder.svelte";
     import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     import PlaceDetails from "$lib/components/shared/PlaceDetails.svelte";
+    import MyTurnBanner from "./MyTurnBanner.svelte";
     import RouteSteps from "$lib/components/shared/RouteSteps.svelte";
     import ChatPanel from "$lib/components/assistant/ChatPanel.svelte";
     import { Chat } from "$lib/assistant/chat.svelte";
@@ -542,7 +543,7 @@
                 {:else if about && aboutHere}
                     {@const info = placeInfo(to.info)}
                     <div class="about">
-                        {#if info}<PlaceDetails {info} />{/if}
+                        {#if info}<PlaceDetails {info} place={to.id} />{/if}
                         {#if clinics.length}<div class="clinics">
                                 <small>{t("clinicsHere")}</small>
                                 {#each clinics as c (c.id)}<button onclick={() => (to = c)}>
@@ -564,6 +565,14 @@
                 >{t("cancel")}</button
             >
         </div>{/if}
+    <div class="my-turn-slot">
+        <MyTurnBanner
+            onopen={(id) => {
+                const place = placeList.find((p) => p.id === id);
+                if (place) to = place;
+            }}
+        />
+    </div>
     {#if error || notice}<p class="viewer-error" role="alert">{error || (notice && t(notice))}</p>{/if}
     {#if toast}<div class="toast" role="status"><span>✓</span>{toast}</div>{/if}
 </div>
@@ -1261,6 +1270,22 @@
     }
     .picking .stage :global(canvas) {
         cursor: crosshair;
+    }
+    .my-turn-slot {
+        position: absolute;
+        z-index: 6;
+        top: 20px;
+        left: calc(var(--column) + 20px);
+        right: 260px;
+        pointer-events: none;
+    }
+    .my-turn-slot > :global(*) {
+        pointer-events: auto;
+    }
+    .mobile .my-turn-slot {
+        top: calc(var(--top) + 118px);
+        left: 12px;
+        right: 12px;
     }
     .viewer-error {
         position: absolute;

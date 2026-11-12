@@ -20,6 +20,8 @@ export type DoctorQueue = {
   quota?: number;
   /** The queue number (no_reg) called last, e.g. "012". */
   serving?: string;
+  /** Today's queue numbers not seen yet, lowest first: numbers only, so a visitor can follow theirs. */
+  waitingNos?: number[];
 };
 
 /** A clinic's registrations and queue today. */
@@ -92,7 +94,8 @@ export function parseSnapshot(value: unknown): Snapshot {
           !count(d.registered) ||
           !count(d.waiting) ||
           (d.quota !== undefined && !count(d.quota)) ||
-          (d.serving !== undefined && !text(d.serving, 12))
+          (d.serving !== undefined && !text(d.serving, 12)) ||
+          (d.waitingNos !== undefined && (!Array.isArray(d.waitingNos) || d.waitingNos.length > 999 || !d.waitingNos.every(count)))
         )
           fail();
         return {
@@ -102,6 +105,7 @@ export function parseSnapshot(value: unknown): Snapshot {
           waiting: d.waiting,
           ...(d.quota ? { quota: d.quota } : {}),
           ...(d.serving ? { serving: d.serving } : {}),
+          ...(d.waitingNos ? { waitingNos: [...d.waitingNos].sort((a, b) => a - b) } : {}),
         };
       }),
     };
@@ -173,6 +177,66 @@ export function started(d: DoctorQueue | undefined): boolean | undefined {
   if (!d) return undefined;
   if (d.serving || d.registered > d.waiting) return true;
   return d.registered ? false : undefined;
+}
+
+/**
+ * A visitor's own queue number ("Nomor saya"), kept on their phone for the
+ * day: a ticket at the registration counters, or a number at a clinic with
+ * a doctor. `place` is the map place it was set on, to go back to it.
+ */
+export type Ticket = {
+  number: number;
+  day: string;
+  place?: string;
+  /** What it is for, as shown: "Poliklinik Penyakit Dalam · dr. Malik Candra". */
+  label?: string;
+} & (
+  | { kind: "loket" }
+  | { kind: "poli"; clinic: string; doctor: string }
+);
+
+/** Where a visitor's number stands. */
+export type Turn =
+  /** `ahead` numbers are still before theirs; `serving` is the one called last. */
+  | { state: "waiting"; ahead: number; serving?: number }
+  /** Their number is being called (at `counter`, for the registration counters). */
+  | { state: "now"; counter?: number }
+  /** Their number was called already. */
+  | { state: "passed" }
+  /** Their number isn't among the numbers waiting (seen already, or not registered under it). */
+  | { state: "missing" }
+  /** SIMRS can't tell: no figures, or no such clinic, doctor or ticket today. */
+  | { state: "unknown" };
+
+const asNumber = (s: string | undefined) => {
+  const n = Number.parseInt(s ?? "", 10);
+  return Number.isInteger(n) ? n : undefined;
+};
+
+/** How far a visitor's number is from being called, from the live figures (null when there are none). */
+export function turnOf(ticket: Ticket, live: Live | null | undefined): Turn {
+  const n = ticket.number;
+  if (!live) return { state: "unknown" };
+  if (ticket.kind === "loket") {
+    const k = live.counter;
+    if (!k) return { state: "unknown" };
+    const at = k.counters.find((c) => c.serving === n);
+    if (at) return { state: "now", counter: at.no };
+    if (n <= k.called) return { state: "passed" };
+    if (n > k.tickets) return { state: "unknown" };
+    return { state: "waiting", ahead: n - k.called - 1, ...(k.called ? { serving: k.called } : {}) };
+  }
+  const d = live.clinics.find((c) => c.code === ticket.clinic)?.doctors.find((x) => x.code === ticket.doctor);
+  if (!d) return { state: "unknown" };
+  const serving = asNumber(d.serving);
+  if (serving === n) return { state: "now" };
+  if (d.waitingNos) {
+    if (d.waitingNos.includes(n)) return { state: "waiting", ahead: d.waitingNos.filter((x) => x < n).length, ...(serving !== undefined && { serving }) };
+    return serving !== undefined && n < serving ? { state: "passed" } : { state: "missing" };
+  }
+  // A bridge that doesn't send the waiting numbers: count from the number called last.
+  if (serving === undefined) return { state: "unknown" };
+  return n < serving ? { state: "passed" } : { state: "waiting", ahead: n - serving - 1, serving };
 }
 
 /** Places left in a doctor's quota today; undefined without a quota. */

@@ -8,7 +8,7 @@ It runs on a machine at the hospital that can reach Khanza's database and the in
 
 Totals and queue numbers only:
 
-- per clinic and doctor: patients registered today, how many still wait, the queue number called last (`no_reg`), and the doctor's quota for today;
+- per clinic and doctor: patients registered today, how many still wait, the queue number called last (`no_reg`), the queue numbers still waiting (numbers only), and the doctor's quota for today;
 - per ward and class: beds and how many are empty;
 - the doctors' practice schedules (`jadwal`): days and hours per doctor and clinic;
 - the registration counters (loket): queue tickets taken today, the number called last and the number each counter is serving.
@@ -61,6 +61,7 @@ Needs Node 22.18 or newer.
 
 - A linked place's card shows _Antrean hari ini_ (registered, waiting, the number being served and quota left per doctor) or _Tempat tidur_ (empty beds, per class), with the time the figures arrived.
 - A place linked to a clinic lists SIMRS's doctors and their days and hours (_Jadwal dari SIMRS_) instead of the ones typed in the editor. Schedules stay when the bridge goes quiet. The editor's doctors are still used for what SIMRS doesn't know: a doctor's leave (cuti), specialty and how their name is written, matched by name. While a doctor is practising, the card and the assistant say whether they have started on today's patients (_Sudah melayani · 3 pasien hari ini_ / _Belum mulai melayani pasien_).
+- **Nomor saya:** on a clinic's or the registration counters' card, a visitor types the number on their ticket (and picks the doctor, when several have patients) and the map follows it: how many numbers are before theirs, the number being served, and _Giliran Anda sekarang_ when it's called (with the counter, at registration). It turns amber three numbers before and the phone buzzes. The number stays on that phone for the day only (`src/lib/my-turn.svelte.ts`); the assistant can answer the same from the waiting numbers.
 - A place linked to the registration counters shows _Antrean loket pendaftaran_: numbers taken, how many wait, the number called last and each counter's.
 - The assistant answers from the same figures (`get_clinic_queue`, `get_registration_queue`, `get_bed_availability`), for every clinic and ward, linked or not.
 - When the bridge has been silent for 5 minutes the figures are no longer shown, and the assistant says they aren't available.
