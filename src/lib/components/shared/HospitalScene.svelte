@@ -277,13 +277,28 @@
                 const parts = buildings.children.filter((o) => o.userData.pieceId === focus?.pieceId);
                 const pieceBox = parts.length ? parts.reduce((box, o) => box.expandByObject(o), new THREE.Box3()) : null;
                 // Just over the walls with the roofs off, so the pin stays over its room; else just over the roof.
-                const top = !focusShape ? 0 : focusShape.room || inside ? 3.4 : pieceBox ? pieceBox.max.y + 0.3 : 1;
+                // A room seen from its door gets it lower, so from that angle it doesn't seem to mark the room behind.
+                const top = !focusShape
+                    ? 0
+                    : focusShape.room && presentation && !overhead
+                      ? 2
+                      : focusShape.room || inside
+                        ? 3.4
+                        : pieceBox
+                          ? pieceBox.max.y + 0.3
+                          : 1;
                 const focusBox = marker.show(focusShape, top);
-                // A room is framed with its whole building, and a place with what is around it, to find your bearings.
-                const around = focusBox?.clone();
-                if (around && focusShape?.room && pieceBox)
-                    around.union(new THREE.Box3(pieceBox.min.clone().setY(0), pieceBox.max.clone().setY(0)));
-                if (moved) rig.frameRoute(routeBox ?? around ?? null, routeBox ? 8 : 10);
+                // A room is seen from in front of its door, with the corridor or space
+                // just outside it; a place with what is around it, to find your bearings.
+                const around = focusBox?.clone(),
+                    door = focusShape?.room ? focusShape.door : undefined;
+                // Framed at wall height (the pin may run above the view), grown both ways
+                // across the door wall so the doorway shows and the room stays in the middle.
+                if (around && door) {
+                    around.max.y = Math.min(around.max.y, 2.5);
+                    around.expandByVector(door === "north" || door === "south" ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0));
+                }
+                if (moved) rig.frameRoute(routeBox ?? around ?? null, routeBox ? 8 : door ? 1.5 : 10, routeBox ? undefined : door);
                 // From farther away (a whole building) the pin grows, so it stays easy to spot.
                 const above = marker.resize(THREE.MathUtils.clamp(rig.focusDistance() / 40, 1, 3));
                 // The place's own name moves up onto the pin, like a map marker, instead of covering it.

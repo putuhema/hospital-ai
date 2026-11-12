@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { center, footprint } from "../model/interiors.ts";
+import { center, footprint, type Side } from "../model/interiors.ts";
 import type { Piece } from "../model/layout.ts";
 import type { Point } from "../wayfinding/navigation.ts";
 import { clearGroup } from "./dispose.ts";
@@ -14,12 +14,13 @@ export type HighlightTarget = { pieceId?: number; roomId?: number; point: Point 
 /**
  * The outline to draw around a highlighted place, in tiles: a room's
  * rectangle, a building's or area's footprint, or a small square around a
- * landmark. Null when the place is no longer on the layout.
+ * landmark. Null when the place is no longer on the layout. A room also says
+ * which wall its door is in, so the camera can look in through it.
  */
 export function highlightShape(
   pieces: Piece[],
   target: HighlightTarget,
-): { polygon: Point[]; centre: Point; room: boolean } | null {
+): { polygon: Point[]; centre: Point; room: boolean; door?: Side } | null {
   if (target.pieceId === undefined) {
     const { x, y } = target.point,
       r = 0.6;
@@ -49,6 +50,7 @@ export function highlightShape(
       ],
       centre: { x: x + r.w / 2, y: y + r.h / 2 },
       room: true,
+      door: r.door ?? "south",
     };
   }
   return { polygon: footprint(p), centre: center(p), room: false };
