@@ -22,7 +22,7 @@
     // hospital information and the doctors, and saves it back.
     let title = $state("Greenfield Hospital"),
         greenery = $state(1),
-        grid = $state({ width: 24, height: 20 }),
+        grid = $state({ width: 24, height: 20, tileMeters: 2 }),
         pieces: Piece[] = $state(structuredClone(starterPieces)),
         network: WalkingNetwork = $state(emptyNetwork()),
         faq: FaqEntry[] = $state([]);
@@ -33,11 +33,11 @@
         toast = $state("");
 
     const snapshot = () =>
-        layoutSnapshot({ title, greenery, pieces, network, faq, width: grid.width, height: grid.height });
+        layoutSnapshot({ title, greenery, pieces, network, faq, width: grid.width, height: grid.height, tileMeters: grid.tileMeters });
     function load(json: string) {
         const d = parseLayout(json);
         ({ title, greenery, pieces, network, faq } = d);
-        grid = { width: d.grid.width, height: d.grid.height };
+        grid = { width: d.grid.width, height: d.grid.height, tileMeters: d.grid.tileMeters };
     }
     // Saved to the database as it is typed; changes from the editor show up here too.
     const store = new HospitalStore(snapshot, load, (merged) => merged && notify(mergeMessage(merged.conflicts)));

@@ -13,9 +13,11 @@ export type Project = {
   greenery: number;
   /** Hospital information: questions the map can't answer. */
   faq?: FaqEntry[];
+  /** Real metres per tile, for walking distances; 2 unless measured. */
+  tileMeters?: number;
 };
 
-const grid = (p: Project) => ({ width: p.width, height: p.height, tileMeters: 2 });
+const grid = (p: Project) => ({ width: p.width, height: p.height, tileMeters: p.tileMeters ?? 2 });
 
 /** What autosave stores (read back with `parseLayout`). */
 export const layoutSnapshot = (p: Project) =>

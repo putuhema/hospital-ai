@@ -17,6 +17,7 @@
         canvasWidth,
         canvasHeight,
         greenery = $bindable(),
+        tileMeters = $bindable(2),
         hidden,
         faq,
         update,
@@ -37,6 +38,8 @@
         canvasHeight: number;
         /** Trees and foliage around the campus on the visitor map. */
         greenery: number;
+        /** Real metres per tile, for walking distances. */
+        tileMeters?: number;
         hidden: boolean;
         /** Hospital information, edited on its own page (/editor/info). */
         faq: FaqEntry[];
@@ -240,7 +243,7 @@
                 >Questions & answers and doctors' schedules · {answered(faq).length} live</span
             ></a
         >{/if}
-    <ProjectOverview {pieces} {canvasWidth} {canvasHeight} bind:greenery {onexportmodel} />
+    <ProjectOverview {pieces} {canvasWidth} {canvasHeight} bind:greenery bind:tileMeters {onexportmodel} />
 </aside>
 
 <style>

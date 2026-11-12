@@ -23,6 +23,9 @@ type Layout = {
 export type Merged = { layout: string; conflicts: string[] };
 
 const same = (a: unknown, b: unknown) => stableJson(a) === stableJson(b);
+type Grid = { width?: number; height?: number; tileMeters?: number };
+const size = (l: Layout) => ({ width: (l.grid as Grid)?.width, height: (l.grid as Grid)?.height });
+const scale = (l: Layout) => (l.grid as Grid)?.tileMeters ?? 2;
 
 /** One value: theirs unless only mine changed. */
 function pick<T>(base: T, mine: T, theirs: T, name: string, conflicts: string[]): T {
@@ -79,7 +82,11 @@ export function mergeLayouts(base: string, mine: string, theirs: string): Merged
     ...t,
     title: pick(b.title, m.title, t.title, "the hospital's name", conflicts),
     greenery: pick(b.greenery, m.greenery, t.greenery, "the trees setting", conflicts),
-    grid: pick(b.grid, m.grid, t.grid, "the canvas size", conflicts),
+    // The canvas size and the map's scale are set separately, so two editors can change one each.
+    grid: {
+      ...pick(size(b), size(m), size(t), "the canvas size", conflicts),
+      tileMeters: pick(scale(b), scale(m), scale(t), "the map scale", conflicts),
+    },
     pieces: byId(b.pieces ?? [], m.pieces ?? [], t.pieces ?? [], (p) => p.name || "a building", conflicts),
     network: {
       nodes: byId(b.network?.nodes ?? [], m.network?.nodes ?? [], t.network?.nodes ?? [], (n) => n.name || "a waypoint", conflicts),

@@ -206,6 +206,51 @@ h3 span {
     font-size: 9px;
     color: #a3ad95;
 }
+.real-size .tile-size,
+.real-size .measure div {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #5c6d4e;
+}
+.real-size input[type="number"] {
+    width: 64px;
+    padding: 5px 6px;
+    border: 1px solid #dde3d5;
+    border-radius: 6px;
+    font: inherit;
+    background: white;
+}
+.real-size select {
+    min-width: 0;
+    flex: 1;
+    padding: 5px 4px;
+    border: 1px solid #dde3d5;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 11px;
+    background: white;
+}
+.real-size .measure {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.real-size .measure div span {
+    white-space: nowrap;
+}
+.real-size button {
+    align-self: flex-start;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: #2d4a38;
+    color: white;
+    font-size: 11px;
+}
+.real-size button:disabled {
+    opacity: 0.4;
+}
 .blender-note {
     display: flex;
     gap: 8px;

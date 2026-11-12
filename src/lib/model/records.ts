@@ -11,7 +11,15 @@ import type { Doctor } from "./doctors.ts";
 import type { PlaceInfo } from "./place-info.ts";
 import type { WalkingNetwork } from "../wayfinding/navigation.ts";
 
-export type Site = { title: string; greenery: number; width: number; height: number; network: WalkingNetwork };
+export type Site = {
+  title: string;
+  greenery: number;
+  width: number;
+  height: number;
+  /** Real metres per tile; 2 unless the hospital measured it. */
+  tileMeters?: number;
+  network: WalkingNetwork;
+};
 export type BuildingRow = { pieceId: number; order: number; piece: Piece };
 /** `place` is "b:<piece>", "r:<piece>:<room>" or "n:<waypoint>". */
 export type PlaceRow = { place: string; info: Omit<PlaceInfo, "doctors"> };
@@ -32,7 +40,7 @@ const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 export function splitLayout(layout: {
   title: string;
   greenery: number;
-  grid: { width: number; height: number };
+  grid: { width: number; height: number; tileMeters?: number };
   pieces: Piece[];
   network: WalkingNetwork;
   faq: FaqEntry[];
@@ -70,7 +78,14 @@ export function splitLayout(layout: {
     edges: layout.network.edges,
   };
   return {
-    site: plain({ title: layout.title, greenery: layout.greenery, width: layout.grid.width, height: layout.grid.height, network }),
+    site: plain({
+      title: layout.title,
+      greenery: layout.greenery,
+      width: layout.grid.width,
+      height: layout.grid.height,
+      tileMeters: layout.grid.tileMeters ?? 2,
+      network,
+    }),
     buildings,
     places,
     doctors,
@@ -105,7 +120,7 @@ export function joinLayout(r: Records) {
     greenery: r.site.greenery,
     pieces,
     network,
-    grid: { width: r.site.width, height: r.site.height, tileMeters: 2 },
+    grid: { width: r.site.width, height: r.site.height, tileMeters: r.site.tileMeters ?? 2 },
     faq: [...r.faq].sort((a, b) => a.order - b.order).map(({ topic, question, answer }) => ({ question, answer, topic })),
   });
 }

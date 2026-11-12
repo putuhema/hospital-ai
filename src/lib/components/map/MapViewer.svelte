@@ -31,6 +31,7 @@
         pieces,
         network,
         greenery = 1,
+        tileMeters = 2,
         canvasWidth,
         canvasHeight,
         faq = [],
@@ -44,6 +45,8 @@
         network: WalkingNetwork;
         /** Trees and foliage around the campus, set in the editor. */
         greenery?: number;
+        /** Real metres per tile, as the hospital measured it: walking distances use it. */
+        tileMeters?: number;
         canvasWidth: number;
         canvasHeight: number;
         /** Hospital information: general questions the map can't answer. */
@@ -91,7 +94,7 @@
         done = $state(0),
         journeyHeight = $state(0);
     let exporter: (() => Promise<void>) | null = null;
-    let grid = $derived(buildGrid(pieces, canvasWidth, canvasHeight));
+    let grid = $derived(buildGrid(pieces, canvasWidth, canvasHeight, tileMeters));
     let route = $derived(from && to ? planRoute(grid, from, to) : null);
     let questions = $derived(answered(faq));
     let landmarks = $derived(network.nodes.filter((n) => n.name.trim()));
@@ -193,18 +196,21 @@
         onward = $state(0),
         /** Their walking speed (m/s), from their recent steps. */
         pace = $state<number | null>(null);
-    // How many map metres a real metre is, learned at corners: the map may not be
-    // drawn to the hospital's true size. Kept on this phone, per hospital.
-    const scaleKey = () => `p-map-scale:${slug ?? "home"}`;
-    function savedScale() {
+    // The follower counts in the map's drawn metres (2 a tile); a real metre is
+    // 2 / tileMeters of them, as the hospital measured it. What corners teach on
+    // top of that (the visitor's stride, a building drawn a bit off) is kept on
+    // this phone, per hospital, as a correction to the measured scale.
+    const drawn = () => 2 / tileMeters;
+    const correctionKey = () => `p-map-stride:${slug ?? "home"}`;
+    function savedCorrection() {
         try {
-            const n = Number(localStorage.getItem(scaleKey()));
+            const n = Number(localStorage.getItem(correctionKey()));
             return n > 0 ? n : 1;
         } catch {
             return 1;
         }
     }
-    let follower = $derived(route ? createFollower(route, { scale: untrack(savedScale) }) : null);
+    let follower = $derived(route ? createFollower(route, { scale: drawn() * untrack(savedCorrection) }) : null);
     let stopSensor: (() => void) | null = null,
         stepTimes: number[] = [];
     /** Start following; called from the tap that opens the steps, as iOS asks for motion access only then. */
@@ -231,7 +237,7 @@
                     done = follower.done;
                     onward = 0;
                     try {
-                        localStorage.setItem(scaleKey(), follower.scale.toFixed(3));
+                        localStorage.setItem(correctionKey(), (follower.scale / drawn()).toFixed(3));
                     } catch {}
                 }
             },
@@ -636,7 +642,14 @@
                         ></button
                     >
                 </div>
-                {#if stepping && route}<div class="about steps"><RouteSteps {route} bind:done following={sensing} {pace} {onward} compact /></div>
+                {#if stepping && route}<div class="about steps"><RouteSteps
+                            {route}
+                            bind:done
+                            following={sensing}
+                            pace={pace && pace / drawn()}
+                            onward={onward / drawn()}
+                            compact
+                        /></div>
                 {:else if about && aboutHere}
                     {@const info = placeInfo(to.info)}
                     <div class="about">

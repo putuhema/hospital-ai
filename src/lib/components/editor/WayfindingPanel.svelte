@@ -19,6 +19,7 @@
         network,
         width,
         height,
+        tileMeters = 2,
         onchange,
         onselectpiece,
     }: {
@@ -26,11 +27,13 @@
         network: WalkingNetwork;
         width: number;
         height: number;
+        /** Real metres per tile, for the test route's distance. */
+        tileMeters?: number;
         onchange: (n: WalkingNetwork) => void;
         /** Jump to a building in the layout editor to fix it. */
         onselectpiece: (id: number) => void;
     } = $props();
-    let grid = $derived(buildGrid(pieces, width, height));
+    let grid = $derived(buildGrid(pieces, width, height, tileMeters));
     let placeList = $derived(places(pieces, network));
     let blocked = $derived(unreachable(grid, placeList));
     let landmarks = $derived(network.nodes.filter((n) => n.name.trim()));

@@ -39,12 +39,12 @@ export type AssistantContext = {
 
 /** The context for a layout (as `parseLayout` returns it) at a moment. */
 export function assistantContext(
-  layout: { pieces: Piece[]; network: WalkingNetwork; grid: { width: number; height: number }; faq?: FaqEntry[] },
+  layout: { pieces: Piece[]; network: WalkingNetwork; grid: { width: number; height: number; tileMeters?: number }; faq?: FaqEntry[] },
   now: Date,
 ): AssistantContext {
   return {
     places: places(layout.pieces, layout.network),
-    grid: buildGrid(layout.pieces, layout.grid.width, layout.grid.height),
+    grid: buildGrid(layout.pieces, layout.grid.width, layout.grid.height, layout.grid.tileMeters),
     ...(layout.faq && { faq: layout.faq }),
     now,
   };

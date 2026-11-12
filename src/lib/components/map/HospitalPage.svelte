@@ -66,6 +66,7 @@
         greenery={layout.greenery}
         canvasWidth={layout.grid.width}
         canvasHeight={layout.grid.height}
+        tileMeters={layout.grid.tileMeters}
         faq={layout.faq}
         shareUrl={publicUrl(map.data.slug, page.url.origin)}
         slug={map.data.slug}

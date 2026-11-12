@@ -132,12 +132,15 @@ export type NavGrid = {
   southWall: Uint8Array;
   walls: [Point, Point][];
   pieces: Piece[];
+  /** Real metres per tile, for walking distances (the map itself is drawn at 2). */
+  tileMeters: number;
 };
 
 export function buildGrid(
   pieces: Piece[],
   width: number,
   height: number,
+  tileMeters = 2,
 ): NavGrid {
   const cols = width * RES,
     rows = height * RES,
@@ -171,7 +174,7 @@ export function buildGrid(
       for (let j = from; j <= to; j++) eastWall[j * cols + i] = 1;
     }
   }
-  return { cols, rows, cost, eastWall, southWall, walls: segments, pieces };
+  return { cols, rows, cost, eastWall, southWall, walls: segments, pieces, tileMeters };
 }
 
 const cellAt = (g: NavGrid, p: Point) =>
@@ -384,13 +387,14 @@ function describe(
   points: Point[],
   fromName: string | null,
   to: Place,
+  tileMeters = 2,
 ): Step[] {
   const says: { say: StepSay; meters: number; at: number }[] = [];
   let heading: Point | null = null;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1],
       b = points[i],
-      meters = distance(a, b) * 2,
+      meters = distance(a, b) * tileMeters,
       d = { x: b.x - a.x, y: b.y - a.y };
     if (meters < 0.05) continue;
     const area = areaAt(pieces, b),
@@ -526,11 +530,11 @@ export function planRoute(
   const route = smooth(g, points);
   let meters = 0;
   for (let i = 1; i < route.length; i++)
-    meters += distance(route[i - 1], route[i]) * 2;
+    meters += distance(route[i - 1], route[i]) * g.tileMeters;
   return {
     points: route,
     meters: Math.round(meters),
-    steps: describe(g.pieces, route, fromPlace?.name ?? null, to),
+    steps: describe(g.pieces, route, fromPlace?.name ?? null, to, g.tileMeters),
   };
 }
 

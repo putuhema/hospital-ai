@@ -41,7 +41,9 @@
     let title = $state("Greenfield Hospital"),
         greenery = $state(1),
         canvasWidth = $state(24),
-        canvasHeight = $state(20);
+        canvasHeight = $state(20),
+        /** Real metres per tile, for walking distances. */
+        tileMeters = $state(2);
     let canvas = $derived({ width: canvasWidth, height: canvasHeight });
 
     // Editor state.
@@ -93,7 +95,8 @@
     // Persistence: every change is saved to the database shortly after it is
     // made, and is live for visitors straight away.
     let loaded = false;
-    const snapshot = () => layoutSnapshot({ title, greenery, pieces, network, faq, width: canvasWidth, height: canvasHeight });
+    const snapshot = () =>
+        layoutSnapshot({ title, greenery, pieces, network, faq, width: canvasWidth, height: canvasHeight, tileMeters });
     function load(json: string) {
         const d = parseLayout(json);
         pieces = d.pieces;
@@ -103,6 +106,7 @@
         greenery = d.greenery;
         canvasWidth = d.grid.width;
         canvasHeight = d.grid.height;
+        tileMeters = d.grid.tileMeters;
     }
     // The hospital information page, or another device, saved a change.
     const store = new HospitalStore(snapshot, load, (merged) => {
@@ -208,7 +212,7 @@
 
     // Import and export.
     function download(format: "json" | "obj") {
-        const project = { title, greenery, pieces, network, faq, width: canvasWidth, height: canvasHeight };
+        const project = { title, greenery, pieces, network, faq, width: canvasWidth, height: canvasHeight, tileMeters };
         if (format === "json") {
             downloadFile(layoutJson(project), "application/json", fileName(title, "json"));
             notify("Layout exported");
@@ -325,6 +329,7 @@
                             {network}
                             width={canvasWidth}
                             height={canvasHeight}
+                            {tileMeters}
                             onchange={(n) => {
                                 checkpoint();
                                 network = n;
@@ -386,6 +391,7 @@
                 {canvasWidth}
                 {canvasHeight}
                 bind:greenery
+                bind:tileMeters
                 hidden={!propertiesOpen}
                 {faq}
                 {update}

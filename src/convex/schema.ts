@@ -14,6 +14,8 @@ export default defineSchema({
     greenery: v.optional(v.number()),
     width: v.number(),
     height: v.number(),
+    /** Real metres per tile of the map, for walking distances; 2 when unset. */
+    tileMeters: v.optional(v.number()),
     /** Waypoints and the paths between them (their details are in `places`). */
     network: v.any(),
     /** Goes up with every saved change, so editors see each other's changes. */

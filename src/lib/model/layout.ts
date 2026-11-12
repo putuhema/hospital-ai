@@ -373,6 +373,10 @@ export const STORAGE_KEY = "hospital-layout";
 export const parseGreenery = (value: unknown) =>
   typeof value === "number" && value >= 0 && value <= 2 ? value : 1;
 
+/** How many real metres one tile of the map is, as the hospital set it: 2 unless measured. */
+export const parseTileMeters = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0.5 && value <= 10 ? Math.round(value * 100) / 100 : 2;
+
 export function parseLayout(text: string) {
   const d = JSON.parse(text);
   const width = d.grid?.width ?? 24,
@@ -474,7 +478,7 @@ export function parseLayout(text: string) {
     title: typeof d.title === "string" ? d.title : "Hospital map",
     greenery: parseGreenery(d.greenery),
     pieces: d.pieces as Piece[],
-    grid: { width, height, tileMeters: 2 },
+    grid: { width, height, tileMeters: parseTileMeters(d.grid?.tileMeters) },
     faq: parseFaq(d.faq),
   };
 }
