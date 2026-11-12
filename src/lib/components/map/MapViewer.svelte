@@ -1257,20 +1257,11 @@
     }
     .scroll :global(.route-finder .place-details) {
         margin-top: 16px;
-        padding: 14px;
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        background: var(--paper-2);
         font-size: 13.5px;
         color: var(--ink);
     }
     .scroll :global(.route-finder .place-details small) {
         color: var(--muted);
-    }
-    .scroll :global(.route-finder .place-details .doctor) {
-        padding: 11px 12px;
-        border-radius: 12px;
-        background: var(--card);
     }
     .scroll :global(.route-finder .place-details .phone) {
         color: var(--forest);
@@ -1455,7 +1446,6 @@
     .clinics {
         display: flex;
         flex-direction: column;
-        gap: 6px;
         margin-top: 10px;
     }
     .clinics small {
@@ -1464,15 +1454,21 @@
         text-transform: uppercase;
         color: var(--muted);
     }
+    /* On the card's own colour, set apart by thin lines like the doctors. */
+    .clinics small {
+        margin-bottom: 4px;
+    }
     .clinics button {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 8px 10px;
-        border-radius: 12px;
-        background: #f5f8f1;
+        padding: 10px 2px;
+        border-bottom: 1px solid var(--line);
         text-align: left;
         color: inherit;
+    }
+    .clinics small + button {
+        border-top: 1px solid var(--line);
     }
     .clinics button span {
         flex: 1;
