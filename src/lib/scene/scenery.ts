@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import type { Piece } from "../model/layout.ts";
 
-// Calm landscape around the campus: gradient sky, drifting clouds, a meadow
-// that fades into haze, and low-poly trees.
+// Quiet grounds around the campus, so the buildings stand out like on a map:
+// a pale, flat lawn running to the edge of the view, and a few low-poly trees
+// on it and around it. No sky: the map looks down too steeply to see one.
 
-export const SKY = { top: "#6f9fcb", horizon: "#e2ebee", haze: "#dde7e6" };
+/** The lawn, also the colour the map clears to, so it runs off every edge. */
+export const LAWN = "#dbe4cc";
 const GREENS = ["#7fa36a", "#6d9660", "#8fb178", "#5f8a5a", "#9bbd7f", "#86a877"];
 const CONIFERS = ["#4f7a5a", "#5c8766", "#46705a"];
 
@@ -18,112 +20,32 @@ function random(seed: number) {
   };
 }
 
-function skyDome() {
-  const material = new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    depthWrite: false,
-    fog: false,
-    uniforms: {
-      top: { value: new THREE.Color(SKY.top) },
-      horizon: { value: new THREE.Color(SKY.horizon) },
-    },
-    vertexShader: /* glsl */ `
-      varying vec3 vDir;
-      void main() {
-        vDir = normalize(position);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform vec3 top;
-      uniform vec3 horizon;
-      varying vec3 vDir;
-      void main() {
-        float h = max(vDir.y, 0.0);
-        vec3 col = mix(horizon, top, pow(smoothstep(0.0, 0.3, h), 0.7));
-        gl_FragColor = vec4(col, 1.0);
-        #include <colorspace_fragment>
-      }`,
-  });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(1000, 32, 16), material);
-  dome.renderOrder = -1;
-  dome.frustumCulled = false;
-  return dome;
-}
-
-function cloud(rand: () => number, material: THREE.Material) {
-  const g = new THREE.Group();
-  const puffs = 4 + Math.floor(rand() * 4);
-  for (let i = 0; i < puffs; i++) {
-    const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), material);
-    const r = 5 + rand() * 6;
-    puff.scale.set(r * 1.3, r * 0.6, r);
-    puff.position.set((i - puffs / 2) * 7 + rand() * 4, rand() * 3, rand() * 8 - 4);
-    g.add(puff);
-  }
-  return g;
-}
-
 export function createScenery(scene: THREE.Scene) {
   const root = new THREE.Group();
   root.name = "Scenery";
   scene.add(root);
 
-  const sky = skyDome();
-  scene.add(sky);
-
   const meadow = new THREE.Mesh(
-    new THREE.CircleGeometry(1400, 64),
-    new THREE.MeshStandardMaterial({ color: "#b3c79a", roughness: 1 }),
+    new THREE.CircleGeometry(1400, 48),
+    new THREE.MeshLambertMaterial({ color: LAWN }),
   );
   meadow.rotation.x = -Math.PI / 2;
   meadow.position.y = -0.08;
   meadow.receiveShadow = true;
   root.add(meadow);
 
-  const cloudMaterial = new THREE.MeshLambertMaterial({
-    color: "#ffffff",
-    emissive: "#e8eef2",
-    emissiveIntensity: 0.35,
-    transparent: true,
-    opacity: 0.92,
-  });
-  const clouds = new THREE.Group();
-  const cloudRand = random(7);
-  for (let i = 0; i < 11; i++) {
-    const c = cloud(cloudRand, cloudMaterial);
-    const angle = cloudRand() * Math.PI * 2,
-      far = 160 + cloudRand() * 260;
-    c.position.set(Math.cos(angle) * far, 34 + cloudRand() * 30, Math.sin(angle) * far);
-    clouds.add(c);
-  }
-  root.add(clouds);
-
-  // Rolling hills on the horizon; the haze turns them soft blue-green.
-  const hillMaterial = new THREE.MeshStandardMaterial({ color: "#a3b99a", roughness: 1 });
-  const hills = new THREE.Group();
-  const hillRand = random(3);
-  for (let i = 0; i < 18; i++) {
-    const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 12), hillMaterial);
-    const angle = (i / 18) * Math.PI * 2 + hillRand() * 0.3,
-      far = 780 + hillRand() * 180;
-    hill.scale.set(150 + hillRand() * 150, 14 + hillRand() * 26, 150 + hillRand() * 150);
-    hill.position.set(Math.cos(angle) * far, -4, Math.sin(angle) * far);
-    hills.add(hill);
-  }
-  root.add(hills);
-
   // Instanced parts shared by every tree: fast to draw even with hundreds.
-  const MAX = 2500;
+  const MAX = 700;
   const flat = (color: string) =>
-    new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true });
+    new THREE.MeshLambertMaterial({ color, flatShading: true });
   const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 1.4, 6).translate(0, 0.7, 0);
   const crownGeo = new THREE.IcosahedronGeometry(1, 1).translate(0, 2.3, 0);
   const coneGeo = new THREE.ConeGeometry(1, 2.8, 7).translate(0, 2.6, 0);
   const bushGeo = new THREE.IcosahedronGeometry(0.7, 0).translate(0, 0.4, 0);
   const make = (geo: THREE.BufferGeometry, color: string) => {
     const mesh = new THREE.InstancedMesh(geo, flat(color), MAX);
+    // Shadows are drawn once per rebuild (see HospitalScene), so trees can cast them cheaply.
     mesh.castShadow = true;
-    mesh.receiveShadow = true;
     mesh.count = 0;
     root.add(mesh);
     return mesh;
@@ -134,9 +56,6 @@ export function createScenery(scene: THREE.Scene) {
   const bushes = make(bushGeo, "#ffffff");
 
   let signature = "";
-  const fog = new THREE.Fog(SKY.haze, 200, 600);
-  scene.fog = fog;
-  let haze = { extent: 48, reach: 70 };
   /** Rebuild the trees for a canvas of W × D metres. */
   function update(
     pieces: Piece[],
@@ -144,27 +63,14 @@ export function createScenery(scene: THREE.Scene) {
     D: number,
     /** Tree and foliage amount: 0 none, 1 normal, 2 lush. */
     amount: number,
-    camera: THREE.PerspectiveCamera,
   ) {
     const next = JSON.stringify([W, D, amount, pieces.map((p) => [p.x, p.y, p.w, p.h])]);
-    if (next === signature) return;
+    if (next === signature) return false;
     signature = next;
     const extent = Math.max(W, D);
-    // Everything far away grows with the canvas; 1 for the default 48 m campus.
-    const scale = Math.max(1, (extent + 60) / 108);
-    for (const g of [hills, clouds, meadow]) g.position.set(W / 2, g.position.y, D / 2);
-    clouds.scale.setScalar(scale);
-    meadow.scale.set(scale, scale, 1); // the meadow is rotated flat, so z is its thickness
-    sky.scale.setScalar(1.8 * scale);
-    // Keep the render distance short: the landscape dissolves into haze a
-    // little way past the campus, like depth of field on a real map.
-    const reach = Math.max(70, extent * 0.9);
-    const hazeFar = extent * 1.5 + reach + 240;
-    camera.far = hazeFar * 2 + 1200;
-    camera.updateProjectionMatrix();
-    haze = { extent, reach };
-    // Hills stand just inside the haze, as faint silhouettes on the horizon.
-    hills.scale.setScalar((hazeFar * 0.85) / 960);
+    meadow.position.set(W / 2, meadow.position.y, D / 2);
+    // A thin belt of trees just past the canvas edge; the map never looks farther.
+    const reach = Math.max(24, extent * 0.3);
 
     // No frame around the campus: the meadow runs straight under it.
     const rand = random(W * 131 + D * 17);
@@ -177,7 +83,7 @@ export function createScenery(scene: THREE.Scene) {
     const spots: { x: number; z: number; kind: number }[] = [];
     const free = (x: number, z: number) =>
       !blocked.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1);
-    // Countryside around the campus, thinning out with distance.
+    // Trees around the campus, few by its edge.
     // Wider spacing on big canvases keeps the tree count within budget.
     const step = Math.max(7, Math.sqrt(((W + 2 * reach) * (D + 2 * reach) * 0.5) / (MAX * 0.8)));
     const outside: typeof spots = [];
@@ -187,11 +93,8 @@ export function createScenery(scene: THREE.Scene) {
           pz = z + (rand() - 0.5) * step * 0.7;
         const out = Math.max(-px, px - W, -pz, pz - D);
         if (out < 0) continue;
-        // Open lawn by the campus easing into fuller woodland, with no hard edge.
-        const density =
-          out < 70 * scale
-            ? 0.25 + 0.5 * Math.min(1, out / 40)
-            : 0.5 - (out / reach) * 0.3;
+        // Open lawn by the campus easing into a light belt of trees.
+        const density = 0.12 + 0.3 * Math.min(1, out / reach);
         if (rand() > density * amount) continue;
         if (free(px, pz)) outside.push({ x: px, z: pz, kind: rand() < 0.3 ? 1 : 0 });
       }
@@ -201,7 +104,7 @@ export function createScenery(scene: THREE.Scene) {
         for (let z = 1; z < D; z += 5.5) {
           const px = x + (rand() - 0.5) * 3,
             pz = z + (rand() - 0.5) * 3;
-          if (px > 0 && px < W && pz > 0 && pz < D && rand() < 0.3 * amount && free(px, pz))
+          if (px > 0 && px < W && pz > 0 && pz < D && rand() < 0.18 * amount && free(px, pz))
             spots.push({ x: px, z: pz, kind: rand() < 0.45 ? 2 : 0 });
         }
 
@@ -247,21 +150,7 @@ export function createScenery(scene: THREE.Scene) {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.computeBoundingSphere();
     }
-  }
-
-  let last = 0;
-  /** `focus` is the camera's distance to the point it orbits (the campus). */
-  function animate(time: number, camera: THREE.Camera, focus: number) {
-    sky.position.copy(camera.position);
-    // Haze begins well past the far edge of the canvas and thickens gently,
-    // so the campus and the fields around it stay clear, and only the far
-    // countryside fades, where the trees end.
-    fog.near = focus + haze.extent * 0.5 + haze.reach * 0.35;
-    fog.far = focus + haze.extent * 0.5 + haze.reach * 1.1;
-    const dt = Math.min(0.1, (time - last) / 1000);
-    last = time;
-    // Clouds drift slowly around the campus.
-    clouds.rotation.y += dt * 0.004;
+    return true;
   }
 
   function dispose() {
@@ -271,11 +160,8 @@ export function createScenery(scene: THREE.Scene) {
         (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
       }
     });
-    sky.geometry.dispose();
-    (sky.material as THREE.Material).dispose();
-    scene.remove(root, sky);
-    scene.fog = null;
+    scene.remove(root);
   }
 
-  return { update, animate, dispose };
+  return { update, dispose };
 }

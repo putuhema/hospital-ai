@@ -5,7 +5,7 @@
     import { center, isArea, isBuilding, isOpenAir } from "$lib/model/interiors";
     import type { Piece } from "$lib/model/layout";
     import type { Point } from "$lib/wayfinding/navigation";
-    import { createScenery, SKY } from "$lib/scene/scenery";
+    import { createScenery, LAWN } from "$lib/scene/scenery";
     import { createCameraRig } from "$lib/scene/camera-rig";
     import { createStage } from "$lib/scene/stage";
     import { createRouteOverlay } from "$lib/scene/route-overlay";
@@ -14,6 +14,7 @@
     import { loadTemplates, MODEL_KINDS, pieceModel } from "$lib/scene/models";
     import { attachPointer, type Hover } from "$lib/scene/pointer";
     import { clearGroup } from "$lib/scene/dispose";
+    import { batchMeshes } from "$lib/scene/batch";
     import { defaultPrefs, loadPrefs } from "$lib/scene/display-prefs";
     import SceneOptions from "./SceneOptions.svelte";
     import SceneTooltip from "./SceneTooltip.svelte";
@@ -72,7 +73,11 @@
     } = $props();
     const { t } = useLocale();
     let cutaway = $state(false),
-        overhead = $state(false);
+        overhead = $state(false),
+        /** Which way the map faces, in radians: 0 when north is up. */
+        heading = $state(0);
+    let faceNorth: () => void = () => {};
+    let turned = $derived(Math.abs(Math.atan2(Math.sin(heading), Math.cos(heading))) > 0.05);
     let prefs = $state(defaultPrefs());
     onMount(() => {
         prefs = loadPrefs();
@@ -127,10 +132,15 @@
             onerror(t("webglUnavailable"));
             return;
         }
-        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        // The map is drawn at up to 1.5× on sharp screens: crisp enough, and
+        // far fewer pixels for a budget phone to fill.
+        renderer.setPixelRatio(Math.min(devicePixelRatio, presentation ? 1.5 : 2));
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.setClearColor(presentation ? SKY.horizon : "#edf0e7");
+        // On the map nothing moves in the sun, so shadows are drawn once per
+        // rebuild instead of every frame (see `sync`), with plain filtering.
+        renderer.shadowMap.type = presentation ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+        renderer.shadowMap.autoUpdate = !presentation;
+        renderer.setClearColor(presentation ? LAWN : "#edf0e7");
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         const dom = renderer.domElement;
@@ -148,6 +158,14 @@
             marker = createHighlight();
         scene.add(buildings, labelGroup, overlay.group, marker.group);
         const declutter = createDeclutter();
+        // The map is drawn only when something changes: the camera, the
+        // scene, a label shown or hidden, or a route or pin animating.
+        let dirty = true;
+        controls.addEventListener("change", () => (dirty = true));
+        faceNorth = () => {
+            rig.faceNorth();
+            dirty = true;
+        };
 
         let templates = new Map<string, THREE.Group>(),
             materials = new Set<THREE.Material>();
@@ -174,6 +192,12 @@
                 const template = templates.get(p.kind);
                 if (!template && !isOpenAir(p)) continue;
                 const { model, interior } = pieceModel(p, template, pieces, inside);
+                // On the map nothing is dragged, so each building's look-alike parts
+                // are merged: far fewer draw calls for a phone.
+                if (presentation) {
+                    batchMeshes(model);
+                    if (interior) batchMeshes(interior);
+                }
                 if (interior) buildings.add(interior);
                 if (isBuilding(p) || isArea(p)) addLabels(p, model);
                 buildings.add(model);
@@ -201,7 +225,7 @@
 
         sync = () => {
             if (destroyed) return;
-            controls.mouseButtons.LEFT = pan ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+            if (!presentation) controls.mouseButtons.LEFT = pan ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
             const size = `${canvasWidth}:${canvasHeight}`;
             if (size !== canvasSize) {
                 canvasSize = size;
@@ -211,13 +235,14 @@
             stage.grid.visible = grid;
             rig.setOverhead(overhead);
             rig.frame(host.clientWidth, host.clientHeight, insetLeft, insetBottom);
-            scenery?.update(pieces, canvasWidth * 2, canvasHeight * 2, greenery, camera);
+            const planted = !!scenery?.update(pieces, canvasWidth * 2, canvasHeight * 2, greenery);
             if (lastZoom !== zoom) {
                 rig.zoomBy(lastZoom / zoom);
                 lastZoom = zoom;
             }
             const next = JSON.stringify([pieces, inside, buildingNames, roomNames]);
             const rebuilt = next !== built && ready();
+            if (rebuilt || planted) renderer.shadowMap.needsUpdate = true;
             if (rebuilt) {
                 built = next;
                 buildPieces();
@@ -275,6 +300,7 @@
             stage.selectedBox.visible = !!object && !presentation;
             if (object) stage.selectedBox.box.setFromObject(object);
             if (!active) stage.ghost.visible = false;
+            dirty = true;
         };
 
         loadTemplates()
@@ -317,6 +343,7 @@
             renderer.setSize(w, h);
             rig.frame(w, h, insetLeft, insetBottom);
             rig.fit(canvasWidth, canvasHeight, zoom);
+            dirty = true;
         });
         resize.observe(host);
 
@@ -333,16 +360,29 @@
             URL.revokeObjectURL(url);
         });
 
-        let frame = 0;
+        let frame = 0,
+            pulsed = 0;
         function animate(time = 0) {
             frame = requestAnimationFrame(animate);
-            overlay.animate(time);
-            marker.animate(time);
-            scenery?.animate(time, camera, rig.focusDistance());
-            declutter(labelGroup, camera, dom.clientWidth, dom.clientHeight, time);
-            rig.tick();
-            controls.update();
+            // The editor moves buildings and ghosts under the pointer: it always draws.
+            if (!presentation) dirty = true;
+            if (rig.tick()) dirty = true;
+            if (controls.update()) dirty = true;
             rig.bound();
+            // The route's arrows and the pin move gently; 30 frames a second is plenty.
+            if ((route?.length || focusShape || !presentation) && time - pulsed > (presentation ? 32 : 0)) {
+                pulsed = time;
+                overlay.animate(time);
+                marker.animate(time);
+                dirty = true;
+            }
+            if (declutter(labelGroup, camera, dom.clientWidth, dom.clientHeight, time)) dirty = true;
+            if (!dirty) return;
+            dirty = false;
+            if (presentation) {
+                const now = rig.heading();
+                if (Math.abs(now - heading) > 0.005) heading = now;
+            }
             renderer.render(scene, camera);
         }
         sync();
@@ -396,8 +436,27 @@
             y={hover.y}
         />{/if}
     <SceneOptions bind:prefs bind:cutaway bind:overhead routeShown={!!route?.length} />
+    {#if presentation}
+        <!-- Shown once the map is turned: a tap turns it back, north up. -->
+        <button
+            class="compass"
+            class:turned
+            tabindex={turned ? 0 : -1}
+            aria-hidden={!turned}
+            aria-label={t("northUp")}
+            title={t("northUp")}
+            onclick={() => faceNorth()}
+            ><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" style:rotate={`${heading}rad`}
+                ><path d="M12 3l3.6 9H8.4z" fill="#d6553a" /><path d="M12 21l-3.6-9h7.2z" fill="#9aa59b" /></svg
+            ></button
+        >
+    {/if}
     <div class="orbit-help" class:gone={explored || !!route?.length || !!focusShape}>
-        <span>{t(pan ? "dragToPan" : onmove ? "dragBuildings" : "dragToExplore")} · {t("zoomHelp")}</span>
+        <span
+            >{#if presentation}{t("mapHelp")}{:else}{t(pan ? "dragToPan" : onmove ? "dragBuildings" : "dragToExplore")} · {t(
+                    "zoomHelp",
+                )}{/if}</span
+        >
     </div>
     {#if !presentation}<a class="source-link" href="/models/hospital-assets.blend" download
             >↓ Blender source</a
@@ -440,6 +499,38 @@
     /* On the map, the hint goes once the visitor has moved it. */
     .orbit-help.gone {
         opacity: 0;
+    }
+    .compass {
+        position: absolute;
+        z-index: 3;
+        top: 76px;
+        right: 20px;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: #fffdf8;
+        box-shadow:
+            0 0 0 1px #1b2a2117,
+            0 8px 24px -12px #1b2a2140;
+        opacity: 0;
+        scale: 0.8;
+        pointer-events: none;
+        transition:
+            opacity 160ms ease-out,
+            scale 160ms ease-out;
+    }
+    .compass.turned {
+        opacity: 1;
+        scale: 1;
+        pointer-events: auto;
+    }
+    .compass:active {
+        scale: 0.94;
+    }
+    .compass svg {
+        transform-origin: center;
     }
     .source-link {
         position: absolute;

@@ -40,13 +40,15 @@ export function createLabel(text: string, kind: keyof typeof LABEL_SIZE) {
 /**
  * Hide labels that would overlap one already shown, like a street map:
  * building names win over room names, nearer labels over farther ones.
+ * Returns true when it showed or hid one, so the scene needs drawing again.
  */
 export function createDeclutter() {
   const projected = new THREE.Vector3();
   let last = 0;
   return (group: THREE.Group, camera: THREE.Camera & { projectionMatrix: THREE.Matrix4 }, width: number, height: number, time: number) => {
-    if (time - last < 120) return;
+    if (time - last < 120) return false;
     last = time;
+    let changed = false;
     // Screen pixels per unit of a non-attenuated sprite's scale.
     const unit = (camera.projectionMatrix.elements[5] * height) / 2,
       placed: [number, number, number, number][] = [];
@@ -60,10 +62,13 @@ export function createDeclutter() {
         hw = (sprite.scale.x * unit) / 2 + 3,
         hh = (sprite.scale.y * unit) / 2 + 2;
       const box: [number, number, number, number] = [x - hw, y - hh, x + hw, y + hh];
-      sprite.visible =
+      const visible =
         projected.z < 1 &&
         !placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
-      if (sprite.visible) placed.push(box);
+      if (visible !== sprite.visible) changed = true;
+      sprite.visible = visible;
+      if (visible) placed.push(box);
     }
+    return changed;
   };
 }

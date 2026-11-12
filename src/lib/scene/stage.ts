@@ -8,7 +8,8 @@ export function createStage(scene: THREE.Scene, presentation: boolean) {
   scene.add(new THREE.HemisphereLight("#e3eef8", "#a3b88c", 2.4));
   const sun = new THREE.DirectionalLight("#fff0d8", 3.1);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  // The map draws its shadows once per rebuild, at a size budget phones manage.
+  sun.shadow.mapSize.setScalar(presentation ? 1024 : 2048);
   sun.shadow.normalBias = 0.06;
   scene.add(sun, sun.target);
 

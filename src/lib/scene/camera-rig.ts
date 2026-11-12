@@ -1,88 +1,152 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-/** The map renders the top of a frame this much taller, leaving room for sky. */
-const SKY_FRAME = 1.25;
-/** Less on a portrait phone, where the search bar already covers the top. */
-const SKY_FRAME_PORTRAIT = 1.2;
-/** Normal orbit limit: never below the horizon. */
+/** Editor orbit limit: never below the horizon. */
 const LOWEST = Math.PI / 2.15;
+/** Map tilt limit: steep enough that the horizon never shows, so it reads as a map. */
+const MAP_LOWEST = 0.95;
+/** The map's default tilt from straight down: a clear plan with a little depth. */
+const MAP_TILT = 0.6;
+/** Tilt used to look at a route or a place, at most: walls and trees don't hide it. */
+const FRAME_TILT = 0.7;
 /** Polar angle of the bird's-eye view: straight down, nudged so the camera keeps a heading. */
 const OVERHEAD = 1e-4;
+/** How long the camera takes to move to a place, a route or north (ms): short and decisive. */
+const GLIDE_MS = 260;
+
+type Pose = { target: THREE.Vector3; offset: THREE.Spherical };
 
 /** Camera, orbit controls and how the view is framed around the campus or a route. */
 export function createCameraRig(dom: HTMLElement, presentation: boolean) {
-  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1500);
-  // The map uses a lower, scenic angle so the horizon and sky show, but
-  // high enough to see into the campus.
-  camera.position.set(59, presentation ? 30 : 53, 67);
+  // The map uses a long lens from high up, so it reads as a flat, legible plan.
+  const camera = new THREE.PerspectiveCamera(presentation ? 30 : 38, 1, 0.1, 1500);
   const controls = new OrbitControls(camera, dom);
   controls.target.set(24, 0, 20);
+  if (presentation) {
+    // North up (the camera south of the campus, looking north), like the plan.
+    camera.position.copy(controls.target).add(new THREE.Vector3().setFromSphericalCoords(90, MAP_TILT, 0));
+    // Like a map app: one finger or the left button pans along the ground,
+    // two fingers pinch to zoom and slide to turn or tilt, the right button turns.
+    controls.screenSpacePanning = false;
+    controls.zoomToCursor = true;
+    controls.dampingFactor = 0.3;
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    controls.maxPolarAngle = MAP_LOWEST;
+    controls.minDistance = 10;
+  } else {
+    camera.position.set(59, 53, 67);
+    controls.maxPolarAngle = LOWEST;
+    controls.minDistance = 6;
+  }
   controls.enableDamping = true;
-  controls.maxPolarAngle = LOWEST;
-  // The map lets you get closer; how far out is set by the canvas (see `bound`).
-  controls.minDistance = presentation ? 6 : 15;
   controls.maxDistance = 900;
+  const lowest = controls.maxPolarAngle;
 
   // Set while a route is framed, so resizing keeps the route in view.
   let routeDistance: number | null = null;
   // On the map: the canvas, which the view never leaves, and the built
   // campus on it, which the view opens on.
   let site: THREE.Box3 | null = null,
-    campus: THREE.Box3 | null = null;
+    campus: THREE.Box3 | null = null,
+    opened = false;
   let framedAs = "";
-  // Bird's-eye view: the angles to glide to, and the view to return to afterwards.
+  // Bird's-eye view, and the angles to return to afterwards.
   let overhead = false,
-    goal: { phi: number; theta: number } | null = null,
-    before = { phi: 0.9, theta: 0 };
+    before = { phi: MAP_TILT, theta: 0 };
   const orbit = new THREE.Spherical(),
     offset = new THREE.Vector3();
+  // A camera move under way: from one pose to another over GLIDE_MS.
+  let glide: { from: Pose; to: Pose; start: number; duration: number; done?: () => void } | null = null;
 
   // Pixels covered by overlays. A side panel narrows the view; a bottom sheet
   // floats over the map, which only leaves room for it when framing a place.
   let size = { width: 0, height: 0 },
     target = { left: 0, bottom: 0 };
   // The last place or route framed, framed again if a sheet rises just after or grows.
-  let framed: { bounds: THREE.Box3; pad: number; at: number } | null = null;
+  // `moved`: the visitor has dragged or zoomed since, so it is left where they put it.
+  let framed: { bounds: THREE.Box3; pad: number; at: number; moved?: boolean } | null = null;
   const ray = new THREE.Raycaster(),
     ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-  function skyFrame() {
-    // Looking straight down there is no sky to leave room for.
-    if (overhead) return 1;
-    return size.width < size.height ? SKY_FRAME_PORTRAIT : SKY_FRAME;
+  // A visitor's own drag or pinch takes over from any move under way.
+  controls.addEventListener("start", () => {
+    if (glide) finish(false);
+    if (framed) framed.moved = true;
+  });
+
+  const pose = (): Pose => ({
+    target: controls.target.clone(),
+    offset: new THREE.Spherical().setFromVector3(offset.copy(camera.position).sub(controls.target)),
+  });
+  function apply(p: Pose) {
+    controls.target.copy(p.target);
+    camera.position.copy(p.target).add(offset.setFromSpherical(p.offset));
+    camera.lookAt(controls.target);
+  }
+  const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /** Move from `from` to where the camera is now, over a short ease-out. */
+  function glideFrom(from: Pose, done?: () => void) {
+    const to = pose();
+    if (glide?.done && glide.done !== done) glide.done();
+    glide = null;
+    const still =
+      from.target.distanceToSquared(to.target) < 1e-4 &&
+      Math.abs(from.offset.radius - to.offset.radius) < 1e-3 &&
+      Math.abs(from.offset.phi - to.offset.phi) < 1e-4 &&
+      Math.abs(from.offset.theta - to.offset.theta) < 1e-4;
+    if (still || reduced()) return done?.();
+    glide = { from, to, start: performance.now(), duration: GLIDE_MS, done };
+    apply(from);
+  }
+  /**
+   * Start a new move: returns where the camera shows now, to glide from, and
+   * puts the camera where any move under way was heading, to work out the next
+   * destination from.
+   */
+  function begin() {
+    const from = pose();
+    finish(true);
+    return from;
+  }
+  /** End the move under way: at its destination, or where it is now. */
+  function finish(arrive: boolean) {
+    if (!glide) return;
+    const { to, done } = glide;
+    glide = null;
+    if (arrive) apply(to);
+    done?.();
   }
 
   function project() {
     const { width, height } = size;
     if (presentation) {
-      // Frame the campus beside the side panel, sitting low with sky above it.
-      const inset = Math.min(target.left, width / 2),
-        tall = skyFrame();
-      camera.aspect = (width + inset) / (height * tall);
-      camera.setViewOffset(width + inset, height * tall, 0, 0, width, height);
+      // Frame the campus beside the side panel.
+      const inset = Math.min(target.left, width / 2);
+      camera.aspect = (width + inset) / height;
+      camera.setViewOffset(width + inset, height, 0, 0, width, height);
     } else camera.aspect = width / height;
     camera.updateProjectionMatrix();
   }
 
   /**
-   * Match the viewport. On the map, render the top-right part of a larger
-   * frame: the campus sits lower (sky above it) and clear of a panel of
-   * `insetLeft` pixels on the left. A sheet of `insetBottom` pixels floats
-   * over the bottom; places framed from now on sit above it. Returns false
-   * when nothing changed.
+   * Match the viewport. On the map, render the right-hand part of a wider
+   * frame, so the campus sits clear of a panel of `insetLeft` pixels on the
+   * left. A sheet of `insetBottom` pixels floats over the bottom; places
+   * framed from now on sit above it. Returns false when nothing changed.
    */
   function frame(width: number, height: number, insetLeft = 0, insetBottom = 0) {
     const key = `${width}:${height}:${insetLeft}:${insetBottom}:${overhead}`;
     if (!width || !height || key === framedAs) return false;
-    const risen = insetBottom !== target.bottom,
-      grew = insetBottom > target.bottom;
+    const risen = insetBottom !== target.bottom;
     framedAs = key;
     size = { width, height };
     target = { left: insetLeft, bottom: insetBottom };
     project();
-    // A sheet opening with the place it shows, or growing over it (a route's steps): keep the place above it.
-    if (risen && framed && (grew || performance.now() - framed.at < 700)) frameRoute(framed.bounds, framed.pad);
+    // A sheet opening with the place it shows, growing over it (a route's steps) or
+    // shrinking: keep the place in the clear part, unless the visitor has moved the map.
+    if (risen && framed && (!framed.moved || performance.now() - framed.at < 700)) frameRoute(framed.bounds, framed.pad);
     return true;
   }
 
@@ -98,13 +162,12 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     const { width, height } = size;
     const inset = Math.min(target.left, width / 2),
       clear = height - (sheet ? Math.min(target.bottom, height * 0.7) : 0),
-      tall = skyFrame(),
       // The view angles of the clear part, at the scale of the whole view.
       tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * (clear / height),
-      tanH = tanV * ((width + inset) / (clear * tall));
+      tanH = tanV * ((width + inset) / clear);
     // Shares of the half-frame, measured from its centre where the box sits.
     const across = ((width - inset) / (width + inset)) * margin,
-      below = (2 / tall - 1) * margin,
+      below = margin,
       above = 0.8 * margin;
     const back = offset.copy(camera.position).sub(controls.target).normalize(),
       right =
@@ -137,7 +200,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     camera.updateMatrixWorld();
     // Where the centre should show: middle of the clear part's frame, as `project` places it for the whole view.
     const inset = Math.min(target.left, width / 2);
-    ray.setFromCamera(new THREE.Vector2(inset / width, 1 - (clear * skyFrame()) / height), camera);
+    ray.setFromCamera(new THREE.Vector2(inset / width, 1 - clear / height), camera);
     const hit = ray.ray.intersectPlane(ground, new THREE.Vector3());
     if (!hit) return;
     const shift = centre.clone().sub(hit).setY(0);
@@ -145,22 +208,10 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     controls.target.add(shift);
   }
 
-  /**
-   * Look at a long campus from its side, so it runs across a wide screen (or
-   * up a tall one) and fills it, rather than end-on and far away. Keeps the
-   * camera's height angle; used when the view opens on the campus.
-   */
-  function turnAlong(box: THREE.Box3) {
-    const extent = box.getSize(new THREE.Vector3()),
-      wide = size.width >= size.height,
-      // From the south-east, the start view; from the east-south-east when a deep campus should run across.
-      across = wide ? extent.z > extent.x * 1.2 : extent.x > extent.z * 1.2,
-      heading = across ? new THREE.Vector3(1, 0, 0.45) : new THREE.Vector3(0.6, 0, 0.8);
+  /** Point the camera's heading north, keeping its tilt and distance. */
+  function northUp() {
     orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
-    const polar = orbit.phi,
-      radius = orbit.radius;
-    orbit.setFromVector3(heading);
-    orbit.set(radius, polar, orbit.theta);
+    orbit.theta = 0;
     camera.position.copy(controls.target).add(offset.setFromSpherical(orbit));
     camera.lookAt(controls.target);
   }
@@ -170,10 +221,14 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     if (routeDistance === null && presentation && site && size.width) {
       const opening = campus ?? site;
       controls.target.copy(opening.getCenter(new THREE.Vector3()).setY(0));
-      if (!overhead) turnAlong(opening);
-      // Opens close in, the campus filling the view and its empty corners
-      // running off it; zooming out still shows the whole canvas (see `bound`).
-      const distance = Math.max(controls.minDistance, fitDistance(opening, 1, true)) * (100 / zoom);
+      // Opens north up, like the plan; later refits keep the visitor's heading.
+      if (!opened) northUp();
+      opened = true;
+      // On a phone it opens close in, the campus filling the view and its empty
+      // corners running off it; on a wide screen the whole campus shows. Zooming
+      // out still shows the whole canvas (see `bound`).
+      const cover = size.width < size.height,
+        distance = Math.max(controls.minDistance, fitDistance(opening, 1, cover)) * (100 / zoom);
       camera.position.sub(controls.target).normalize().multiplyScalar(distance).add(controls.target);
       clearOfSheet(controls.target.clone());
       return;
@@ -226,24 +281,29 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   }
 
   /**
-   * Look down on a route (or a highlighted place) from about 50° so trees and
-   * walls don't hide it; null releases it. `pad` metres at least are kept
-   * clear around it: routes keep the rooms around them in view, a single
-   * place is framed closer.
+   * Look down on a route (or a highlighted place) steeply, so trees and walls
+   * don't hide it; null releases it. `pad` metres at least are kept clear
+   * around it: routes keep the rooms around them in view, a single place is
+   * framed closer. On the map the camera glides there.
    */
   function frameRoute(bounds: THREE.Box3 | null, pad = 8) {
+    const from = begin();
     routeDistance = null;
     framed = bounds && { bounds: bounds.clone(), pad, at: performance.now() };
     if (!bounds) {
       // Back to the whole campus once a route is cleared.
-      if (site) fit(0, 0, 100);
+      if (site) {
+        fit(0, 0, 100);
+        if (presentation) glideFrom(from);
+      }
       return;
     }
     const centre = bounds.getCenter(new THREE.Vector3()).setY(0),
-      extent = bounds.getSize(new THREE.Vector3()),
-      direction = camera.position.clone().sub(controls.target).setY(0).normalize(),
-      elevation = overhead ? Math.PI / 2 - OVERHEAD : 0.87;
-    direction.multiplyScalar(Math.cos(elevation)).setY(Math.sin(elevation));
+      extent = bounds.getSize(new THREE.Vector3());
+    orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
+    // Keeps the visitor's heading, and their tilt if it is already steeper.
+    const tilt = overhead ? OVERHEAD : presentation ? Math.min(orbit.phi, FRAME_TILT) : Math.PI / 2 - 0.87,
+      direction = new THREE.Vector3().setFromSphericalCoords(1, tilt, orbit.theta);
     // Look from the final direction first: the fit depends on it. Short
     // routes are padded so the rooms around them stay in view.
     controls.target.copy(centre);
@@ -257,49 +317,65 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
       : Math.max(60, Math.max(extent.x, extent.z) * 3.2) * Math.max(1, 1.1 / camera.aspect);
     camera.position.copy(centre).addScaledVector(direction, routeDistance);
     clearOfSheet(centre);
+    if (presentation) glideFrom(from);
+  }
+
+  /** Turn the map so north is up again, keeping its tilt. */
+  function faceNorth() {
+    const from = begin();
+    northUp();
+    glideFrom(from);
   }
 
   /**
-   * Switch the bird's-eye view on or off. The camera glides there over a few
-   * frames (see `tick`); with reduced motion it jumps. Returns false when
-   * nothing changed.
+   * Switch the bird's-eye view on or off; the camera glides there. Returns
+   * false when nothing changed.
    */
   function setOverhead(on: boolean) {
     if (on === overhead) return false;
+    const from = begin(),
+      settled = pose().offset;
     overhead = on;
-    orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
-    if (on) before = { phi: orbit.phi, theta: orbit.theta };
+    if (on) before = { phi: settled.phi, theta: settled.theta };
     // Overhead faces north, like the plan: the camera sits south (+z) of its target.
-    goal = on ? { phi: OVERHEAD, theta: 0 } : before;
-    // Free the orbit limits while gliding; `tick` sets them when it arrives.
+    const goal = on ? { phi: OVERHEAD, theta: 0 } : before;
+    // Free the orbit limits while gliding; they are set on arrival.
     controls.minPolarAngle = 0;
-    controls.maxPolarAngle = LOWEST;
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) tick(1);
+    controls.maxPolarAngle = lowest;
+    orbit.set(settled.radius, goal.phi, goal.theta);
+    camera.position.copy(controls.target).add(offset.setFromSpherical(orbit));
+    camera.lookAt(controls.target);
+    // Overhead, dragging turns the map but can't tip the camera back down.
+    glideFrom(from, () => {
+      if (overhead) controls.maxPolarAngle = OVERHEAD;
+    });
     return true;
   }
 
-  /** Advance the bird's-eye glide; call once per frame. */
-  function tick(step = 0.14) {
-    if (goal === null) return;
-    orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
-    // Turn the short way round.
-    const turn = Math.atan2(Math.sin(goal.theta - orbit.theta), Math.cos(goal.theta - orbit.theta));
-    orbit.phi += (goal.phi - orbit.phi) * step;
-    orbit.theta += turn * step;
-    if (Math.abs(goal.phi - orbit.phi) < 0.002 && Math.abs(turn) < 0.002) {
-      orbit.phi = goal.phi;
-      orbit.theta = goal.theta;
-      goal = null;
-      // Overhead, dragging turns the map but can't tip the camera back down.
-      if (overhead) controls.maxPolarAngle = OVERHEAD;
-    }
+  /** Advance a camera move; call once per frame. Returns true while the camera is moving. */
+  function tick(now = performance.now()) {
+    if (!glide) return false;
+    const { from, to, start, duration } = glide,
+      t = Math.min(1, (now - start) / duration),
+      // Ease out: fast off the mark, settling gently.
+      k = 1 - Math.pow(1 - t, 3);
+    const turn = Math.atan2(Math.sin(to.offset.theta - from.offset.theta), Math.cos(to.offset.theta - from.offset.theta));
+    orbit.set(
+      THREE.MathUtils.lerp(from.offset.radius, to.offset.radius, k),
+      THREE.MathUtils.lerp(from.offset.phi, to.offset.phi, k),
+      from.offset.theta + turn * k,
+    );
+    controls.target.lerpVectors(from.target, to.target, k);
     camera.position.copy(controls.target).add(offset.setFromSpherical(orbit));
     camera.lookAt(controls.target);
+    if (t >= 1) finish(true);
+    return true;
   }
 
   return {
     camera,
     setOverhead,
+    faceNorth,
     tick,
     controls,
     frame,
@@ -309,7 +385,9 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     frameRoute,
     frameSite,
     bound,
-    /** Distance from the camera to the point it orbits. */
-    focusDistance: () => camera.position.distanceTo(controls.target),
+    /** Where the camera is heading, in radians: 0 when north is up. */
+    heading: () => (glide ? glide.to.offset.theta : controls.getAzimuthalAngle()),
+    /** Distance from the camera to the point it orbits, where it is going to be when it is moving. */
+    focusDistance: () => (glide ? glide.to.offset.radius : camera.position.distanceTo(controls.target)),
   };
 }

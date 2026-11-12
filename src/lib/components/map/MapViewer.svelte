@@ -1375,6 +1375,13 @@
         top: calc(var(--top) + 66px);
         right: 12px;
     }
+    /* On a phone the compass sits at the free left end of the map controls' row,
+       clear of the "Nomor saya" banner below them. */
+    .mobile :global(.compass) {
+        top: calc(var(--top) + 66px);
+        right: auto;
+        left: 12px;
+    }
     .mobile .plan {
         padding: calc(env(safe-area-inset-top) + 120px) 8px calc(var(--inset-bottom) + 8px);
     }
