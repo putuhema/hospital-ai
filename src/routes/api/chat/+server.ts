@@ -71,9 +71,22 @@ export async function POST({ request, getClientAddress }) {
   if (!answer) return json({ error: "The assistant is not set up." }, { status: 503 });
   const body = await request.json().catch(() => null);
   if (!body || !valid(body.messages)) return json({ error: "Invalid conversation." }, { status: 400 });
+  const walking = body.context?.walking;
   const context: ReplyContext & { lang: Lang } = {
     ...(typeof body.context?.from === "string" && { from: body.context.from }),
     lang: body.context?.lang === "en" ? "en" : "id",
+    // On the way along a route: where to, which step, how far is left.
+    ...(walking &&
+      typeof walking.to === "string" &&
+      [walking.step, walking.total, walking.metersLeft].every((n) => Number.isFinite(n) && n >= 0 && n < 1e5) && {
+        walking: {
+          to: walking.to,
+          step: walking.step,
+          total: walking.total,
+          metersLeft: walking.metersLeft,
+          ...(typeof walking.next === "string" && walking.next.length <= 200 && { next: walking.next }),
+        },
+      }),
   };
   const slug = typeof body.slug === "string" ? body.slug : undefined;
   const convex = new ConvexHttpClient(PUBLIC_CONVEX_URL),
@@ -91,8 +104,9 @@ export async function POST({ request, getClientAddress }) {
   // A conversation's first question, asked recently by someone else in the same spot, is answered
   // from the cache: instantly, and without counting against the limits or the model bill.
   const messages = body.messages as ChatMessage[];
+  // Asked on the way, an answer depends on where along it they are: never cached.
   const cacheKey =
-    secret && messages.length === 1
+    secret && messages.length === 1 && !context.walking
       ? createHash("sha256")
           .update(
             JSON.stringify([hospital.slug, hospital.revision, hospital.schedules, answer.model, context.lang, context.from ?? "", normalize(messageText(messages[0]))]),

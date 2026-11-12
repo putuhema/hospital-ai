@@ -54,6 +54,16 @@ Kinds of place on this map: ${placeTypes(ctx).join(", ") || "none yet"}.
 ${info}`;
 }
 
+/** While they follow a route in the app: where to, and how far along. */
+function walking(ctx: AssistantContext, context: ReplyContext) {
+  const w = context.walking,
+    to = w && ctx.places.find((p) => p.id === w.to);
+  if (!w || !to) return "";
+  return `They are walking to ${to.name}${to.building && to.building !== to.name ? `, ${to.building}` : ""} (place id ${to.id}) with the app's directions: step ${w.step} of ${w.total}, about ${w.metersLeft} m left.${
+    w.next ? ` The app's next instruction: "${w.next}".` : ""
+  } Answer as a helper beside them on the way: short, and from where they are now. For which way to go, use only that instruction, word for word if it helps; never work out a direction yourself. To send them somewhere else, give that place's card.`;
+}
+
 /** Where the visitor is and the time at the hospital, sent with each question. */
 export function situation(ctx: AssistantContext, context: ReplyContext): string {
   const at = context.from && ctx.places.find((p) => p.id === context.from);
@@ -68,10 +78,13 @@ export function situation(ctx: AssistantContext, context: ReplyContext): string 
   return [
     `Now at the hospital: ${when}.`,
     at
-      ? `The visitor is at ${at.name}${at.building && at.building !== at.name ? `, ${at.building}` : ""} (place id ${at.id}).`
+      ? `The visitor is ${context.walking ? "now near" : "at"} ${at.name}${at.building && at.building !== at.name ? `, ${at.building}` : ""} (place id ${at.id}).`
       : "The visitor hasn't said where they are.",
+    walking(ctx, context),
     `The app is in ${context.lang === "en" ? "English" : "Indonesian"}.`,
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** The conversation so far, as the API takes it; a card becomes a note of what was shown. */

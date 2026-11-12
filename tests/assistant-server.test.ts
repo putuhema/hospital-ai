@@ -125,3 +125,11 @@ test('long hospital information is sent as its questions, for search_hospital_in
   assert.match(s, /\[Lainnya\] Pertanyaan nomor 79\?/);
   assert.doesNotMatch(s, /Jawaban panjang/);
 });
+
+test('asked on the way, the assistant knows where they are going and how far is left', () => {
+  const s = situation(ctx, { lang: 'id', from: pharmacy.id, walking: { to: ctx.places[0].id, step: 2, total: 5, metersLeft: 38, next: 'Belok kanan di dekat UTD, dalam 8 m' } });
+  assert.match(s, /now near Pharmacy/);
+  assert.match(s, new RegExp(`walking to ${ctx.places[0].name}.*step 2 of 5, about 38 m left`));
+  assert.match(s, /next instruction: "Belok kanan di dekat UTD, dalam 8 m".*never work out a direction yourself/);
+  assert.doesNotMatch(situation(ctx, { lang: 'id' }), /walking/);
+});

@@ -44,7 +44,7 @@ export function assistantContext(
 ): AssistantContext {
   return {
     places: places(layout.pieces, layout.network),
-    grid: buildGrid(layout.pieces, layout.grid.width, layout.grid.height, layout.grid.tileMeters),
+    grid: buildGrid(layout.pieces, layout.grid.width, layout.grid.height, layout.grid.tileMeters, layout.network.nodes),
     ...(layout.faq && { faq: layout.faq }),
     now,
   };

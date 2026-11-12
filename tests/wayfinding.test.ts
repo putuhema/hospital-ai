@@ -124,3 +124,23 @@ test('ticking off steps moves along the route', async () => {
   assert.deepEqual(progress(route, 1), { at: route.steps[1].at, metersLeft: route.steps.slice(1).reduce((m, s) => m + s.meters, 0) });
   assert.deepEqual(progress(route, 99), { at: route.points.length - 1, metersLeft: 0 });
 });
+
+test('steps name what the visitor sees: the place at a turn, one passed on a long stretch', async () => {
+  const { stepText } = await import('../src/lib/wayfinding/routing.ts');
+  const g = buildGrid(starterPieces, 24, 20), list = places(starterPieces);
+  const route = planRoute(g, find(list, 'Nurse station'), find(list, 'Outpatient clinic'))!;
+  const words = route.steps.map((s) => stepText(s.say, 'id'));
+  assert.ok(words.some((w) => /di dekat \w/.test(w)), words.join(' / '));
+  assert.ok(words.some((w) => /melewati \w/.test(w)), words.join(' / '));
+  // Never the start or the destination itself, nor the same place twice.
+  const named = route.steps.flatMap((s) => (s.say.kind === 'arrive' ? [] : [s.say.kind === 'turn' ? s.say.by : undefined, s.say.past])).filter(Boolean);
+  assert.ok(!named.includes('Nurse station') && !named.includes('Outpatient clinic'));
+  assert.equal(new Set(named).size, named.length);
+  assert.match(stepText(route.steps[1].say, 'en'), /^Turn right by \w/);
+});
+
+test('named waypoints are landmarks too', () => {
+  const g = buildGrid(starterPieces, 24, 20, 2, [{ name: 'Masjid', x: 3, y: 3 }]);
+  assert.ok(g.marks.some((m) => m.name === 'Masjid' && m.rank === 0));
+  assert.ok(g.marks.some((m) => m.name === 'Pharmacy'));
+});

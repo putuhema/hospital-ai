@@ -1,10 +1,11 @@
 import type { Piece } from "../model/layout.ts";
-import { center as centerPoint, footprint, inPolygon, isArea, isBuilding, isCorridor, isGateway, isOpenAir, isPath, roomTypes } from "../model/interiors.ts";
+import { center as centerPoint, doorSegment, footprint, inPolygon, isArea, isBuilding, isCorridor, isGateway, isOpenAir, isPath, roomDoor, roomTypes } from "../model/interiors.ts";
 import type { PlaceInfo } from "../model/place-info.ts";
 import { category, type LandmarkCategory } from "../model/categories.ts";
 import { search as searchText } from "./search.ts";
 import type { Lang } from "../i18n/lang.ts";
 import {
+  buildingDoors,
   crosses,
   distance,
   walls,
@@ -37,9 +38,13 @@ export type Via = "corridor" | "path" | "grounds";
 /** Where a step leads: one of the walkways, or a named room, building or area. */
 export type Area = { walkway: "corridor" | "path" | "outside" } | { name: string };
 /** What a step means, so it can be put into words in either language (see `stepText`). */
+/**
+ * `by`: a place the visitor sees at the turn (e.g. "Turn right by the Pharmacy");
+ * `past`: one they pass on a long stretch, so they know they are on the way.
+ */
 export type StepSay =
-  | { kind: "start"; from: string | null; heading: Heading; through?: Via; into?: Area }
-  | { kind: "turn"; turn: Turn; through?: Via; into?: Area }
+  | { kind: "start"; from: string | null; heading: Heading; through?: Via; into?: Area; past?: string }
+  | { kind: "turn"; turn: Turn; through?: Via; into?: Area; by?: string; past?: string }
   | { kind: "arrive"; place: string; building?: string; listed?: boolean };
 /** One instruction; `text` is the English wording, `at` the route point it starts from. */
 export type Step = { text: string; meters: number; say: StepSay; at: number };
@@ -134,13 +139,137 @@ export type NavGrid = {
   pieces: Piece[];
   /** Real metres per tile, for walking distances (the map itself is drawn at 2). */
   tileMeters: number;
+  /** Named spots a visitor can see on the way, for directions by landmark. */
+  marks: Mark[];
 };
+
+/**
+ * Something with a name a visitor sees from the walkway: a room's door or a
+ * named waypoint. `point` is where it is; a door is seen from just outside it.
+ */
+export type Mark = { name: string; point: Point; rank: number };
+
+/** Room types people look out for; the rest still count, ranked lower. */
+const NOTICED = ["reception", "pharmacy", "toilet", "waiting", "emergency", "stairs", "radiology", "lab", "nurse"];
+
+/** Nudges a point on a wall to just outside it, on the side the wall faces. */
+const outside = (p: Point, side: "north" | "south" | "east" | "west", by = 0.15) =>
+  side === "north" ? { x: p.x, y: p.y - by } : side === "south" ? { x: p.x, y: p.y + by } : side === "west" ? { x: p.x - by, y: p.y } : { x: p.x + by, y: p.y };
+
+/**
+ * Named waypoints (best known: they were named to be found), buildings' doors
+ * (they carry name boards) and the doors of the rooms inside.
+ */
+export function marksOf(pieces: Piece[], landmarks: { name: string; x: number; y: number }[] = []): Mark[] {
+  const marks: Mark[] = landmarks.filter((n) => n.name.trim()).map((n) => ({ name: n.name, point: { x: n.x, y: n.y }, rank: 0 }));
+  for (const b of pieces.filter(isBuilding)) {
+    for (const d of buildingDoors(b, pieces)) {
+      const [a, c] = doorSegment(b, d);
+      marks.push({ name: b.name, point: outside({ x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 }, d.side), rank: 1 });
+    }
+    for (const r of b.roomAssets ?? []) {
+      const d = roomDoor(r),
+        x = b.x + r.x,
+        y = b.y + r.y;
+      // Just outside the doorway, on the walkway side, so it is seen through the opening.
+      const point = outside(
+        d.side === "north"
+          ? { x: x + d.offset, y }
+          : d.side === "south"
+            ? { x: x + d.offset, y: y + r.h }
+            : d.side === "west"
+              ? { x, y: y + d.offset }
+              : { x: x + r.w, y: y + d.offset },
+        d.side,
+      );
+      marks.push({ name: r.name, point, rank: NOTICED.includes(r.type) ? 1 : 2 });
+    }
+  }
+  return marks;
+}
+
+/** Metres from a turn within which a place in sight counts as "at" it. */
+const NEAR = 7;
+/** Metres from the way within which a place in sight counts as passed. */
+const ALONG = 4;
+
+/** Distance (tiles) from `p` to the segment a–b, and how far along it (0–1) the nearest point is. */
+function toSegment(p: Point, a: Point, b: Point) {
+  const dx = b.x - a.x,
+    dy = b.y - a.y,
+    length = dx * dx + dy * dy;
+  const t = length ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
+  return { gap: Math.hypot(a.x + dx * t - p.x, a.y + dy * t - p.y), t };
+}
+
+/**
+ * Name what a visitor sees on the way: the place at each turn, and on long
+ * stretches one they pass halfway, best known first, and only what is in
+ * sight (no wall between). Never the start or the destination, nor the place
+ * a step leads into (it is named already), and no place twice.
+ */
+function addLandmarks(
+  steps: { say: StepSay; meters: number; at: number }[],
+  points: Point[],
+  g: Pick<NavGrid, "marks" | "walls" | "tileMeters">,
+  skip: string[],
+) {
+  const { marks, walls, tileMeters } = g;
+  const used = new Set(skip),
+    near = NEAR / tileMeters,
+    along = ALONG / tileMeters,
+    inSight = (from: Point, m: Mark) => !walls.some((w) => crosses(from, m.point, w));
+  const best = (fits: (m: Mark) => number | null) => {
+    let found: { mark: Mark; score: number } | null = null;
+    for (const m of marks) {
+      if (used.has(m.name)) continue;
+      const gap = fits(m);
+      if (gap === null) continue;
+      const score = m.rank * 2 + gap;
+      if (!found || score < found.score) found = { mark: m, score };
+    }
+    if (found) used.add(found.mark.name);
+    return found?.mark.name;
+  };
+  steps.forEach((step, i) => {
+    const say = step.say;
+    if (say.kind === "arrive") return;
+    const into = say.into && "name" in say.into ? say.into.name : null;
+    if (into) used.add(into);
+    if (say.kind === "turn") {
+      const corner = points[step.at];
+      const by = best((m) => {
+        const gap = distance(m.point, corner);
+        return gap <= near && inSight(corner, m) ? gap : null;
+      });
+      if (by) say.by = by;
+    }
+    if (step.meters < 10) return;
+    // Passed around the middle of the stretch, not at either end (those are turns).
+    const end = steps[i + 1]?.at ?? points.length - 1;
+    const past = best((m) => {
+      let nearest: number | null = null;
+      for (let k = step.at + 1; k <= end; k++) {
+        const a = points[k - 1],
+          b = points[k],
+          { gap, t } = toSegment(m.point, a, b);
+        const ends = (k === step.at + 1 && t < 0.25) || (k === end && t > 0.75);
+        if (gap > along || ends || (nearest !== null && gap >= nearest)) continue;
+        if (inSight({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, m)) nearest = gap;
+      }
+      return nearest;
+    });
+    if (past) say.past = past;
+  });
+}
 
 export function buildGrid(
   pieces: Piece[],
   width: number,
   height: number,
   tileMeters = 2,
+  /** Named waypoints, for directions by landmark. */
+  landmarks: { name: string; x: number; y: number }[] = [],
 ): NavGrid {
   const cols = width * RES,
     rows = height * RES,
@@ -174,7 +303,7 @@ export function buildGrid(
       for (let j = from; j <= to; j++) eastWall[j * cols + i] = 1;
     }
   }
-  return { cols, rows, cost, eastWall, southWall, walls: segments, pieces, tileMeters };
+  return { cols, rows, cost, eastWall, southWall, walls: segments, pieces, tileMeters, marks: marksOf(pieces, landmarks) };
 }
 
 const cellAt = (g: NavGrid, p: Point) =>
@@ -388,6 +517,8 @@ function describe(
   fromName: string | null,
   to: Place,
   tileMeters = 2,
+  g: Pick<NavGrid, "marks" | "walls" | "tileMeters"> = { marks: [], walls: [], tileMeters: 2 },
+  fromBuilding?: string,
 ): Step[] {
   const says: { say: StepSay; meters: number; at: number }[] = [];
   let heading: Point | null = null;
@@ -457,6 +588,8 @@ function describe(
     meters: 0,
     at: points.length - 1,
   });
+  // Not where they start or end, nor the buildings those are in.
+  addLandmarks(says, points, g, [to.name, fromName ?? "", to.building ?? "", fromBuilding ?? ""].filter(Boolean));
   return says.map(({ say, meters, at }) => ({ text: stepText(say, "en"), meters: Math.round(meters), say, at }));
 }
 
@@ -479,6 +612,8 @@ const WORDS = {
     through: { corridor: " through the corridor", path: " along the path", grounds: " across the grounds" },
     into: { corridor: " into the corridor", path: " onto the path", outside: " and go outside" },
     intoName: (name: string) => ` into ${name}`,
+    by: (name: string) => ` by ${name}`,
+    past: (name: string) => `, past ${name}`,
     start: (from: string | null, heading: string) => `From ${from ?? "your position"}, head ${heading}`,
     arrive: (place: string, building?: string, listed?: boolean) =>
       listed
@@ -493,6 +628,8 @@ const WORDS = {
     through: { corridor: " melalui koridor", path: " menyusuri jalan setapak", grounds: " melintasi halaman" },
     into: { corridor: " masuk ke koridor", path: " ke jalan setapak", outside: " lalu keluar gedung" },
     intoName: (name: string) => ` masuk ke ${name}`,
+    by: (name: string) => ` di dekat ${name}`,
+    past: (name: string) => `, melewati ${name}`,
     start: (from: string | null, heading: string) => `Dari ${from ?? "posisi Anda"}, jalan ke arah ${heading}`,
     arrive: (place: string, building?: string, listed?: boolean) =>
       listed
@@ -506,8 +643,10 @@ export function stepText(say: StepSay, lang: Lang): string {
   const w = WORDS[lang];
   if (say.kind === "arrive") return w.arrive(say.place, say.building, say.listed);
   const into = !say.into ? "" : "name" in say.into ? w.intoName(say.into.name) : w.into[say.into.walkway];
-  const rest = (say.through ? w.through[say.through] : "") + into;
-  return say.kind === "start" ? w.start(say.from, HEADINGS[lang][say.heading]) + rest : w.turn[say.turn] + rest;
+  const rest = (say.through ? w.through[say.through] : "") + into + (say.past ? w.past(say.past) : "");
+  return say.kind === "start"
+    ? w.start(say.from, HEADINGS[lang][say.heading]) + rest
+    : w.turn[say.turn] + (say.by ? w.by(say.by) : "") + rest;
 }
 
 /** Shortest walking route between two places (or a map point and a place). */
@@ -534,7 +673,7 @@ export function planRoute(
   return {
     points: route,
     meters: Math.round(meters),
-    steps: describe(g.pieces, route, fromPlace?.name ?? null, to, g.tileMeters),
+    steps: describe(g.pieces, route, fromPlace?.name ?? null, to, g.tileMeters, g, fromPlace?.building),
   };
 }
 

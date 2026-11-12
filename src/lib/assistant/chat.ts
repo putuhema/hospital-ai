@@ -44,7 +44,20 @@ export type ChatMessage = {
  * What the app knows about the visitor: where they are, as a place id, and
  * the language the map is in (replies follow the visitor's own words first).
  */
-export type ReplyContext = { from?: string; lang?: Lang };
+/**
+ * What the app knows about the visitor when they ask: where they are (a
+ * place id), their language and, while following a route, where they are
+ * going, which step they are on and how far is left.
+ */
+export type ReplyContext = { from?: string; lang?: Lang; walking?: Walking };
+export type Walking = {
+  to: string;
+  step: number;
+  total: number;
+  metersLeft: number;
+  /** The app's next instruction as the visitor sees it, e.g. "Serong ke kanan di dekat UTD, dalam 8 m". */
+  next?: string;
+};
 export type Replier = (
   messages: ChatMessage[],
   context: ReplyContext,

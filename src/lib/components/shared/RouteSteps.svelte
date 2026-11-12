@@ -9,6 +9,8 @@
         pace = null,
         onward = 0,
         compact = false,
+        onscan,
+        onask,
     }: {
         route: Route;
         /** Steps the visitor has ticked off, from the first. */
@@ -21,6 +23,10 @@
         onward?: number;
         /** Over the map on a phone: just the next thing to do, the whole list a tap away. */
         compact?: boolean;
+        /** On the way: scan a sign to say where you are. */
+        onscan?: () => void;
+        /** On the way: ask the assistant, without leaving the route. */
+        onask?: () => void;
     } = $props();
     const locale = useLocale();
     let steps = $derived(route.steps);
@@ -64,6 +70,18 @@
             <button onclick={() => (showAll = true)}>{locale.t("allSteps", { n: steps.length })}</button>
         </p>
         {#if following === "denied" && done < steps.length}<p class="following">{locale.t("followOff")}</p>{/if}
+        {#if (onscan || onask) && done < steps.length}<div class="helpers">
+                {#if onscan}<button onclick={onscan}
+                        ><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
+                            ><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8" /></svg
+                        >{locale.t("scanButton")}</button
+                    >{/if}
+                {#if onask}<button onclick={onask}
+                        ><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
+                            ><path d="M5 18.5V7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8.5z" /><path d="M9 9.5h6M9 12.5h4" /></svg
+                        >{locale.t("askOnTheWay")}</button
+                    >{/if}
+            </div>{/if}
     </div>
 {:else}
 <div class="progress" aria-live="polite">
@@ -185,6 +203,35 @@
     .fewer {
         display: block;
         margin-top: 4px;
+    }
+    .helpers {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+    }
+    .helpers button {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 40px;
+        border-radius: 12px;
+        background: #f1f4ee;
+        color: #2f4336;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .helpers button:active {
+        transform: scale(0.97);
+    }
+    .helpers svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
     }
     .live {
         color: #2f6b3a;

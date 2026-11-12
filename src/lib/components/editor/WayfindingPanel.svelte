@@ -33,7 +33,7 @@
         /** Jump to a building in the layout editor to fix it. */
         onselectpiece: (id: number) => void;
     } = $props();
-    let grid = $derived(buildGrid(pieces, width, height, tileMeters));
+    let grid = $derived(buildGrid(pieces, width, height, tileMeters, network.nodes));
     let placeList = $derived(places(pieces, network));
     let blocked = $derived(unreachable(grid, placeList));
     let landmarks = $derived(network.nodes.filter((n) => n.name.trim()));

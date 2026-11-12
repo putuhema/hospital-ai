@@ -9,6 +9,7 @@
     import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     import PlaceDetails from "$lib/components/shared/PlaceDetails.svelte";
     import MyTurnBanner from "./MyTurnBanner.svelte";
+    import QrScanner from "./QrScanner.svelte";
     import RouteSteps from "$lib/components/shared/RouteSteps.svelte";
     import ChatPanel from "$lib/components/assistant/ChatPanel.svelte";
     import { Chat } from "$lib/assistant/chat.svelte";
@@ -23,7 +24,7 @@
     import { walkwayAt } from "$lib/model/interiors";
     import { hoursStatus } from "$lib/model/place-info";
     import type { Point, WalkingNetwork } from "$lib/wayfinding/navigation";
-    import { buildGrid, places, planRoute, progress, walkMinutes, type Place } from "$lib/wayfinding/routing";
+    import { buildGrid, places, planRoute, progress, stepText, walkMinutes, type Place } from "$lib/wayfinding/routing";
     import { createFollower, STRIDE } from "$lib/wayfinding/follow";
     import { startWalkSensor, type SensorState } from "$lib/wayfinding/walk-sensor";
     let {
@@ -94,8 +95,6 @@
         done = $state(0),
         journeyHeight = $state(0);
     let exporter: (() => Promise<void>) | null = null;
-    let grid = $derived(buildGrid(pieces, canvasWidth, canvasHeight, tileMeters));
-    let route = $derived(from && to ? planRoute(grid, from, to) : null);
     let questions = $derived(answered(faq));
     let landmarks = $derived(network.nodes.filter((n) => n.name.trim()));
 
@@ -106,6 +105,9 @@
     // Rooms the editor named by default ("Examination room 2") read in the visitor's language.
     let rooms = $derived(localizeRooms(pieces, locale.lang));
     let placeList = $derived(places(rooms, network));
+    // Routes are planned on the rooms as visitors read them, so the steps name them that way too.
+    let grid = $derived(buildGrid(rooms, canvasWidth, canvasHeight, tileMeters, network.nodes));
+    let route = $derived(from && to ? planRoute(grid, from, to) : null);
 
     // The assistant. Canned replies from the map and the hospital information
     // until the chat server route is built.
@@ -120,10 +122,52 @@
         // Kept for the browser session: visitors switch apps and come back. One hospital per page.
         untrack(() => `p-map-chat:${slug ?? "home"}`),
     );
-    const chatContext = (): ReplyContext => ({
-        lang: locale.lang,
-        ...(from && "id" in from && { from: from.id }),
-    });
+    /**
+     * Where the visitor is now: while following a route, the named place
+     * nearest the point they have walked to; otherwise where they set out from.
+     */
+    function whereNow(): Place | null {
+        if (route && (done > 0 || onward > 0)) {
+            const p = route.points[walked],
+                next = route.points[Math.min(walked + 1, route.points.length - 1)],
+                span = Math.hypot(next.x - p.x, next.y - p.y) * 2,
+                k = span ? Math.min(1, onward / span) : 0,
+                here = { x: p.x + (next.x - p.x) * k, y: p.y + (next.y - p.y) * k };
+            let best: Place | null = null,
+                gap = 3; // tiles: farther than that, they are near nothing in particular
+            for (const place of placeList) {
+                if (place.kind === "listed" || place.kind === "area") continue;
+                const d = Math.hypot(place.point.x - here.x, place.point.y - here.y);
+                if (d < gap) [best, gap] = [place, d];
+            }
+            if (best) return best;
+        }
+        return from && "id" in from ? from : null;
+    }
+    const chatContext = (): ReplyContext => {
+        const at = whereNow();
+        return {
+            lang: locale.lang,
+            ...(at && { from: at.id }),
+            // On the way: the assistant can say how far is left, or what is near from here.
+            ...(route &&
+                to &&
+                stepping &&
+                done < route.steps.length && {
+                    walking: {
+                        to: to.id,
+                        step: done + 1,
+                        total: route.steps.length,
+                        metersLeft: Math.max(0, Math.round(progress(route, done).metersLeft - onward / drawn())),
+                        ...(route.steps[done + 1] && {
+                            next: `${stepText(route.steps[done + 1].say, locale.lang)}, ${t("nextIn", {
+                                m: Math.max(0, Math.round(route.steps[done].meters - onward / drawn())),
+                            })}`,
+                        }),
+                    },
+                }),
+        };
+    };
     // While chatting, the place the latest answer is about stands out on the
     // map; otherwise the chosen destination does.
     let chatFocus = $derived.by(() => {
@@ -142,14 +186,18 @@
         }
         tab = next;
     }
-    // A picked spot is named after the corridor or path it is on.
-    let here = $derived(
-        !from
+    // A picked spot is named after the corridor or path it is on; on the way, where they have got to.
+    let here = $derived.by(() => {
+        if (stepping && route && (done > 0 || onward > 0)) {
+            const now = whereNow();
+            if (now) return now.name;
+        }
+        return !from
             ? null
             : "id" in from
               ? from.name
-              : t("spotOn", { name: walkwayAt(pieces, from)?.name ?? t("theMap") }),
-    );
+              : t("spotOn", { name: walkwayAt(pieces, from)?.name ?? t("theMap") });
+    });
     let status = $derived(to?.info ? hoursStatus(to.info, new Date(), locale.lang) : null);
     /** A building's clinics: the rooms in it where doctors practise. */
     let clinics = $derived(
@@ -290,7 +338,13 @@
         // Deep links, e.g. a QR code at an entrance: /?from=b:9&to=r:2:25
         const params = new URLSearchParams(location.search);
         from = decode(params.get("from"));
-        const target = decode(params.get("to"));
+        let target = decode(params.get("to"));
+        // A sign's link has only a start: on the way somewhere in the last two hours, carry on there.
+        if (from && !target)
+            try {
+                const going = JSON.parse(localStorage.getItem(goingKey()) ?? "null");
+                if (going && Date.now() - going.at < 2 * 3600_000) target = decode(going.to);
+            } catch {}
         to = target && "id" in target ? target : null;
         // A conversation from earlier in the session doesn't replace the link's destination.
         if (to) carried = chatFocus?.id ?? null;
@@ -342,6 +396,26 @@
     // Choosing a start on the map needs the map.
     $effect(() => {
         if (picking) untrack(() => (sheetOpen = false));
+    });
+    // Scanning a "You are here" sign: it sets where the visitor is. On the way,
+    // the route is planned again from the sign, and following carries on from there.
+    let scanning = $state(false);
+    function atSign(id: string) {
+        scanning = false;
+        const place = placeList.find((p) => p.id === id);
+        if (!place) return;
+        from = place;
+        notify(t("youAreAt", { name: place.name }));
+    }
+    // Where the visitor was going, kept a while on this phone: scanning a sign
+    // with the phone's own camera opens the map afresh, and should carry on.
+    const goingKey = () => `p-map-going:${slug ?? "home"}`;
+    $effect(() => {
+        if (!ready) return;
+        try {
+            if (to) localStorage.setItem(goingKey(), JSON.stringify({ to: to.id, at: Date.now() }));
+            else localStorage.removeItem(goingKey());
+        } catch {}
     });
     function notify(s: string) {
         toast = s;
@@ -563,7 +637,16 @@
                     }}
                 />{:else}<div class="scroll" in:unblur>
                     <h2>{t("whereTo")}</h2>
-                    <RouteFinder places={placeList} {grid} {route} bind:from bind:to bind:picking bind:done />
+                    <RouteFinder
+                        places={placeList}
+                        {grid}
+                        {route}
+                        bind:from
+                        bind:to
+                        bind:picking
+                        bind:done
+                        onscan={wide ? undefined : () => (scanning = true)}
+                    />
                 </div>{/if}
         </div>
     </aside>
@@ -649,6 +732,8 @@
                             pace={pace && pace / drawn()}
                             onward={onward / drawn()}
                             compact
+                            onscan={() => (scanning = true)}
+                            onask={() => open("chat")}
                         /></div>
                 {:else if about && aboutHere}
                     {@const info = placeInfo(to.info)}
@@ -685,6 +770,7 @@
     </div>
     {#if error || notice}<p class="viewer-error" role="alert">{error || (notice && t(notice))}</p>{/if}
     {#if toast}<div class="toast" role="status"><span>✓</span>{toast}</div>{/if}
+    {#if scanning}<QrScanner {slug} onfound={atSign} onclose={() => (scanning = false)} />{/if}
 </div>
 
 <style>

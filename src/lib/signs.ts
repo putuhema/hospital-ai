@@ -26,3 +26,21 @@ export function suggestedSpots(list: Place[]): Place[] {
 
 /** Places a sign can stand at: everything except listed rooms, which have no spot of their own. */
 export const signablePlaces = (list: Place[]) => list.filter((p) => p.kind !== "listed");
+
+/**
+ * What a scanned QR code says: the spot of one of this map's signs (its place
+ * id, as in `signLink`), a sign of another hospital's map, or something else.
+ */
+export function readSign(text: string, slug: string | undefined): { from: string } | { error: "other-map" | "not-a-sign" } {
+  let url: URL;
+  try {
+    url = new URL(text.trim());
+  } catch {
+    return { error: "not-a-sign" };
+  }
+  const from = url.searchParams.get("from"),
+    map = url.pathname.match(/^\/m\/([^/]+)\/?$/)?.[1];
+  if (!from || !(map || url.pathname === "/")) return { error: "not-a-sign" };
+  if (map && slug && map !== slug) return { error: "other-map" };
+  return { from };
+}

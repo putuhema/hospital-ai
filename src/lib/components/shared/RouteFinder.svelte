@@ -23,6 +23,7 @@
         to = $bindable(null),
         picking = $bindable(false),
         done = $bindable(0),
+        onscan,
     }: {
         places: Place[];
         grid: NavGrid;
@@ -33,6 +34,8 @@
         picking?: boolean;
         /** Steps of the route the visitor has ticked off. */
         done?: number;
+        /** Scan a "You are here" sign to set the start (on phones). */
+        onscan?: () => void;
     } = $props();
     const locale = useLocale();
     // A picked spot is named after the corridor or path it is on.
@@ -96,6 +99,11 @@
         >
     </div>
     <div class="tools">
+        {#if onscan}<button class="chip pick" onclick={onscan}
+                ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+                    ><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8" /></svg
+                >{locale.t("scanButton")}</button
+            >{/if}
         <button
             class="chip pick"
             class:active={picking}
