@@ -203,11 +203,51 @@
             ? placeList.filter((p) => p.kind === "room" && p.pieceId === to!.pieceId && p.info?.doctors?.length)
             : [],
     );
-    // Each new destination opens on what is there, however it was chosen.
+    // Each new destination opens on what is there, however it was chosen; on a
+    // phone just its name, so the map stays in sight (swipe up for the rest).
     $effect(() => {
         void to?.id;
-        untrack(() => (about = true));
+        untrack(() => (about = wide));
     });
+
+    /*
+     * Phones: the destination card is a small sheet. Dragged up it opens on the
+     * details, down it folds to its name, and down again it goes (the ×).
+     */
+    let cardDrag = $state<{ y: number; t: number; dy: number; speed: number } | null>(null);
+    function cardGrab(e: PointerEvent) {
+        if (wide || stepping || (e.target as Element).closest("button:not(.where), .about")) return;
+        cardDrag = { y: e.clientY, t: e.timeStamp, dy: 0, speed: 0 };
+    }
+    function cardPull(e: PointerEvent) {
+        if (!cardDrag) return;
+        const dy = e.clientY - cardDrag.y;
+        if (Math.abs(dy) > 6)
+            try {
+                (e.currentTarget as Element).setPointerCapture(e.pointerId);
+            } catch {
+                // Not every pointer can be captured; the drag works without.
+            }
+        cardDrag.speed = (dy - cardDrag.dy) / Math.max(1, e.timeStamp - cardDrag.t);
+        cardDrag.t = e.timeStamp;
+        // Up is held back (it opens on letting go), down follows the finger.
+        cardDrag.dy = dy < 0 ? dy / 3 : dy;
+    }
+    /** True when the drag was a swipe, so the tap it also ends doesn't count. */
+    let swiped = false;
+    function cardLetGo() {
+        if (!cardDrag) return;
+        const { dy, speed } = cardDrag,
+            open = about && aboutHere;
+        cardDrag = null;
+        swiped = Math.abs(dy) > 6;
+        if (dy < -12 || speed < -0.5) {
+            if (aboutHere) about = true;
+        } else if (dy > 40 || speed > 0.5) {
+            if (open) about = false;
+            else to = null;
+        }
+    }
     /** The destination has something to tell beyond its name. */
     let hasAbout = $derived(!!to && (!!placeInfo(to.info) || clinics.length > 0));
     /** Details in the card, unless the directions beside it already show them (wide screens, Rute tab). */
@@ -777,10 +817,19 @@
 
     {#if to}{#key to.id}<div
                 class="journey"
+                role="group"
+                aria-label={t("headingTo", { name: to.name })}
                 class:open={(about && aboutHere) || stepping}
+                class:dragging={!!cardDrag}
+                style:transform={cardDrag && cardDrag.dy ? `translateY(${cardDrag.dy}px)` : null}
                 bind:clientHeight={journeyHeight}
                 in:rise={{ y: 10 }}
+                onpointerdown={cardGrab}
+                onpointermove={cardPull}
+                onpointerup={cardLetGo}
+                onpointercancel={() => (cardDrag = null)}
             >
+                {#if !wide && !stepping}<span class="card-grabber" aria-hidden="true"></span>{/if}
                 <div class="journey-head">
                     <PlaceIcon of={to} size={34} />
                     <button
@@ -789,6 +838,8 @@
                         aria-expanded={aboutHere ? about && !stepping : undefined}
                         title={aboutHere ? t(about && !stepping ? "hideDetails" : "showDetails") : undefined}
                         onclick={() => {
+                            // A swipe on the header ends in a tap too: that one is the swipe's.
+                            if (swiped) return void (swiped = false);
                             about = stepping || !about;
                             stepping = false;
                         }}
@@ -1757,7 +1808,28 @@
         translate: none;
         width: auto;
         max-width: none;
-        max-height: calc(100% - var(--top) - var(--bottom) - 150px);
+        /* Open, it covers at most a little over half the map; the details scroll inside. */
+        max-height: min(58%, calc(100% - var(--top) - var(--bottom) - 150px));
+        padding-top: 14px;
+        touch-action: pan-x;
+        transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .mobile .journey.dragging {
+        transition: none;
+    }
+    /* The details scroll with a finger; the rest of the card drags. */
+    .mobile .journey .about {
+        touch-action: pan-y;
+    }
+    .card-grabber {
+        position: absolute;
+        top: 5px;
+        left: 50%;
+        width: 36px;
+        height: 4px;
+        margin-left: -18px;
+        border-radius: 2px;
+        background: #1b2a2126;
     }
     /* Following the steps: the card stays low, the route on the map above it. */
     .mobile .journey:has(.steps) {
