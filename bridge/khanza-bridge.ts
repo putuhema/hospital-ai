@@ -70,17 +70,18 @@ async function read() {
   const run = async (sql: string, params: unknown[] = []) => (await pool.query({ sql, timeout: 20_000 }, params))[0];
   // The counters' queue is optional: a Khanza without those tables (or a user without access to them) just has none.
   const optional = (sql: string, params: unknown[] = []) => run(sql, params).catch(() => undefined);
-  const [clinics, registrations, quotas, serving, beds, tickets, counters, called] = await Promise.all([
+  const [clinics, registrations, quotas, serving, beds, schedules, tickets, counters, called] = await Promise.all([
     run(QUERIES.clinics),
     run(QUERIES.registrations, [date, date]),
     run(QUERIES.quotas, [date]),
     run(QUERIES.serving, [date]),
     run(QUERIES.beds),
+    run(QUERIES.schedules),
     optional(QUERIES.tickets, [date]),
     optional(QUERIES.counters),
     optional(QUERIES.called),
   ]);
-  return buildSnapshot({ clinics, registrations, quotas, serving, beds, tickets, counters, called } as unknown as Rows);
+  return buildSnapshot({ clinics, registrations, quotas, serving, beds, schedules, tickets, counters, called } as unknown as Rows);
 }
 
 async function push(snapshot: object) {

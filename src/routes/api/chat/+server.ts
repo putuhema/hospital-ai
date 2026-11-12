@@ -95,7 +95,7 @@ export async function POST({ request, getClientAddress }) {
     secret && messages.length === 1
       ? createHash("sha256")
           .update(
-            JSON.stringify([hospital.slug, hospital.revision, answer.model, context.lang, context.from ?? "", normalize(messageText(messages[0]))]),
+            JSON.stringify([hospital.slug, hospital.revision, hospital.schedules, answer.model, context.lang, context.from ?? "", normalize(messageText(messages[0]))]),
           )
           .digest("hex")
       : null;

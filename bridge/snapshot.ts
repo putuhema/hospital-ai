@@ -5,6 +5,7 @@
  * numbers only, never a patient's name or record number.
  */
 import type { ClinicLive, CounterLive, DoctorQueue, Snapshot, WardLive } from "../src/lib/model/live.ts";
+import type { ClinicSchedule } from "../src/lib/model/schedules.ts";
 
 /** `?` is the day (YYYY-MM-DD). Visits are found by their number (no_rawat starts with the day), which is indexed. */
 export const QUERIES = {
@@ -44,6 +45,14 @@ export const QUERIES = {
       join bangsal b on b.kd_bangsal = k.kd_bangsal
      where k.statusdata = '1' and b.status = '1'
      group by b.kd_bangsal, b.nm_bangsal, k.kelas`,
+  /** Every practice schedule (jadwal) of doctors and clinics in use. */
+  schedules: `
+    select j.kd_poli, j.kd_dokter, d.nm_dokter, j.hari_kerja,
+           time_format(j.jam_mulai, '%H:%i') as open, time_format(j.jam_selesai, '%H:%i') as close
+      from jadwal j
+      join dokter d on d.kd_dokter = j.kd_dokter
+      join poliklinik p on p.kd_poli = j.kd_poli
+     where d.status = '1' and p.status = '1' and j.jam_selesai is not null`,
   /** Queue tickets printed at the registration counters today (antrean loket). */
   tickets: `select count(*) as tickets from antriloketcetak where tanggal = ?`,
   /** The number each counter is serving. */
@@ -59,6 +68,7 @@ export type Rows = {
   quotas: { kd_poli: string | null; kd_dokter: string; nm_dokter: Value; kuota: Value }[];
   serving: { kd_poli: string | null; kd_dokter: string | null; no_reg: Value }[];
   beds: { kd_bangsal: string; nm_bangsal: Value; kelas: Value; beds: Value; empty: Value }[];
+  schedules?: { kd_poli: string; kd_dokter: string; nm_dokter: Value; hari_kerja: Value; open: Value; close: Value }[];
   /** The registration counters; left out where SIMRS has no such queue. */
   tickets?: { tickets: Value }[];
   counters?: { loket: Value; antrian: Value }[];
@@ -85,6 +95,42 @@ export function buildCounter(rows: Pick<Rows, "tickets" | "counters" | "called">
   const last = rows.called?.length ? n(rows.called[0].last_number) : Math.max(0, ...counters.map((c) => c.serving));
   const called = last <= tickets ? last : 0;
   return { tickets, called, waiting: tickets - called, counters: called ? counters : [] };
+}
+
+const WEEKDAYS = ["AKHAD", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU"];
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Doctors' hours per clinic: the days with the same hours become one rule ("Sen–Jum 08.00–12.00"). */
+export function buildSchedules(rows: NonNullable<Rows["schedules"]>): ClinicSchedule[] {
+  const clinics = new Map<string, Map<string, { code: string; name: string; byTime: Map<string, Set<number>> }>>();
+  for (const r of rows) {
+    const day = WEEKDAYS.indexOf(String(r.hari_kerja ?? "").toUpperCase()),
+      open = String(r.open ?? ""),
+      close = String(r.close ?? "");
+    if (day < 0 || !TIME.test(open) || !TIME.test(close) || !r.kd_poli || !r.kd_dokter) continue;
+    let doctors = clinics.get(r.kd_poli);
+    if (!doctors) clinics.set(r.kd_poli, (doctors = new Map()));
+    let d = doctors.get(r.kd_dokter);
+    if (!d) doctors.set(r.kd_dokter, (d = { code: r.kd_dokter, name: name(r.nm_dokter, r.kd_dokter).slice(0, 100), byTime: new Map() }));
+    const key = `${open}-${close}`;
+    d.byTime.set(key, (d.byTime.get(key) ?? new Set()).add(day));
+  }
+  return [...clinics]
+    .map(([code, doctors]) => ({
+      code,
+      doctors: [...doctors.values()]
+        .map((d) => ({
+          code: d.code,
+          name: d.name,
+          hours: [...d.byTime]
+            .map(([key, days]) => ({ days: [...days].sort(), open: key.slice(0, 5), close: key.slice(6) }))
+            .sort((a, b) => a.days[0] - b.days[0] || a.open.localeCompare(b.open))
+            .slice(0, 14),
+        }))
+        .sort(byName)
+        .slice(0, 60),
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
 }
 
 export function buildSnapshot(rows: Rows): Snapshot {
@@ -135,6 +181,7 @@ export function buildSnapshot(rows: Rows): Snapshot {
   const counter = buildCounter(rows);
   return {
     ...(counter && { counter }),
+    ...(rows.schedules && { schedules: buildSchedules(rows.schedules) }),
     clinics: [...clinics.values()]
       .map(({ byDoctor, ...c }) => ({ ...c, doctors: [...byDoctor.values()].sort(byName) }))
       .sort(byName),

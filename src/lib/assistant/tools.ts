@@ -21,7 +21,7 @@ import { dateOf, doctorStatus, shortDate, specialtyOf, type Doctor } from "../mo
 import { shortcuts } from "../wayfinding/shortcuts.ts";
 import { topicOf, topics, type FaqEntry } from "../model/faq.ts";
 import { faqMatches } from "./faq-match.ts";
-import { clinicKey, COUNTER_KEY, liveFor, quotaLeft, wardKey, type ClinicLive, type CounterLive, type Live, type WardLive } from "../model/live.ts";
+import { clinicKey, COUNTER_KEY, doctorToday, liveFor, quotaLeft, started, wardKey, type ClinicLive, type CounterLive, type Live, type WardLive } from "../model/live.ts";
 
 /** What the tools know: the hospital map and the time at the hospital. */
 export type AssistantContext = {
@@ -134,6 +134,11 @@ export type DoctorSchedule = {
   on_leave?: boolean;
   /** Leave today or coming up, e.g. ["30 Sep – 2 Oct"]. */
   leave?: string[];
+  /** While practising, from SIMRS: whether they have started seeing today's patients, and how many they have seen. */
+  seeing_patients?: boolean;
+  seen_today?: number;
+  /** The schedule is SIMRS's own. */
+  from_simrs?: boolean;
 };
 
 export type Directions = {
@@ -333,6 +338,14 @@ function schedule(ctx: AssistantContext, d: Doctor, place?: Place): DoctorSchedu
   const today = dateOf(ctx.now),
     leave = (d.leave ?? []).filter((l) => l.to >= today).map((l) => (l.from === l.to ? shortDate(l.from, "en") : `${shortDate(l.from, "en")} – ${shortDate(l.to, "en")}`));
   if (leave.length) s.leave = leave;
+  if (d.code) s.from_simrs = true;
+  const queue = doctorToday(ctx.live, d.code),
+    begun = started(queue);
+  if (status?.practising && queue && begun !== undefined) {
+    s.seeing_patients = begun;
+    s.seen_today = queue.registered - queue.waiting;
+    ctx.liveUsed = true;
+  }
   return s;
 }
 

@@ -14,6 +14,8 @@ export type Doctor = {
   specialty?: string;
   hours: Hours[];
   leave?: Leave[];
+  /** kd_dokter, for a doctor whose schedule comes from SIMRS (schedules.ts): ties them to today's queue. */
+  code?: string;
 };
 
 export const MAX_DOCTORS = 60;
@@ -67,6 +69,7 @@ export function parseDoctors(value: unknown): Doctor[] | undefined {
         !d ||
         !text(d.name, 100) ||
         (d.specialty !== undefined && !text(d.specialty, 100)) ||
+        (d.code !== undefined && !text(d.code, 30)) ||
         !validHours(d.hours) ||
         (d.leave !== undefined &&
           (!Array.isArray(d.leave) ||
@@ -81,6 +84,7 @@ export function parseDoctors(value: unknown): Doctor[] | undefined {
       const doctor: Doctor = { name: d.name.trim(), hours: tidyHours(d.hours) };
       if (d.specialty?.trim()) doctor.specialty = d.specialty.trim();
       if (d.leave?.length) doctor.leave = [...d.leave].sort((a, b) => a.from.localeCompare(b.from));
+      if (d.code) doctor.code = d.code;
       return doctor;
     });
   return doctors.length ? doctors : undefined;

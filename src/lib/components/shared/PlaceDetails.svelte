@@ -3,7 +3,7 @@
     import { hoursLines, hoursStatus, type PlaceInfo } from "$lib/model/place-info";
     import { useLocale } from "$lib/i18n/locale.svelte";
     import { dateOf, doctorStatus, shortDate } from "$lib/model/doctors";
-    import { fresh, liveFor, quotaLeft } from "$lib/model/live";
+    import { doctorToday, fresh, liveFor, quotaLeft, started } from "$lib/model/live";
     import { useLive } from "$lib/live.svelte";
     let { info }: { info: PlaceInfo } = $props();
     // The visitor's own clock: they are at the hospital, so it is the hospital's
@@ -20,7 +20,16 @@
     let today = $derived(now && dateOf(now));
     // Today's queue and the beds from SIMRS, for a place linked to a clinic or ward; gone when the bridge is silent.
     const liveData = useLive();
-    let live = $derived(now && liveFor(info.simrs, fresh(liveData(), now.getTime())));
+    let recent = $derived(now && fresh(liveData(), now.getTime()));
+    let live = $derived(liveFor(info.simrs, recent));
+    let fromSimrs = $derived(!!info.doctors?.some((d) => d.code));
+    /** While a doctor is practising: whether they have started on today's patients, from SIMRS. */
+    function serving(code: string | undefined) {
+        const today = doctorToday(recent, code),
+            begun = started(today);
+        if (begun === undefined || !today) return null;
+        return begun ? locale.t("doctorStarted", { n: today.registered - today.waiting }) : locale.t("doctorNotStarted");
+    }
     // As printed on the ticket: "036".
     const number = (n: number) => String(n).padStart(3, "0");
     const time = (at: number) => new Date(at).toLocaleTimeString(locale.lang === "en" ? "en-GB" : "id-ID", { hour: "2-digit", minute: "2-digit" });
@@ -71,12 +80,15 @@
             <span class="from"><i></i>{locale.t("liveFrom", { time: time(live.at) })}</span>
         </div>{/if}
     {#if info.doctors?.length}<div class="doctors">
-            <small>{locale.t("doctorSchedule")}</small>
+            <small>{locale.t("doctorSchedule")}{fromSimrs ? ` · ${locale.t("scheduleFromSimrs")}` : ""}</small>
             {#each info.doctors as d (d.name)}
                 {@const s = now && doctorStatus(d, now, locale.lang)}
                 <div class="doctor">
                     <b>{d.name}</b>{#if d.specialty}<span class="specialty">{d.specialty}</span>{/if}
                     {#if s}<em class:in={s.practising} class:away={s.onLeave}>{s.text}</em>{/if}
+                    {#if s?.practising && serving(d.code)}<span class="serving" class:waiting={!started(doctorToday(recent, d.code))}
+                            >{serving(d.code)}</span
+                        >{/if}
                     {#each hoursLines(d.hours, locale.lang) as line}<span class="line">{line}</span>{/each}
                     {#each (d.leave ?? []).filter((l) => today && l.to >= today) as l}<span class="line leave"
                             >{l.from === l.to
@@ -238,6 +250,13 @@
         color: #9a6a1e;
     }
     .leave {
+        color: #9a6a1e;
+    }
+    .serving {
+        font-weight: 600;
+        color: #2f6b3a;
+    }
+    .serving.waiting {
         color: #9a6a1e;
     }
     .place-details > :last-child {

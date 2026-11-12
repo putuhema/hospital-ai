@@ -4,6 +4,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { parseLayout } from "../lib/model/layout.ts";
 import { joinLayout, splitLayout, stableJson, type Records } from "../lib/model/records.ts";
 import { requireEditor } from "./auth";
+import { schedulesOf } from "./live";
+import { withSchedules } from "../lib/model/schedules.ts";
 
 /** Comfortably below what one save can write. */
 const MAX_LAYOUT = 800_000;
@@ -33,22 +35,28 @@ function fields<T extends Rows>(doc: Doc<T>) {
   return rest;
 }
 
-/** The hospital with all its information, as a layout for `parseLayout`; null before the first save. */
+/**
+ * The hospital with all its information, as a layout for `parseLayout`; null
+ * before the first save. With `simrs`, as visitors see it: places linked to a
+ * SIMRS clinic list SIMRS's doctors and hours (schedules.ts). The editor
+ * leaves it out, so it edits and saves only what was typed.
+ */
 export const get = query({
-  args: { slug: v.optional(v.string()) },
-  handler: async (ctx, { slug }) => {
+  args: { slug: v.optional(v.string()), simrs: v.optional(v.boolean()) },
+  handler: async (ctx, { slug, simrs }) => {
     const h = await find(ctx, slug);
     if (!h) return null;
     const [buildings, places, doctors, faq] = await Promise.all(
       (["buildings", "places", "doctors", "faq"] as const).map((t) => rowsOf(ctx, t, h._id)),
     );
-    const records = {
+    let records = {
       site: { title: h.title, greenery: h.greenery ?? 1, width: h.width, height: h.height, network: h.network },
       buildings: buildings.map(fields),
       places: places.map(fields),
       doctors: doctors.map(fields),
       faq: faq.map(fields),
     } as Records;
+    if (simrs) records = withSchedules(records, (await schedulesOf(ctx, h._id)).schedules);
     return {
       slug: h.slug,
       title: h.title,
@@ -59,12 +67,16 @@ export const get = query({
   },
 });
 
-/** Which version of the hospital is saved and its name, without its contents: for caches that keep the rest. */
+/**
+ * Which version of the hospital is saved and its name, without its contents:
+ * for caches that keep the rest. `schedules` is when SIMRS's doctors'
+ * schedules last changed (0 without any).
+ */
 export const version = query({
   args: { slug: v.optional(v.string()) },
   handler: async (ctx, { slug }) => {
     const h = await find(ctx, slug);
-    return h && { slug: h.slug, title: h.title, revision: h.revision };
+    return h && { slug: h.slug, title: h.title, revision: h.revision, schedules: (await schedulesOf(ctx, h._id)).at };
   },
 });
 

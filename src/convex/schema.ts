@@ -72,8 +72,8 @@ export default defineSchema({
    */
   live: defineTable({
     hospitalId: v.id("hospitals"),
-    kind: v.union(v.literal("poli"), v.literal("ward"), v.literal("loket"), v.literal("sync")),
-    /** kd_poli or kd_bangsal; empty for "loket" (the registration counters' queue) and "sync". */
+    kind: v.union(v.literal("poli"), v.literal("ward"), v.literal("loket"), v.literal("jadwal"), v.literal("sync")),
+    /** kd_poli ("poli", and "jadwal": a clinic's doctors' schedules) or kd_bangsal; empty for "loket" (the registration counters' queue) and "sync". */
     code: v.string(),
     data: v.any(),
   }).index("by_hospital", ["hospitalId", "kind", "code"]),

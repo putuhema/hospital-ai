@@ -5,6 +5,7 @@
  * them here every few seconds. Only totals and queue numbers: nothing about
  * a patient ever leaves the hospital's database.
  */
+import { parseSchedules, type ClinicSchedule } from "./schedules.ts";
 
 /** One doctor's queue at a clinic today. */
 export type DoctorQueue = {
@@ -54,8 +55,8 @@ export type CounterLive = {
   counters: { no: number; serving: number }[];
 };
 
-/** What the bridge sends. */
-export type Snapshot = { clinics: ClinicLive[]; wards: WardLive[]; counter?: CounterLive };
+/** What the bridge sends. `schedules` are the doctors' hours per clinic (schedules.ts); kept even when the bridge goes quiet. */
+export type Snapshot = { clinics: ClinicLive[]; wards: WardLive[]; counter?: CounterLive; schedules?: ClinicSchedule[] };
 /** The same as visitors get it, with when it arrived. */
 export type Live = Snapshot & { at: number };
 
@@ -120,14 +121,15 @@ export function parseSnapshot(value: unknown): Snapshot {
     };
   });
   if (new Set(clinics.map((c) => c.code)).size !== clinics.length || new Set(wards.map((w) => w.code)).size !== wards.length) fail();
+  const schedules = s.schedules === undefined ? undefined : parseSchedules(s.schedules);
   const k = s.counter;
-  if (k === undefined || k === null) return { clinics, wards };
+  if (k === undefined || k === null) return { clinics, wards, ...(schedules && { schedules }) };
   if (!count(k.tickets) || !count(k.called) || !count(k.waiting) || !Array.isArray(k.counters) || k.counters.length > 30) fail();
   const counters = k.counters.map((c) => {
     if (!c || !count(c.no) || !count(c.serving)) fail();
     return { no: c.no, serving: c.serving };
   });
-  return { clinics, wards, counter: { tickets: k.tickets, called: k.called, waiting: k.waiting, counters } };
+  return { clinics, wards, counter: { tickets: k.tickets, called: k.called, waiting: k.waiting, counters }, ...(schedules && { schedules }) };
 }
 
 /** How a place names what it shows from SIMRS: "poli:<kd_poli>", "ward:<kd_bangsal>" or "loket" (the registration counters). */
@@ -160,6 +162,17 @@ export function liveFor(
     wards = links.flatMap((k) => live.wards.filter((w) => wardKey(w.code) === k)),
     counter = links.includes(COUNTER_KEY) ? live.counter : undefined;
   return clinics.length || wards.length || counter ? { clinics, wards, ...(counter && { counter }), at: live.at } : null;
+}
+
+/** Today's queue of a doctor from SIMRS (by kd_dokter), in any clinic. */
+export const doctorToday = (live: Live | null | undefined, code: string | undefined) =>
+  code ? live?.clinics.flatMap((c) => c.doctors).find((d) => d.code === code) : undefined;
+
+/** Whether a doctor has started seeing today's patients: one has been called or seen. Undefined when SIMRS can't tell (nobody registered). */
+export function started(d: DoctorQueue | undefined): boolean | undefined {
+  if (!d) return undefined;
+  if (d.serving || d.registered > d.waiting) return true;
+  return d.registered ? false : undefined;
 }
 
 /** Places left in a doctor's quota today; undefined without a quota. */

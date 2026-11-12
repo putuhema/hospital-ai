@@ -10,6 +10,7 @@ Totals and queue numbers only:
 
 - per clinic and doctor: patients registered today, how many still wait, the queue number called last (`no_reg`), and the doctor's quota for today;
 - per ward and class: beds and how many are empty;
+- the doctors' practice schedules (`jadwal`): days and hours per doctor and clinic;
 - the registration counters (loket): queue tickets taken today, the number called last and the number each counter is serving.
 
 No patient name, record number, visit number or diagnosis is read into the snapshot. The queries are in [snapshot.ts](snapshot.ts): `poliklinik`, `reg_periksa`, `dokter`, `jadwal`, `antripoli`, `kamar`, `bangsal`, and for the counters `antriloketcetak`, `antriloket` and `antriloket_counter`.
@@ -59,6 +60,7 @@ Needs Node 22.18 or newer.
 ## How it shows
 
 - A linked place's card shows _Antrean hari ini_ (registered, waiting, the number being served and quota left per doctor) or _Tempat tidur_ (empty beds, per class), with the time the figures arrived.
+- A place linked to a clinic lists SIMRS's doctors and their days and hours (_Jadwal dari SIMRS_) instead of the ones typed in the editor. Schedules stay when the bridge goes quiet. The editor's doctors are still used for what SIMRS doesn't know: a doctor's leave (cuti), specialty and how their name is written, matched by name. While a doctor is practising, the card and the assistant say whether they have started on today's patients (_Sudah melayani · 3 pasien hari ini_ / _Belum mulai melayani pasien_).
 - A place linked to the registration counters shows _Antrean loket pendaftaran_: numbers taken, how many wait, the number called last and each counter's.
 - The assistant answers from the same figures (`get_clinic_queue`, `get_registration_queue`, `get_bed_availability`), for every clinic and ward, linked or not.
 - When the bridge has been silent for 5 minutes the figures are no longer shown, and the assistant says they aren't available.

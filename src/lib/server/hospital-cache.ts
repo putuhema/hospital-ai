@@ -15,6 +15,8 @@ import { localizeRooms } from "../i18n/places.ts";
 export type CachedHospital = {
   slug: string;
   revision: number;
+  /** When SIMRS's doctors' schedules last changed, as `hospital.version` says. */
+  schedules: number;
   title: string;
   faq: FaqEntry[];
   /** The tools' view of the map, without the time (each question has its own). */
@@ -28,12 +30,13 @@ export async function hospitalFor(convex: ConvexHttpClient, lang: Lang, slug?: s
   if (!version) return null;
   const key = `${version.slug}:${lang}`;
   const kept = hospitals.get(key);
-  if (kept?.revision === version.revision) return kept;
-  const saved = await convex.query(api.hospital.get, { slug: version.slug });
+  if (kept?.revision === version.revision && kept.schedules === version.schedules) return kept;
+  // As visitors see it: SIMRS's doctors and hours for the clinics linked to it.
+  const saved = await convex.query(api.hospital.get, { slug: version.slug, simrs: true });
   if (!saved) return null;
   const layout = parseLayout(saved.layout);
   const { now: _, ...map } = assistantContext({ ...layout, pieces: localizeRooms(layout.pieces, lang) }, new Date());
-  const hospital = { slug: saved.slug, revision: saved.revision, title: layout.title, faq: layout.faq, map };
+  const hospital = { slug: saved.slug, revision: saved.revision, schedules: version.schedules, title: layout.title, faq: layout.faq, map };
   hospitals.set(key, hospital);
   return hospital;
 }

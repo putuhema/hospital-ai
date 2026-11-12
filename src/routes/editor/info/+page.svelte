@@ -12,6 +12,9 @@
     import ShareMenu from "$lib/components/editor/ShareMenu.svelte";
     import { HospitalStore } from "$lib/editor/saving.svelte";
     import { mergeMessage } from "$lib/editor/merge";
+    import { useQuery } from "convex-svelte";
+    import { api } from "../../../convex/_generated/api";
+    import type { Place } from "$lib/wayfinding/routing";
 
     type Section = TopicId | "doctors";
 
@@ -64,15 +67,21 @@
 
     // Doctors.
     let all = $derived(clinics(pieces));
+    // Clinics whose doctors and hours come from SIMRS (a place linked to one shows them to visitors).
+    const simrs = useQuery(api.live.schedules, {});
+    function fromSimrs(c: Place) {
+        const codes = (c.info?.simrs ?? []).filter((k) => k.startsWith("poli:")).map((k) => k.slice(5));
+        return (simrs.data ?? []).filter((s) => codes.includes(s.code)).flatMap((s) => s.doctors);
+    }
     let doctorCount = $derived(all.reduce((n, c) => n + (c.info?.doctors?.length ?? 0), 0));
     let shown = $derived.by(() => {
         const q = normalize(filter);
         return all
-            .filter((c) => c.info?.doctors?.length || opened.includes(c.id))
+            .filter((c) => c.info?.doctors?.length || opened.includes(c.id) || fromSimrs(c).length)
             .filter(
                 (c) =>
                     !q ||
-                    [c.name, c.building, ...(c.info?.doctors ?? []).flatMap((d) => [d.name, d.specialty])].some((t) =>
+                    [c.name, c.building, ...fromSimrs(c), ...(c.info?.doctors ?? []).flatMap((d) => [d.name, d.specialty])].some((t) =>
                         normalize(t ?? "").includes(q),
                     ),
             );
@@ -145,6 +154,11 @@
                             <h3>{c.name}</h3>
                             <small>{where(c)}</small>
                         </header>
+                        {#if fromSimrs(c).length}<p class="synced">
+                                <b>Days and hours come from SIMRS</b> ({fromSimrs(c).join(", ")}). Visitors see SIMRS's schedule
+                                here, so change hours in SIMRS. Add a doctor below only for their leave (cuti), specialty
+                                or how their name is written; they are matched by name.
+                            </p>{/if}
                         <DoctorsEditor doctors={c.info?.doctors ?? []} onchange={(d) => setDoctors(c.id, d)} />
                     </section>{:else}<p class="empty">
                         {filter ? "No doctor or clinic matches." : "No doctors yet. Choose the clinic they practise in."}
@@ -356,6 +370,15 @@
     .clinic header small {
         color: #7b8c70;
         font-size: 12px;
+    }
+    .synced {
+        margin: 0 0 10px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: #eef4ea;
+        color: #3f5a45;
+        font-size: 12px;
+        line-height: 1.5;
     }
     .add-clinic {
         display: flex;
