@@ -72,14 +72,30 @@ test('the turn the route expects moves the visitor on, and they arrive by walkin
   assert.equal(f.done, 3, 'arrived: every step, the arrival too, ticked');
 });
 
-test('a turn felt far too early is ignored; with no turn felt, a stretch ends a little past its length', () => {
+test('a turn felt far too early is ignored; with no turn felt, it waits at the corner a long way before moving on', () => {
   const f = createFollower(route);
   walk(f, 2);
   assert.equal(f.turn(90), false, 'turning round at the start is not the corner');
-  walk(f, 8 + 3.5);
-  assert.equal(f.done, 0, 'waits a few metres for the turn');
-  walk(f, 1.5);
+  walk(f, 18);
+  assert.equal(f.done, 0, 'still waiting for the turn, the dot at the corner');
+  assert.equal(f.along, 10);
+  walk(f, 5);
   assert.equal(f.done, 1);
+});
+
+test('a map drawn smaller than the hospital is learned at the first corner', () => {
+  // The route is drawn 20 m long, but each stretch is twice that on foot.
+  const f = createFollower(route);
+  walk(f, 19.6);
+  assert.equal(f.done, 0, 'reaching the drawn length early, it waits for the real corner');
+  assert.equal(f.turn(90), true);
+  assert.ok(Math.abs(f.scale - 0.7) < 0.05, `learned ${f.scale.toFixed(2)} so far, on the way to 0.5`);
+  walk(f, 10);
+  assert.ok(f.along < 8, `10 m walked of a 20 m stretch shows ${f.along.toFixed(1)} map metres, not the whole of it`);
+  // What a route taught carries to the next.
+  const next = createFollower(route, { scale: 0.5 });
+  walk(next, 10);
+  assert.ok(Math.abs(next.along - 5) < 0.5);
 });
 
 test('ticking a step by hand overrides the count', () => {

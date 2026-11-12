@@ -170,7 +170,9 @@
     // How much of the screen the conversation covers, so the camera frames the rest.
     let insetLeft = $derived(wide ? COLUMN : 0);
     // On phones, the chat bar (and the destination above it) cover the bottom.
-    let insetBottom = $derived(wide ? 0 : to && journeyHeight ? journeyHeight + 92 : 90);
+    /** On a phone, following the steps: the map is for walking, so the bars that aren't go. */
+    let navigating = $derived(ready && !wide && stepping && !!route);
+    let insetBottom = $derived(wide ? 0 : to && journeyHeight ? journeyHeight + (navigating ? 24 : 92) : 90);
     // Steps belong to one route; a new one starts from the first.
     $effect(() => {
         if (!route || wide) stepping = false;
@@ -191,7 +193,18 @@
         onward = $state(0),
         /** Their walking speed (m/s), from their recent steps. */
         pace = $state<number | null>(null);
-    let follower = $derived(route ? createFollower(route) : null);
+    // How many map metres a real metre is, learned at corners: the map may not be
+    // drawn to the hospital's true size. Kept on this phone, per hospital.
+    const scaleKey = () => `p-map-scale:${slug ?? "home"}`;
+    function savedScale() {
+        try {
+            const n = Number(localStorage.getItem(scaleKey()));
+            return n > 0 ? n : 1;
+        } catch {
+            return 1;
+        }
+    }
+    let follower = $derived(route ? createFollower(route, { scale: untrack(savedScale) }) : null);
     let stopSensor: (() => void) | null = null,
         stepTimes: number[] = [];
     /** Start following; called from the tap that opens the steps, as iOS asks for motion access only then. */
@@ -205,7 +218,9 @@
                 if (!follower) return;
                 // Speed from the last dozen steps, if they came at a walk (no long pause between).
                 stepTimes = [...stepTimes.filter((t) => time - t < 9000), time].slice(-12);
-                if (stepTimes.length >= 6) pace = (STRIDE * (stepTimes.length - 1)) / ((time - stepTimes[0]) / 1000);
+                // In map metres a second, as the distances left are measured on the map.
+                if (stepTimes.length >= 6)
+                    pace = (STRIDE * follower.scale * (stepTimes.length - 1)) / ((time - stepTimes[0]) / 1000);
                 if (follower.step()) done = follower.done;
                 onward = follower.along;
                 // Arrived: nothing left to follow.
@@ -215,6 +230,9 @@
                 if (follower?.turn(angle)) {
                     done = follower.done;
                     onward = 0;
+                    try {
+                        localStorage.setItem(scaleKey(), follower.scale.toFixed(3));
+                    } catch {}
                 }
             },
             state: (state) => (sensing = state),
@@ -419,6 +437,7 @@
     class:mobile={ready && !wide}
     class:sheet-open={ready && !wide && sheetOpen}
     class:layers-open={layersOpen}
+    class:navigating
     style:--column={`${COLUMN}px`}
 >
     <section class="stage" aria-label={t("mapRegion")}>
@@ -617,7 +636,7 @@
                         ></button
                     >
                 </div>
-                {#if stepping && route}<div class="about steps"><RouteSteps {route} bind:done following={sensing} {pace} {onward} /></div>
+                {#if stepping && route}<div class="about steps"><RouteSteps {route} bind:done following={sensing} {pace} {onward} compact /></div>
                 {:else if about && aboutHere}
                     {@const info = placeInfo(to.info)}
                     <div class="about">
@@ -1436,6 +1455,7 @@
     .mobile .masthead {
         transition:
             opacity 300ms ease,
+            visibility 300ms,
             transform 460ms cubic-bezier(0.32, 0.72, 0, 1);
     }
     .sheet-open .masthead {
@@ -1582,6 +1602,29 @@
             transform: translateY(calc(100% + 24px));
             transition: none;
         }
+    }
+    /* Following the steps on a phone: only the map, the steps card, the compass
+       and the "Nomor saya" banner; the name bar, map controls and chat bar step aside. */
+    .navigating .masthead,
+    .navigating .map-controls,
+    .navigating .launcher {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+    }
+    .mobile .map-controls {
+        transition:
+            opacity 200ms ease,
+            visibility 200ms;
+    }
+    .mobile .launcher {
+        transition:
+            transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+            opacity 200ms ease,
+            visibility 200ms;
+    }
+    .mobile.navigating .journey {
+        bottom: var(--bottom);
     }
     .mobile :global(.orbit-help) {
         display: none;
