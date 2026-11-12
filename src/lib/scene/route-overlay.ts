@@ -7,7 +7,10 @@ const BLUE = "#2f7fc4",
   /** The part already walked. */
   WALKED = "#a9b8ae",
   /** Height of the route line: just above room floors. */
-  LINE_Y = 0.46;
+  LINE_Y = 0.46,
+  /** The next turn's arrow: the hospital's signal orange, over the route line. */
+  TURN = "#e0663d",
+  TURN_Y = LINE_Y + 0.1;
 
 function arrowShape() {
   const s = new THREE.Shape();
@@ -53,6 +56,7 @@ export function createRouteOverlay() {
   let arrows: { mesh: THREE.Mesh; offset: number }[] = [];
   let pin: THREE.Object3D | null = null;
   let halo: THREE.Mesh | null = null;
+  let turn: THREE.Group | null = null;
 
   /** Draw a route in tile coordinates; returns its bounds in metres, or null when cleared. */
   function show(route: Point[] | null): THREE.Box3 | null {
@@ -63,6 +67,7 @@ export function createRouteOverlay() {
     here = [];
     walked = 0;
     pin = halo = null;
+    turn = null;
     if (!route || route.length < 2) return null;
     const points = route.map((p) => new THREE.Vector3(p.x * 2, LINE_Y, p.y * 2)),
       blue = new THREE.MeshBasicMaterial({ color: BLUE }),
@@ -131,6 +136,60 @@ export function createRouteOverlay() {
     for (const o of here) o.position.set(path.points[walked].x, o.position.y, path.points[walked].z);
   }
 
+  /**
+   * A bold arrow on the floor at route point `at`, bending the way the route
+   * turns there: the turn to make next. `scale` enlarges it, so it stays
+   * easy to see from farther away. Null takes it away.
+   */
+  function turnAt(at: number | null, scale = 1) {
+    if (turn) {
+      clearGroup(turn);
+      group.remove(turn);
+      turn = null;
+    }
+    if (!path || at === null || at <= 0 || at >= path.points.length - 1) return;
+    const { points } = path,
+      corner = points[at],
+      before = corner.clone().sub(points[at - 1]),
+      after = points[at + 1].clone().sub(corner);
+    const inLength = Math.min(2.4 * scale, before.length()) / scale,
+      outLength = Math.min(2.6 * scale, after.length()) / scale;
+    if (inLength < 0.1 || outLength < 0.1) return;
+    before.normalize();
+    after.normalize();
+    turn = new THREE.Group();
+    const orange = new THREE.MeshBasicMaterial({ color: TURN }),
+      head = 1.1,
+      width = 0.7;
+    // Built around the corner, then scaled there.
+    turn.position.copy(corner).setY(TURN_Y);
+    turn.scale.set(scale, 1, scale);
+    const origin = new THREE.Vector3();
+    const band = (a: THREE.Vector3, b: THREE.Vector3) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, 0.05, a.distanceTo(b)), orange.clone());
+      mesh.position.copy(a).lerp(b, 0.5);
+      // Its length runs along z: turn it to run from a to b.
+      mesh.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+      return mesh;
+    };
+    const tail = before.clone().multiplyScalar(-inLength),
+      neck = after.clone().multiplyScalar(Math.max(0.1, outLength - head));
+    const joint = new THREE.Mesh(new THREE.CylinderGeometry(width / 2, width / 2, 0.05, 24), orange.clone());
+    const tip = new THREE.Shape();
+    tip.moveTo(0, head);
+    tip.lineTo(0.8, 0);
+    tip.lineTo(-0.8, 0);
+    const arrowhead = new THREE.Mesh(new THREE.ShapeGeometry(tip), orange.clone());
+    arrowhead.material.side = THREE.DoubleSide;
+    // The shape points along its y; laid flat and turned to point along the way out.
+    arrowhead.rotation.set(-Math.PI / 2, Math.atan2(-after.x, -after.z), 0, "YXZ");
+    arrowhead.position.copy(neck).setY(0.03);
+    turn.add(band(tail, origin), joint, band(origin, neck), arrowhead);
+    turn.traverse((o) => (o.renderOrder = 6));
+    orange.dispose();
+    group.add(turn);
+  }
+
   /** Arrows flow along the route still to walk, the pin bobs and its halo pulses. */
   function animate(time: number) {
     if (!path) return;
@@ -157,5 +216,5 @@ export function createRouteOverlay() {
     }
   }
 
-  return { group, show, walk, animate, dispose: () => clearGroup(group) };
+  return { group, show, walk, turnAt, animate, dispose: () => clearGroup(group) };
 }

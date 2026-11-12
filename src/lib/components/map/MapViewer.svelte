@@ -178,6 +178,17 @@
         done = 0;
     });
     let walked = $derived(route ? progress(route, done).at : 0);
+    /**
+     * Following the steps (on a phone, the steps card; on a wide screen, once a
+     * step is ticked): the stretch to walk now, up to the next turn. The map
+     * looks along it, so what is ahead on the screen is ahead in the hospital.
+     */
+    let leg = $derived.by(() => {
+        if (!route || !(stepping || (wide && done > 0)) || done >= route.steps.length - 1) return null;
+        const from = route.steps[done].at,
+            to = route.steps[done + 1]?.at ?? route.points.length - 1;
+        return to > from ? { from, to } : null;
+    });
 
     const encode = (p: Place | Point) => ("id" in p ? p.id : `${p.x.toFixed(2)},${p.y.toFixed(2)}`);
     function decode(value: string | null): Place | Point | null {
@@ -364,6 +375,7 @@
                     {canvasHeight}
                     route={route?.points ?? null}
                     {walked}
+                    {leg}
                     {highlight}
                     {insetLeft}
                     {insetBottom}

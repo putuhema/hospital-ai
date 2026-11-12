@@ -6,7 +6,7 @@
     import type { Piece } from "$lib/model/layout";
     import type { Point } from "$lib/wayfinding/navigation";
     import { createScenery, LAWN } from "$lib/scene/scenery";
-    import { createCameraRig } from "$lib/scene/camera-rig";
+    import { aheadView, createCameraRig, doorView } from "$lib/scene/camera-rig";
     import { createStage } from "$lib/scene/stage";
     import { createRouteOverlay } from "$lib/scene/route-overlay";
     import { createHighlight, highlightShape, type HighlightTarget } from "$lib/scene/highlight";
@@ -37,6 +37,7 @@
         registerExport,
         route = null,
         walked = 0,
+        leg = null,
         highlight = null,
         labels = true,
         insetLeft = 0,
@@ -63,6 +64,11 @@
         route?: Point[] | null;
         /** The route point the visitor has walked to; the line behind it greys. */
         walked?: number;
+        /**
+         * Following the route: the stretch being walked, as route point indices
+         * up to the next turn. The map looks along it, the turn marked on the floor.
+         */
+        leg?: { from: number; to: number } | null;
         /** A place to pick out, e.g. the one the assistant is talking about; hidden while a route shows. */
         highlight?: HighlightTarget | null;
         labels?: boolean;
@@ -106,6 +112,7 @@
         inside;
         route;
         walked;
+        leg;
         focusShape;
         buildingNames;
         roomNames;
@@ -175,6 +182,7 @@
             canvasSize = "",
             routeShown = "",
             focusShown = "",
+            legShown = "",
             sited = "",
             lastZoom = zoom;
         const ready = () => templates.size === MODEL_KINDS.length;
@@ -223,6 +231,30 @@
                 }
         }
 
+        /**
+         * The stretch from route point `from` to the turn at `to`, with a little of
+         * the way on after it, seen from behind: the way ahead points up the screen.
+         */
+        function legView(points: Point[], { from, to }: { from: number; to: number }) {
+            const a = points[from],
+                b = points[Math.min(to, points.length - 1)];
+            if (!a || !b) return null;
+            const dx = (b.x - a.x) * 2,
+                dz = (b.y - a.y) * 2;
+            if (Math.hypot(dx, dz) < 0.5) return null;
+            const box = new THREE.Box3();
+            for (let i = from; i <= Math.min(to, points.length - 1); i++)
+                box.expandByPoint(new THREE.Vector3(points[i].x * 2, 0, points[i].y * 2));
+            const after = points[to + 1];
+            if (after) {
+                const turn = new THREE.Vector3((after.x - b.x) * 2, 0, (after.y - b.y) * 2);
+                const reach = Math.min(4, turn.length());
+                if (reach > 0) box.expandByPoint(new THREE.Vector3(b.x * 2, 0, b.y * 2).addScaledVector(turn.normalize(), reach));
+            }
+            box.max.y = 1;
+            return { box, view: aheadView(dx, dz) };
+        }
+
         sync = () => {
             if (destroyed) return;
             if (!presentation) controls.mouseButtons.LEFT = pan ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
@@ -266,12 +298,16 @@
             }
             // The camera frames the route, or else the highlighted place.
             const nextRoute = JSON.stringify(route ?? null),
-                nextFocus = JSON.stringify(focusShape);
-            if (nextRoute !== routeShown || nextFocus !== focusShown || (rebuilt && focusShape)) {
-                const moved = nextRoute !== routeShown || nextFocus !== focusShown;
+                nextFocus = JSON.stringify(focusShape),
+                nextLeg = JSON.stringify(route?.length ? leg : null);
+            if (nextRoute !== routeShown || nextFocus !== focusShown || nextLeg !== legShown || (rebuilt && focusShape)) {
+                const moved = nextRoute !== routeShown || nextFocus !== focusShown || nextLeg !== legShown;
                 routeShown = nextRoute;
                 focusShown = nextFocus;
-                const routeBox = overlay.show(route);
+                legShown = nextLeg;
+                const routeBox = overlay.show(route),
+                    ahead = route?.length && leg ? legView(route, leg) : null;
+
                 // The pin floats over the roof, or with the roofs off, above the building's name.
                 // A building is its outside and its interior; the pin goes over the taller.
                 const parts = buildings.children.filter((o) => o.userData.pieceId === focus?.pieceId);
@@ -298,7 +334,12 @@
                     around.max.y = Math.min(around.max.y, 2.5);
                     around.expandByVector(door === "north" || door === "south" ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0));
                 }
-                if (moved) rig.frameRoute(routeBox ?? around ?? null, routeBox ? 8 : door ? 1.5 : 10, routeBox ? undefined : door);
+                if (moved)
+                    if (ahead) rig.frameRoute(ahead.box, 3, ahead.view);
+                    else if (routeBox) rig.frameRoute(routeBox, 8);
+                    else rig.frameRoute(around ?? null, door ? 1.5 : 10, door ? doorView(door) : undefined);
+                // The next turn's arrow, larger when the stretch to it is long and seen from farther.
+                overlay.turnAt(ahead ? leg!.to : null, THREE.MathUtils.clamp(rig.focusDistance() / 45, 1, 1.8));
                 // From farther away (a whole building) the pin grows, so it stays easy to spot.
                 const above = marker.resize(THREE.MathUtils.clamp(rig.focusDistance() / 40, 1, 3));
                 // The place's own name moves up onto the pin, like a map marker, instead of covering it.

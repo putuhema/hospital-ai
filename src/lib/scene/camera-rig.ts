@@ -15,7 +15,15 @@ const OVERHEAD = 1e-4;
 const DOOR_TILT = 0.9;
 /** Heading that puts the camera outside each wall, looking in (0 is from the south). */
 const FROM_SIDE = { south: 0, east: Math.PI / 2, north: Math.PI, west: -Math.PI / 2 } as const;
-export type FacingSide = keyof typeof FROM_SIDE;
+/** Tilt for following a route: looking ahead along the way, like walking it. */
+const AHEAD_TILT = 0.85;
+
+/** A particular angle to frame something from: heading, tilt and how near the camera may come. */
+export type View = { theta: number; tilt: number; near: number };
+/** Look at a room from in front of its door wall. */
+export const doorView = (side: keyof typeof FROM_SIDE): View => ({ theta: FROM_SIDE[side], tilt: DOOR_TILT, near: 12 });
+/** Look along a walk from `dx`, `dz` (metres): the camera behind, the way ahead pointing up the screen. */
+export const aheadView = (dx: number, dz: number): View => ({ theta: Math.atan2(-dx, -dz), tilt: AHEAD_TILT, near: 14 });
 /** Pixels at the top of a phone's map covered by the search bar and map controls. */
 const PHONE_BARS = 110;
 /** How long the camera takes to move to a place, a route or north (ms): short and decisive. */
@@ -72,8 +80,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     target = { left: 0, bottom: 0 };
   // The last place or route framed, framed again if a sheet rises just after or grows.
   // `moved`: the visitor has dragged or zoomed since, so it is left where they put it.
-  let framed: { bounds: THREE.Box3; pad: number; door?: FacingSide; at: number; moved?: boolean } | null =
-    null;
+  let framed: { bounds: THREE.Box3; pad: number; view?: View; at: number; moved?: boolean } | null = null;
   const ray = new THREE.Raycaster(),
     ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
@@ -155,7 +162,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     // A sheet opening with the place it shows, growing over it (a route's steps) or
     // shrinking: keep the place in the clear part, unless the visitor has moved the map.
     if (risen && framed && (!framed.moved || performance.now() - framed.at < 700))
-      frameRoute(framed.bounds, framed.pad, framed.door);
+      frameRoute(framed.bounds, framed.pad, framed.view);
     return true;
   }
 
@@ -296,14 +303,14 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
    * Look down on a route (or a highlighted place) steeply, so trees and walls
    * don't hide it; null releases it. `pad` metres at least are kept clear
    * around it: routes keep the rooms around them in view, a single place is
-   * framed closer. With `door`, on the map, it looks from in front of that
-   * wall, lower, so the room's doorway faces the visitor. On the map the
-   * camera glides there.
+   * framed closer. With a `view`, on the map, it looks from that angle: from
+   * in front of a room's door (`doorView`) or along the way ahead
+   * (`aheadView`). On the map the camera glides there.
    */
-  function frameRoute(bounds: THREE.Box3 | null, pad = 8, door?: FacingSide) {
+  function frameRoute(bounds: THREE.Box3 | null, pad = 8, view?: View) {
     const from = begin();
     routeDistance = null;
-    framed = bounds && { bounds: bounds.clone(), pad, door, at: performance.now() };
+    framed = bounds && { bounds: bounds.clone(), pad, view, at: performance.now() };
     if (!bounds) {
       // Back to the whole campus once a route is cleared.
       if (site) {
@@ -315,17 +322,17 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     const centre = bounds.getCenter(new THREE.Vector3()).setY(0),
       extent = bounds.getSize(new THREE.Vector3());
     orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
-    // Keeps the visitor's heading, and their tilt if it is already steeper;
-    // a room is seen from its door (not from straight above, in the top view).
-    const facing = presentation && door && !overhead,
+    // Keeps the visitor's heading, and their tilt if it is already steeper,
+    // unless a view is asked for (in the top view only its heading).
+    const angle = presentation ? view : undefined,
       tilt = overhead
         ? OVERHEAD
-        : facing
-          ? DOOR_TILT
+        : angle
+          ? angle.tilt
           : presentation
             ? Math.min(orbit.phi, FRAME_TILT)
             : Math.PI / 2 - 0.87,
-      direction = new THREE.Vector3().setFromSphericalCoords(1, tilt, facing ? FROM_SIDE[door] : orbit.theta);
+      direction = new THREE.Vector3().setFromSphericalCoords(1, tilt, angle ? angle.theta : orbit.theta);
     // Look from the final direction first: the fit depends on it. Short
     // routes are padded so the rooms around them stay in view.
     controls.target.copy(centre);
@@ -335,7 +342,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
       .clone()
       .expandByVector(new THREE.Vector3(Math.max(pad, extent.x * 0.25), 0, Math.max(pad, extent.z * 0.25)));
     routeDistance = size.width
-      ? Math.max(facing ? 12 : 30, fitDistance(padded))
+      ? Math.max(angle?.near ?? 30, fitDistance(padded))
       : Math.max(60, Math.max(extent.x, extent.z) * 3.2) * Math.max(1, 1.1 / camera.aspect);
     camera.position.copy(centre).addScaledVector(direction, routeDistance);
     clearOfSheet(centre);
