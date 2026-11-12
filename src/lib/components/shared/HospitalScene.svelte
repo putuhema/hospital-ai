@@ -37,6 +37,7 @@
         registerExport,
         route = null,
         walked = 0,
+        onward = 0,
         leg = null,
         highlight = null,
         labels = true,
@@ -64,6 +65,8 @@
         route?: Point[] | null;
         /** The route point the visitor has walked to; the line behind it greys. */
         walked?: number;
+        /** Metres walked past `walked`, as the phone follows the visitor; their dot moves along. */
+        onward?: number;
         /**
          * Following the route: the stretch being walked, as route point indices
          * up to the next turn. The map looks along it, the turn marked on the floor.
@@ -112,6 +115,7 @@
         inside;
         route;
         walked;
+        onward;
         leg;
         focusShape;
         buildingNames;
@@ -351,7 +355,7 @@
                     tag.center.set(0.5, named ? 0 : 0.5);
                 }
             }
-            overlay.walk(walked);
+            overlay.walk(walked, onward);
             const object = buildings.children.find((o) => o.userData.pieceId === selected);
             stage.selectedBox.visible = !!object && !presentation;
             if (object) stage.selectedBox.box.setFromObject(object);

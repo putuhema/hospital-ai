@@ -24,6 +24,8 @@
     import { hoursStatus } from "$lib/model/place-info";
     import type { Point, WalkingNetwork } from "$lib/wayfinding/navigation";
     import { buildGrid, places, planRoute, progress, walkMinutes, type Place } from "$lib/wayfinding/routing";
+    import { createFollower, STRIDE } from "$lib/wayfinding/follow";
+    import { startWalkSensor, type SensorState } from "$lib/wayfinding/walk-sensor";
     let {
         title,
         pieces,
@@ -178,6 +180,63 @@
         done = 0;
     });
     let walked = $derived(route ? progress(route, done).at : 0);
+
+    /*
+     * On a phone, following the steps also follows the visitor: the motion
+     * sensors count their steps and feel their turns, ticking steps off and
+     * moving their dot along, so they needn't tap. Tapping still corrects it.
+     */
+    let sensing = $state<SensorState | null>(null),
+        /** Metres walked into the current step. */
+        onward = $state(0),
+        /** Their walking speed (m/s), from their recent steps. */
+        pace = $state<number | null>(null);
+    let follower = $derived(route ? createFollower(route) : null);
+    let stopSensor: (() => void) | null = null,
+        stepTimes: number[] = [];
+    /** Start following; called from the tap that opens the steps, as iOS asks for motion access only then. */
+    function follow() {
+        stopSensor?.();
+        sensing = null;
+        pace = null;
+        stepTimes = [];
+        stopSensor = startWalkSensor({
+            step: (time) => {
+                if (!follower) return;
+                // Speed from the last dozen steps, if they came at a walk (no long pause between).
+                stepTimes = [...stepTimes.filter((t) => time - t < 9000), time].slice(-12);
+                if (stepTimes.length >= 6) pace = (STRIDE * (stepTimes.length - 1)) / ((time - stepTimes[0]) / 1000);
+                if (follower.step()) done = follower.done;
+                onward = follower.along;
+                // Arrived: nothing left to follow.
+                if (follower.done >= (route?.steps.length ?? 0)) unfollow();
+            },
+            turn: (angle) => {
+                if (follower?.turn(angle)) {
+                    done = follower.done;
+                    onward = 0;
+                }
+            },
+            state: (state) => (sensing = state),
+        });
+    }
+    function unfollow() {
+        stopSensor?.();
+        stopSensor = null;
+        sensing = null;
+        onward = 0;
+    }
+    $effect(() => {
+        if (!stepping || !route) untrack(unfollow);
+    });
+    // Ticked by hand (or started over): follow on from there.
+    $effect(() => {
+        if (follower && follower.done !== done) {
+            follower.sync(done);
+            onward = 0;
+        }
+    });
+    onMount(() => () => stopSensor?.());
     /**
      * Following the steps (on a phone, the steps card; on a wide screen, once a
      * step is ticked): the stretch to walk now, up to the next turn. The map
@@ -375,6 +434,7 @@
                     {canvasHeight}
                     route={route?.points ?? null}
                     {walked}
+                    {onward}
                     {leg}
                     {highlight}
                     {insetLeft}
@@ -543,7 +603,13 @@
                                 >{/if}</small
                         >
                     </button>
-                    {#if route && !wide}<button class="go" aria-pressed={stepping} onclick={() => (stepping = !stepping)}
+                    {#if route && !wide}<button
+                            class="go"
+                            aria-pressed={stepping}
+                            onclick={() => {
+                                stepping = !stepping;
+                                if (stepping) follow();
+                            }}
                             >{t("steps")}</button
                         >{:else}<button class="go" onclick={() => open("route")}>{route ? t("steps") : t("directions")}</button>{/if}
                     <button class="x" aria-label={t("clearDestination")} onclick={() => (to = null)}
@@ -551,7 +617,7 @@
                         ></button
                     >
                 </div>
-                {#if stepping && route}<div class="about steps"><RouteSteps {route} bind:done /></div>
+                {#if stepping && route}<div class="about steps"><RouteSteps {route} bind:done following={sensing} {pace} {onward} /></div>
                 {:else if about && aboutHere}
                     {@const info = placeInfo(to.info)}
                     <div class="about">

@@ -1,17 +1,27 @@
 <script lang="ts">
     import { progress, stepGlyph, stepText, type Route } from "$lib/wayfinding/routing";
     import { useLocale } from "$lib/i18n/locale.svelte";
+    import type { SensorState } from "$lib/wayfinding/walk-sensor";
     let {
         route,
         done = $bindable(0),
+        following = null,
+        pace = null,
+        onward = 0,
     }: {
         route: Route;
         /** Steps the visitor has ticked off, from the first. */
         done?: number;
+        /** The phone following the visitor's walking, if it is trying to. */
+        following?: SensorState | null;
+        /** The visitor's own walking speed, m/s, once measured. */
+        pace?: number | null;
+        /** Metres walked into the current step, as the phone follows them. */
+        onward?: number;
     } = $props();
     const locale = useLocale();
     let steps = $derived(route.steps);
-    let left = $derived(progress(route, done).metersLeft);
+    let left = $derived(Math.max(0, Math.round(progress(route, done).metersLeft - onward)));
     let list: HTMLOListElement;
     // Tapping a step ticks it off with those before it; tapping a ticked one takes it back.
     const mark = (i: number) => (done = i < done ? i : i + 1);
@@ -31,9 +41,15 @@
                 n: done + 1,
                 total: steps.length,
                 m: left,
-            })}{:else}{locale.t("stepsHint")}{/if}
+            })}{:else if following !== "on"}{locale.t("stepsHint")}{/if}
         {#if done}<button onclick={() => (done = 0)}>{locale.t("stepsReset")}</button>{/if}
     </p>
+    {#if following && done < steps.length}<p class="following" class:on={following === "on"}>
+            {#if following === "on"}<i aria-hidden="true"></i>{locale.t("followOn")}{#if pace && left > 0}<br
+                    />{locale.t("stepsPace", { n: Math.max(1, Math.round(left / pace / 60)) })}{/if}{:else if following === "asking"}{locale.t(
+                    "followAsking",
+                )}{:else if following === "denied"}{locale.t("followOff")}{/if}
+        </p>{/if}
 </div>
 <ol class="route-steps" bind:this={list}>
     {#each steps as step, i}<li class:done={i < done} class:next={i === done}>
@@ -73,6 +89,35 @@
         font-size: 11px;
         color: #4b6f53;
         text-decoration: underline;
+    }
+    .following {
+        margin: 6px 0 0;
+        font-size: 11.5px;
+        line-height: 1.45;
+        color: #6a7c62;
+    }
+    .following.on {
+        color: #2f6b3a;
+    }
+    .following i {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        margin-right: 6px;
+        border-radius: 50%;
+        background: #3f8a52;
+        vertical-align: 1px;
+        animation: beat 1.6s ease-in-out infinite;
+    }
+    @keyframes beat {
+        50% {
+            opacity: 0.35;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .following i {
+            animation: none;
+        }
     }
     ol {
         list-style: none;

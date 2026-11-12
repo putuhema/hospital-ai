@@ -52,7 +52,8 @@ export function createRouteOverlay() {
   // Line pieces ending at each route point (index i: from i - 1 to i), and the dot that marks where the visitor is.
   let pieces: THREE.Mesh[][] = [],
     here: THREE.Object3D[] = [],
-    walked = 0;
+    walked = 0,
+    onward = 0;
   let arrows: { mesh: THREE.Mesh; offset: number }[] = [];
   let pin: THREE.Object3D | null = null;
   let halo: THREE.Mesh | null = null;
@@ -66,6 +67,7 @@ export function createRouteOverlay() {
     pieces = [];
     here = [];
     walked = 0;
+    onward = 0;
     pin = halo = null;
     turn = null;
     if (!route || route.length < 2) return null;
@@ -126,14 +128,25 @@ export function createRouteOverlay() {
     return new THREE.Box3().setFromPoints(points);
   }
 
-  /** The visitor has walked to route point `at`: the line behind them greys and their dot moves on. */
-  function walk(at: number) {
-    if (!path || at === walked) return;
-    walked = Math.max(0, Math.min(at, path.points.length - 1));
-    pieces.forEach((meshes, i) => {
-      for (const m of meshes) (m.material as THREE.MeshBasicMaterial).color.set(i <= walked ? WALKED : BLUE);
+  /**
+   * The visitor has walked to route point `at`, and `metres` on from it: the
+   * line behind them greys and their dot moves on.
+   */
+  function walk(at: number, metres = 0) {
+    if (!path || (at === walked && metres === onward)) return;
+    const { points, lengths } = path;
+    walked = Math.max(0, Math.min(at, points.length - 1));
+    onward = metres;
+    const reached = Math.min(lengths[walked] + metres, path.total);
+    let i = walked;
+    while (i < points.length - 1 && lengths[i + 1] <= reached) i++;
+    pieces.forEach((meshes, k) => {
+      for (const m of meshes) (m.material as THREE.MeshBasicMaterial).color.set(k <= i ? WALKED : BLUE);
     });
-    for (const o of here) o.position.set(path.points[walked].x, o.position.y, path.points[walked].z);
+    const next = points[Math.min(i + 1, points.length - 1)],
+      span = lengths[Math.min(i + 1, points.length - 1)] - lengths[i],
+      spot = points[i].clone().lerp(next, span > 0 ? (reached - lengths[i]) / span : 0);
+    for (const o of here) o.position.set(spot.x, o.position.y, spot.z);
   }
 
   /**
