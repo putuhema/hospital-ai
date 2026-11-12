@@ -24,6 +24,7 @@
         picking = $bindable(false),
         done = $bindable(0),
         onscan,
+        onpick,
     }: {
         places: Place[];
         grid: NavGrid;
@@ -36,6 +37,8 @@
         done?: number;
         /** Scan a "You are here" sign to set the start (on phones). */
         onscan?: () => void;
+        /** The visitor chose the start or the destination here. */
+        onpick?: (which: "from" | "to") => void;
     } = $props();
     const locale = useLocale();
     // A picked spot is named after the corridor or path it is on.
@@ -57,6 +60,7 @@
     let shortcuts = $derived(shortcutsFor(places, 5));
     function nearest(detail: string) {
         to = nearestOfType(grid, places, detail, from);
+        onpick?.("to");
     }
 </script>
 
@@ -71,20 +75,45 @@
             onselect={(p) => {
                 from = p;
                 picking = false;
+                onpick?.("from");
             }}
             onclear={() => {
                 from = null;
                 picking = false;
             }}
             clearLabel={locale.t("clearStart")}
-        />
+        >
+            <!-- The other ways to say where you are: a sign's QR code, or a spot on the map. -->
+            {#snippet actions()}
+                {#if onscan}<button type="button" class="field-tool" aria-label={locale.t("scanButton")} title={locale.t("scanButton")} onclick={onscan}
+                        ><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
+                            ><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8" /></svg
+                        ></button
+                    >{/if}
+                <button
+                    type="button"
+                    class="field-tool"
+                    class:active={picking}
+                    aria-pressed={picking}
+                    aria-label={locale.t(picking ? "clickTheMap" : "pickStart")}
+                    title={locale.t(picking ? "clickTheMap" : "pickStart")}
+                    onclick={() => (picking = !picking)}
+                    ><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
+                        ><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg
+                    ></button
+                >
+            {/snippet}
+        </PlaceSearch>
         <PlaceSearch
             {places}
             marker="end"
             label={locale.t("destination")}
             placeholder={locale.t("searchRoomOrBuilding")}
             value={to?.name ?? ""}
-            onselect={(p) => (to = p)}
+            onselect={(p) => {
+                to = p;
+                onpick?.("to");
+            }}
             onclear={() => (to = null)}
             clearLabel={locale.t("clearDestination")}
         />
@@ -99,20 +128,6 @@
         >
     </div>
     <div class="tools">
-        {#if onscan}<button class="chip pick" onclick={onscan}
-                ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
-                    ><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8" /></svg
-                >{locale.t("scanButton")}</button
-            >{/if}
-        <button
-            class="chip pick"
-            class:active={picking}
-            aria-pressed={picking}
-            onclick={() => (picking = !picking)}
-            ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
-                ><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg
-            >{locale.t(picking ? "clickTheMap" : "pickStart")}</button
-        >
         {#each shortcuts as t}<button
                 class="chip"
                 onclick={() => nearest(t.name)}
@@ -167,6 +182,28 @@
     .swap:disabled {
         opacity: 0.4;
     }
+    .field-tool {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        color: #3f6b4e;
+    }
+    .field-tool:hover {
+        background: #edf3e7;
+    }
+    .field-tool.active {
+        background: #2d4a38;
+        color: white;
+    }
+    .field-tool svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
     .tools {
         display: flex;
         flex-wrap: wrap;
@@ -184,18 +221,8 @@
         font-size: 11px;
         color: #3d5243;
     }
-    .pick svg {
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 2;
-    }
     .chip:hover {
         border-color: #9fb394;
-    }
-    .chip.active {
-        background: #2f7fc4;
-        border-color: #2f7fc4;
-        color: white;
     }
     .result {
         margin-top: 12px;

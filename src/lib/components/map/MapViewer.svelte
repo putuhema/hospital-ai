@@ -455,6 +455,8 @@
         if (!place) return;
         from = place;
         notify(t("youAreAt", { name: place.name }));
+        // With a destination too, the route is ready: show it on the map.
+        if (to && !wide) sheetOpen = false;
     }
     // Where the visitor was going, kept a while on this phone: scanning a sign
     // with the phone's own camera opens the map afresh, and should carry on.
@@ -478,7 +480,8 @@
             else return notify(t("pickHere"));
             picking = false;
             tab = "route";
-            sheetOpen = true;
+            // Back to the drawer to choose where to, unless the route is ready already.
+            sheetOpen = !to;
         } else if (place) {
             // Tapped on the map: that place, not the chat's, with what is there (a clinic's doctors, opening hours).
             carried = chatFocus?.id ?? null;
@@ -494,6 +497,22 @@
      * type in. Focused in the tap itself (after drawing the tab at once), as
      * phones only bring up the keyboard for a focus the visitor asked for.
      */
+    /**
+     * Phones: once both ends are chosen the route is ready, so the drawer gets
+     * out of the way and the map shows it. With only a destination, it stays
+     * open on "where are you now?", as the route needs a start.
+     */
+    function picked(which: "from" | "to") {
+        if (wide) return;
+        if (from && to) {
+            sheetOpen = false;
+            return;
+        }
+        if (which === "to" && !from)
+            document
+                .querySelector<HTMLInputElement>(`.column .route-finder input[aria-label="${t("startingPoint")}"]`)
+                ?.focus({ preventScroll: true });
+    }
     function findWay() {
         open("route");
         if (to) return;
@@ -709,6 +728,7 @@
                         bind:picking
                         bind:done
                         onscan={wide ? undefined : () => (scanning = true)}
+                        onpick={picked}
                     />
                 </div>{/if}
         </div>

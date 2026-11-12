@@ -1,4 +1,5 @@
 <script lang="ts">
+    import type { Snippet } from "svelte";
     import type { Place } from "$lib/wayfinding/routing";
     import { search } from "$lib/wayfinding/search";
     import PlaceIcon from "./PlaceIcon.svelte";
@@ -13,6 +14,7 @@
         onselect,
         onclear,
         clearLabel = "",
+        actions,
     }: {
         places: Place[];
         /** Text shown when not searching, e.g. the chosen place's name. */
@@ -24,12 +26,16 @@
         /** Forget the chosen place; a × shows in the field while one is chosen. */
         onclear?: () => void;
         clearLabel?: string;
+        /** Small buttons at the end of the field, e.g. other ways to fill it in. */
+        actions?: Snippet;
     } = $props();
     const locale = useLocale();
     let query = $state(""),
         open = $state(false),
         highlighted = $state(0),
-        input: HTMLInputElement;
+        input: HTMLInputElement,
+        /** Room the buttons at the end take, so typed text stays clear of them. */
+        endWidth = $state(0);
     const id = `place-${Math.random().toString(36).slice(2)}`;
     let results = $derived(search(places, query).slice(0, 40));
     // The list only opens in the browser, so this is the visitor's own clock.
@@ -70,7 +76,7 @@
             : undefined}
         placeholder={value || placeholder}
         class:filled={!!value}
-        class:clearable={!!value && !!onclear}
+        style:padding-right={endWidth ? `${endWidth + 12}px` : null}
         bind:value={query}
         onfocus={() => {
             open = true;
@@ -113,29 +119,38 @@
                     {locale.t(places.length ? "noMatches" : "emptyMap")}
                 </li>{/each}
         </ul>{/if}
-    {#if value && onclear && !query}<button
-            type="button"
-            class="clear-field"
-            aria-label={clearLabel}
-            title={clearLabel}
-            onclick={() => {
-                onclear();
-                input.focus();
-            }}
-            ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg
-            ></button
-        >{/if}
+    <!-- While typing, the field is all for the text. -->
+    {#if !query && ((value && onclear) || actions)}<div class="end" bind:clientWidth={endWidth}>
+            {#if actions}{@render actions()}{/if}
+            {#if value && onclear}<button
+                    type="button"
+                    class="clear-field"
+                    aria-label={clearLabel}
+                    title={clearLabel}
+                    onclick={() => {
+                        onclear();
+                        input.focus();
+                    }}
+                    ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg
+                    ></button
+                >{/if}
+        </div>{/if}
 </div>
 
 <style>
     .place-search {
         position: relative;
     }
-    .clear-field {
+    .end {
         position: absolute;
-        right: 8px;
+        right: 6px;
         top: 50%;
         transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        gap: 2px;
+    }
+    .clear-field {
         display: grid;
         place-items: center;
         width: 28px;
@@ -180,9 +195,6 @@
         font: inherit;
         font-size: 13px;
         color: #243d2c;
-    }
-    input.clearable {
-        padding-right: 40px;
     }
     input.filled::placeholder {
         color: #243d2c;
