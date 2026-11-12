@@ -13,6 +13,8 @@ import { messageText, type ChatMessage, type ReplyContext, type ReplyEvent } fro
 import { hospitalNow, reply, type ReplyInput } from "$lib/server/assistant";
 import { replyZai, ZAI_BASE_URL, ZAI_MODEL } from "$lib/server/assistant-zai";
 import type { Lang } from "$lib/i18n/lang";
+import { fresh } from "$lib/model/live";
+import type { AssistantContext } from "$lib/assistant/tools";
 
 /** Limits on what a visitor's browser may send: a long conversation, not a document. */
 const MAX_MESSAGES = 30,
@@ -114,7 +116,9 @@ export async function POST({ request, getClientAddress }) {
       );
   }
 
-  const ctx = { ...hospital.map, now: hospitalNow(env.HOSPITAL_TIME_ZONE) };
+  // Today's queue and the beds from SIMRS, when the bridge at the hospital has reported lately.
+  const live = fresh(await convex.query(api.live.get, { slug: hospital.slug }).catch(() => null), Date.now());
+  const ctx: AssistantContext = { ...hospital.map, now: hospitalNow(env.HOSPITAL_TIME_ZONE), live };
   const abort = new AbortController();
   request.signal.addEventListener("abort", () => abort.abort());
   const stream = new ReadableStream({
@@ -126,7 +130,8 @@ export async function POST({ request, getClientAddress }) {
           if (event.type !== "status") sent.push(event);
         }
         // Kept for the next visitor who asks the same, when it is a whole answer.
-        if (secret && cacheKey && sent.some((e) => e.type === "text" && e.text.trim()))
+        // (An answer from the live figures is only true now.)
+        if (secret && cacheKey && !ctx.liveUsed && sent.some((e) => e.type === "text" && e.text.trim()))
           await convex.mutation(api.answers.put, { secret, key: cacheKey, events: merged(sent) }).catch((err) => console.error("Could not keep the answer:", err));
       } catch (err) {
         if (!abort.signal.aborted) {

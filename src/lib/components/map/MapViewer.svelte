@@ -161,7 +161,7 @@
     /** Details in the card, unless the directions beside it already show them (wide screens, Rute tab). */
     let aboutHere = $derived(hasAbout && !(wide && tab === "route" && !!placeInfo(to?.info)));
     function placeInfo(info: Place["info"]) {
-        return info && (info.description || info.phone || info.hours?.length || info.doctors?.length) ? info : null;
+        return info && (info.description || info.phone || info.hours?.length || info.doctors?.length || info.simrs?.length) ? info : null;
     }
 
     // How much of the screen the conversation covers, so the camera frames the rest.

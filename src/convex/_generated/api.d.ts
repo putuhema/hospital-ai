@@ -14,6 +14,7 @@ import type * as crons from "../crons.js";
 import type * as hospital from "../hospital.js";
 import type * as http from "../http.js";
 import type * as limits from "../limits.js";
+import type * as live from "../live.js";
 
 import type {
   ApiFromModules,
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   hospital: typeof hospital;
   http: typeof http;
   limits: typeof limits;
+  live: typeof live;
 }>;
 
 /**

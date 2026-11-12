@@ -1,0 +1,17 @@
+{
+	"name": "khanza-bridge",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "Sends SIMRS Khanza's live queue and bed totals to the P-Map visitor app.",
+	"engines": {
+		"node": ">=22.18"
+	},
+	"scripts": {
+		"start": "node --env-file=.env khanza-bridge.ts",
+		"check": "node --env-file=.env khanza-bridge.ts --once --dry-run"
+	},
+	"dependencies": {
+		"mysql2": "^3.11.0"
+	}
+}

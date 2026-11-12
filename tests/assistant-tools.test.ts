@@ -117,7 +117,7 @@ test('show_on_map returns a place or a route in the map\'s own link format', () 
 });
 
 test('runTool checks the input against the tool definitions', () => {
-  assert.deepEqual(toolDefinitions.map((t) => t.name), ['search_places', 'get_place_details', 'search_hospital_info', 'get_doctor_schedule', 'find_nearest', 'get_directions', 'show_on_map']);
+  assert.deepEqual(toolDefinitions.map((t) => t.name), ['search_places', 'get_place_details', 'search_hospital_info', 'get_doctor_schedule', 'get_clinic_queue', 'get_registration_queue', 'get_bed_availability', 'find_nearest', 'get_directions', 'show_on_map']);
   assert.ok('results' in runTool(ctx, 'search_places', { query: 'pharmacy' }));
   assert.deepEqual(runTool(ctx, 'book_appointment', {}), { error: 'There is no tool called "book_appointment".' });
   assert.deepEqual(runTool(ctx, 'search_places', {}), { error: '"query" is required.' });

@@ -5,6 +5,9 @@
     import { page } from "$app/state";
     import { onMount } from "svelte";
     import { Locale } from "$lib/i18n/locale.svelte";
+    import { useQuery } from "convex-svelte";
+    import { api } from "../../../convex/_generated/api";
+    import { provideLive } from "$lib/live.svelte";
 
     // The hospital from the database; it updates live as the editor saves.
     let {
@@ -15,6 +18,9 @@
         /** Link to the editor from the map's menu. */
         editable?: boolean;
     } = $props();
+    // Today's queue and the beds from SIMRS, live as the bridge at the hospital sends them (convex/live.ts).
+    const live = useQuery(api.live.get, () => (map.data?.slug ? { slug: map.data.slug } : {}));
+    provideLive(() => live.data);
     // Only for the messages before the map is there; the map keeps its own.
     const locale = new Locale();
     // Without a connection the page and the hospital's data come from the phone (service-worker.ts).

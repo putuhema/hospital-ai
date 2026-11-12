@@ -3,6 +3,8 @@
     import { hoursLines, hoursStatus, type PlaceInfo } from "$lib/model/place-info";
     import { useLocale } from "$lib/i18n/locale.svelte";
     import { dateOf, doctorStatus, shortDate } from "$lib/model/doctors";
+    import { fresh, liveFor, quotaLeft } from "$lib/model/live";
+    import { useLive } from "$lib/live.svelte";
     let { info }: { info: PlaceInfo } = $props();
     // The visitor's own clock: they are at the hospital, so it is the hospital's
     // time too. Unknown during server rendering, so the badge waits for the browser.
@@ -16,6 +18,12 @@
     let status = $derived(now && hoursStatus(info, now, locale.lang));
     // Leave that isn't over yet, to show beside the doctor.
     let today = $derived(now && dateOf(now));
+    // Today's queue and the beds from SIMRS, for a place linked to a clinic or ward; gone when the bridge is silent.
+    const liveData = useLive();
+    let live = $derived(now && liveFor(info.simrs, fresh(liveData(), now.getTime())));
+    // As printed on the ticket: "036".
+    const number = (n: number) => String(n).padStart(3, "0");
+    const time = (at: number) => new Date(at).toLocaleTimeString(locale.lang === "en" ? "en-GB" : "id-ID", { hour: "2-digit", minute: "2-digit" });
 </script>
 
 <section class="place-details" aria-label={locale.t("aboutPlace")}>
@@ -25,6 +33,42 @@
     {#if info.hours?.length}<div class="hours">
             <small>{locale.t(info.visiting ? "visitingHours" : "openingHours")}</small>
             {#each hoursLines(info.hours, locale.lang) as line}<span>{line}</span>{/each}
+        </div>{/if}
+    {#if live}<div class="live" aria-live="polite">
+            {#if live.counter}
+                <small>{locale.t("liveCounter")}</small>
+                <b class="total">{locale.t("liveTickets", { n: live.counter.tickets, w: live.counter.waiting })}</b>
+                {#if live.counter.called}<em class="called">{locale.t("liveCalled", { no: number(live.counter.called) })}</em>{/if}
+                {#each live.counter.counters as c (c.no)}<span class="line"
+                        >{locale.t("liveCounterAt", { n: c.no, no: number(c.serving) })}</span
+                    >{/each}
+            {/if}
+            {#each live.clinics as c (c.code)}
+                <small>{locale.t("liveQueue")}{live.clinics.length > 1 ? ` · ${c.name}` : ""}</small>
+                <b class="total">{locale.t("liveRegistered", { n: c.registered, w: c.waiting })}</b>
+                {#each c.doctors.filter((d) => d.registered || d.quota) as d (d.code)}
+                    {@const left = quotaLeft(d)}
+                    <div class="queue">
+                        <span class="who">{d.name}</span>
+                        {#if d.serving}<em>{locale.t("liveServing", { no: d.serving })}</em>{/if}
+                        <span class="line"
+                            >{locale.t("liveRegistered", { n: d.registered, w: d.waiting })}{left === undefined
+                                ? ""
+                                : ` · ${left ? locale.t("liveQuotaLeft", { n: left }) : locale.t("liveQuotaFull")}`}</span
+                        >
+                    </div>
+                {/each}
+            {/each}
+            {#each live.wards as w (w.code)}
+                <small>{locale.t("liveBeds")}{live.wards.length > 1 ? ` · ${w.name}` : ""}</small>
+                <b class="total" class:full={!w.empty}
+                    >{w.empty ? locale.t("liveBedsEmpty", { empty: w.empty, beds: w.beds }) : locale.t("liveBedsFull")}</b
+                >
+                {#if w.classes.length > 1}{#each w.classes as k (k.name)}<span class="line"
+                            >{k.name}: {k.empty ? locale.t("liveBedsEmpty", { empty: k.empty, beds: k.beds }) : locale.t("liveBedsFull")}</span
+                        >{/each}{/if}
+            {/each}
+            <span class="from"><i></i>{locale.t("liveFrom", { time: time(live.at) })}</span>
         </div>{/if}
     {#if info.doctors?.length}<div class="doctors">
             <small>{locale.t("doctorSchedule")}</small>
@@ -96,6 +140,60 @@
         text-transform: uppercase;
         color: #7b8c70;
         margin-bottom: 2px;
+    }
+    .live {
+        display: flex;
+        flex-direction: column;
+        margin-top: 10px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: white;
+    }
+    .live small {
+        font-size: 10px;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: #7b8c70;
+    }
+    .live small:not(:first-child) {
+        margin-top: 8px;
+    }
+    .live .total {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1f3a2b;
+    }
+    .live .total.full {
+        color: #9a3b2e;
+    }
+    .queue {
+        display: flex;
+        flex-direction: column;
+        margin-top: 6px;
+    }
+    .queue .who {
+        font-weight: 600;
+        color: #2f4336;
+    }
+    .queue em,
+    .live .called {
+        font-style: normal;
+        font-weight: 600;
+        color: #2f6b3a;
+    }
+    .live .from {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 8px;
+        font-size: 10.5px;
+        color: #7b8c70;
+    }
+    .live .from i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #3f9a52;
     }
     .doctors {
         display: flex;

@@ -40,6 +40,7 @@ export default defineSchema({
       hours: v.optional(v.any()),
       visiting: v.optional(v.boolean()),
       keywords: v.optional(v.array(v.string())),
+      simrs: v.optional(v.array(v.string())),
     }),
   }).index("by_hospital", ["hospitalId", "place"]),
 
@@ -62,6 +63,20 @@ export default defineSchema({
     question: v.string(),
     answer: v.string(),
   }).index("by_hospital", ["hospitalId", "order"]),
+
+  /**
+   * Live figures from SIMRS, sent by the bridge at the hospital (live.ts): a
+   * row per clinic (today's queue) and per ward (beds), one for the
+   * registration counters' queue, and one "sync" row
+   * with when the bridge last reported.
+   */
+  live: defineTable({
+    hospitalId: v.id("hospitals"),
+    kind: v.union(v.literal("poli"), v.literal("ward"), v.literal("loket"), v.literal("sync")),
+    /** kd_poli or kd_bangsal; empty for "loket" (the registration counters' queue) and "sync". */
+    code: v.string(),
+    data: v.any(),
+  }).index("by_hospital", ["hospitalId", "kind", "code"]),
 
   /** Questions the assistant answered, counted per window (lib/assistant/limits.ts). */
   chatLimits: defineTable({

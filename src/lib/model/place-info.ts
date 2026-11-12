@@ -5,6 +5,7 @@
  */
 import { tidyHours, validHours, type Hours } from "./hours.ts";
 import { parseDoctors, type Doctor } from "./doctors.ts";
+import { parseLinks } from "./live.ts";
 
 export * from "./hours.ts";
 
@@ -18,6 +19,8 @@ export type PlaceInfo = {
   keywords?: string[];
   /** Doctors who practise here, with their schedules. */
   doctors?: Doctor[];
+  /** What it shows live from SIMRS: "poli:<kd_poli>" for a clinic's queue, "ward:<kd_bangsal>" for a ward's beds (live.ts). */
+  simrs?: string[];
 };
 
 /** Validates stored details; returns undefined when there are none. */
@@ -47,5 +50,7 @@ export function parseInfo(value: unknown): PlaceInfo | undefined {
   if (keywords.length) info.keywords = keywords;
   const doctors = parseDoctors(d.doctors);
   if (doctors) info.doctors = doctors;
+  const simrs = parseLinks(d.simrs);
+  if (simrs) info.simrs = simrs;
   return Object.keys(info).length ? info : undefined;
 }

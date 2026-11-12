@@ -46,6 +46,10 @@ npx convex env set SITE_URL http://localhost:5173   # the app's address
 
 The app reads `PUBLIC_CONVEX_SITE_URL` (written by `npx convex dev`) to pass sign-in on to Convex. Visitors never sign in. Changing `BETTER_AUTH_SECRET` later makes the stored token key unreadable: delete the `jwks` row of the betterAuth component in the Convex dashboard and a new one is made.
 
+### Live from SIMRS
+
+Today's queue per clinic, the registration counters' queue and the beds per ward come from SIMRS Khanza through a small bridge that runs at the hospital ([bridge/](bridge/README.md)): it reads Khanza read-only every 15 seconds and posts the totals (no patient data) to `/simrs/push` on the Convex deployment (`src/convex/http.ts`, guarded by `SIMRS_BRIDGE_SECRET`). They are kept in the `live` table (`src/convex/live.ts`, `src/lib/model/live.ts`) and open maps update as they change. A place shows them once it is linked to a clinic or ward in the editor (*Live from SIMRS* in its visitor info); the assistant reads them for any clinic or ward (`get_clinic_queue`, `get_registration_queue`, `get_bed_availability`), and such answers are never cached. Figures older than 5 minutes are not shown.
+
 ### The assistant
 
 The chat answers with a model when the server has an API key, set in `.env.local` (or the hosting environment):

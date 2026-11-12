@@ -21,6 +21,7 @@ import { dateOf, doctorStatus, shortDate, specialtyOf, type Doctor } from "../mo
 import { shortcuts } from "../wayfinding/shortcuts.ts";
 import { topicOf, topics, type FaqEntry } from "../model/faq.ts";
 import { faqMatches } from "./faq-match.ts";
+import { clinicKey, COUNTER_KEY, liveFor, quotaLeft, wardKey, type ClinicLive, type CounterLive, type Live, type WardLive } from "../model/live.ts";
 
 /** What the tools know: the hospital map and the time at the hospital. */
 export type AssistantContext = {
@@ -30,6 +31,10 @@ export type AssistantContext = {
   faq?: FaqEntry[];
   /** The hospital's local time: its day, hours and minutes are read for open-now. */
   now: Date;
+  /** Today's queue and the beds from SIMRS (model/live.ts), while the bridge at the hospital is reporting. */
+  live?: Live | null;
+  /** Set once a tool has answered from the live figures: such a reply is true only now, so it isn't kept for the next visitor. */
+  liveUsed?: boolean;
 };
 
 /** The context for a layout (as `parseLayout` returns it) at a moment. */
@@ -69,6 +74,50 @@ export type PlaceDetails = PlaceSummary & {
   other_names?: string[];
   /** Doctors who practise here. */
   doctors?: DoctorSchedule[];
+  /** Today's registrations and queue here, live from SIMRS. */
+  queue_today?: ClinicQueue[];
+  /** The beds here right now, live from SIMRS. */
+  beds_now?: WardBeds[];
+  /** The registration counters' queue here, live from SIMRS. */
+  registration_queue?: RegistrationQueue;
+};
+
+/** The registration counters' queue (antrean loket pendaftaran) as the model sees it. */
+export type RegistrationQueue = {
+  /** Where the counters are on the map, when a place is linked to them. */
+  place?: PlaceSummary;
+  tickets_taken_today: number;
+  waiting: number;
+  /** The ticket number called last, e.g. "036". */
+  last_called?: string;
+  counters: { counter: number; serving: string }[];
+};
+
+/** A clinic's queue today as the model sees it. */
+export type ClinicQueue = {
+  clinic: string;
+  /** Where it is on the map, when a place is linked to it. */
+  place?: PlaceSummary;
+  registered_today: number;
+  waiting: number;
+  doctors: {
+    name: string;
+    registered_today: number;
+    waiting: number;
+    /** The queue number called last. */
+    now_serving?: string;
+    quota?: number;
+    quota_left?: number;
+  }[];
+};
+
+/** A ward's beds as the model sees them. */
+export type WardBeds = {
+  ward: string;
+  place?: PlaceSummary;
+  beds: number;
+  empty: number;
+  classes: { class: string; beds: number; empty: number }[];
 };
 
 /** A doctor's schedule as the model sees it. */
@@ -147,7 +196,127 @@ export function getPlaceDetails(
   }
   if (p.info?.keywords?.length) d.other_names = p.info.keywords;
   if (p.info?.doctors?.length) d.doctors = p.info.doctors.map((doc) => schedule(ctx, doc));
+  const live = liveFor(p.info?.simrs, ctx.live);
+  if (live) {
+    ctx.liveUsed = true;
+    if (live.clinics.length) d.queue_today = live.clinics.map((c) => queueOf(ctx, c, false));
+    if (live.wards.length) d.beds_now = live.wards.map((w) => bedsOf(ctx, w, false));
+    if (live.counter) d.registration_queue = counterOf(ctx, live.counter, false);
+  }
   return d;
+}
+
+const linked = (ctx: AssistantContext, key: string) => ctx.places.find((p) => p.info?.simrs?.includes(key));
+
+function queueOf(ctx: AssistantContext, c: ClinicLive, withPlace = true): ClinicQueue {
+  const place = withPlace && linked(ctx, clinicKey(c.code));
+  return {
+    clinic: c.name,
+    ...(place && { place: summary(ctx, place) }),
+    registered_today: c.registered,
+    waiting: c.waiting,
+    doctors: c.doctors
+      .filter((d) => d.registered || d.quota)
+      .map((d) => ({
+        name: d.name,
+        registered_today: d.registered,
+        waiting: d.waiting,
+        ...(d.serving && { now_serving: d.serving }),
+        ...(d.quota !== undefined && { quota: d.quota, quota_left: quotaLeft(d) }),
+      })),
+  };
+}
+
+function bedsOf(ctx: AssistantContext, w: WardLive, withPlace = true): WardBeds {
+  const place = withPlace && linked(ctx, wardKey(w.code));
+  return {
+    ward: w.name,
+    ...(place && { place: summary(ctx, place) }),
+    beds: w.beds,
+    empty: w.empty,
+    classes: w.classes.map((k) => ({ class: k.name, beds: k.beds, empty: k.empty })),
+  };
+}
+
+const ticket = (n: number) => String(n).padStart(3, "0");
+function counterOf(ctx: AssistantContext, k: CounterLive, withPlace = true): RegistrationQueue {
+  const place = withPlace && linked(ctx, COUNTER_KEY);
+  return {
+    ...(place && { place: summary(ctx, place) }),
+    tickets_taken_today: k.tickets,
+    waiting: k.waiting,
+    ...(k.called && { last_called: ticket(k.called) }),
+    counters: k.counters.map((c) => ({ counter: c.no, serving: ticket(c.serving) })),
+  };
+}
+
+const NO_LIVE: ToolError = {
+  error:
+    "The live figures from the hospital's system (SIMRS) aren't available right now. Don't guess them; say so and point the visitor to registration (pendaftaran).",
+};
+// Words in a question about queues or beds that aren't part of a clinic's, doctor's or ward's name.
+const LIVE_WORDS = new Set(
+  "poli poliklinik klinik clinic antrian antrean queue nomor dokter doctor dr drg kamar tempat tidur bed beds kosong tersedia empty available ruang ruangan rawat inap bangsal ward hari ini today sekarang now berapa ada masih".split(
+    " ",
+  ),
+);
+/** Whether every word of the query is in the text: short words ("1", "vip") whole, longer ones from their start. */
+function named(query: string | undefined, text: string) {
+  const wanted = normalize(query ?? "")
+      .split(" ")
+      .filter((w) => w && !LIVE_WORDS.has(w)),
+    words = normalize(text).split(" ");
+  return wanted.every((t) => words.some((w) => (t.length < 3 ? w === t : w.startsWith(t))));
+}
+
+/** Today's registrations and queue per clinic, live from SIMRS: how many wait, the number being served, quota left. */
+export function getClinicQueue(
+  ctx: AssistantContext,
+  { query, limit = 10 }: { query?: string; limit?: number },
+): { clinics: ClinicQueue[] } | ToolError {
+  if (!ctx.live) return NO_LIVE;
+  ctx.liveUsed = true;
+  const n = Math.min(Math.max(1, Math.round(limit)), 30);
+  // By the clinic's name or its place on the map ("anak" finds Poliklinik Anak), else by a doctor there.
+  const text = (c: ClinicLive) => `${c.name} ${linked(ctx, clinicKey(c.code))?.name ?? ""}`;
+  const everything = named(query, "");
+  let found = ctx.live.clinics.filter((c) => named(query, text(c)));
+  if (!found.length) found = ctx.live.clinics.filter((c) => c.doctors.some((d) => named(query, d.name)));
+  return {
+    clinics: found
+      // Asked about no clinic in particular: the ones with patients today, busiest first.
+      .filter((c) => !everything || c.registered > 0)
+      .sort((a, b) => b.registered - a.registered)
+      .slice(0, n)
+      .map((c) => queueOf(ctx, c)),
+  };
+}
+
+/** The registration counters' queue right now, live from SIMRS: tickets taken, the number called last, how many wait. */
+export function getRegistrationQueue(ctx: AssistantContext, _input: object): RegistrationQueue | ToolError {
+  if (!ctx.live) return NO_LIVE;
+  if (!ctx.live.counter) return { error: "This hospital's system doesn't report the registration counters' queue. Say so; don't guess." };
+  ctx.liveUsed = true;
+  return counterOf(ctx, ctx.live.counter);
+}
+
+/** Empty beds per ward and class right now, live from SIMRS. */
+export function getBedAvailability(
+  ctx: AssistantContext,
+  { query, limit = 20 }: { query?: string; limit?: number },
+): { wards: WardBeds[]; empty_in_all: number } | ToolError {
+  if (!ctx.live) return NO_LIVE;
+  ctx.liveUsed = true;
+  const n = Math.min(Math.max(1, Math.round(limit)), 60);
+  const text = (w: WardLive) => `${w.name} ${linked(ctx, wardKey(w.code))?.name ?? ""} ${w.classes.map((k) => k.name).join(" ")}`;
+  const found = ctx.live.wards.filter((w) => named(query, text(w)));
+  return {
+    wards: found
+      .sort((a, b) => b.empty - a.empty)
+      .slice(0, n)
+      .map((w) => bedsOf(ctx, w)),
+    empty_in_all: found.reduce((sum, w) => sum + w.empty, 0),
+  };
 }
 
 function schedule(ctx: AssistantContext, d: Doctor, place?: Place): DoctorSchedule {
@@ -372,6 +541,45 @@ export const toolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: "get_clinic_queue",
+    description:
+      "Today's registrations and queue (antrean) per clinic (poli), live from the hospital's system (SIMRS): how many " +
+      "registered, how many still wait, the queue number being served per doctor, and how much of a doctor's quota " +
+      'is left. Give the clinic or doctor, e.g. "anak" or "dr Sari"; without a query it lists today\'s busiest clinics. ' +
+      "No patient names. An error means the live figures aren't available.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The clinic or the doctor, in the visitor's words." },
+        limit: { type: "integer", description: "At most this many clinics (default 10, up to 30)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_registration_queue",
+    description:
+      "The queue at the registration counters (antrean loket pendaftaran / rekam medis) right now, live from the " +
+      "hospital's system (SIMRS): queue tickets taken today, the number called last, how many still wait, and the " +
+      "number each counter (loket) is serving. An error means the figures aren't available.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_bed_availability",
+    description:
+      "Empty beds (tempat tidur / kamar kosong) per inpatient ward and class right now, live from the hospital's " +
+      'system (SIMRS). Give a ward or a class, e.g. "Melati", "ICU", "VIP" or "kelas 1"; without a query it lists ' +
+      "every ward, the emptiest first. An error means the live figures aren't available.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The ward or class, in the visitor's words." },
+        limit: { type: "integer", description: "At most this many wards (default 20, up to 60)." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "find_nearest",
     description:
       "The closest place of a kind, such as toilets, pharmacy, parking or café, by walking distance from " +
@@ -421,6 +629,9 @@ const tools: Record<string, (ctx: AssistantContext, input: never) => object> = {
   search_places: searchPlaces,
   get_place_details: getPlaceDetails,
   get_doctor_schedule: getDoctorSchedule,
+  get_clinic_queue: getClinicQueue,
+  get_registration_queue: getRegistrationQueue,
+  get_bed_availability: getBedAvailability,
   search_hospital_info: searchHospitalInfo,
   find_nearest: findNearest,
   get_directions: getDirections,

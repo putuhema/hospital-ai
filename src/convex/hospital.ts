@@ -11,7 +11,7 @@ const SLUG_CHARS = "abcdefghijkmnpqrstuvwxyz23456789";
 type Rows = "buildings" | "places" | "doctors" | "faq";
 
 /** The hospital at /m/<slug>, or the first one (the one at /) without a slug. */
-async function find(ctx: QueryCtx, slug?: string) {
+export async function find(ctx: QueryCtx, slug?: string) {
   return slug
     ? await ctx.db
         .query("hospitals")
