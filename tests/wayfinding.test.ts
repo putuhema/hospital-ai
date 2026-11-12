@@ -75,7 +75,7 @@ test('steps are put into words in Indonesian, with arrows from what they mean', 
   assert.equal(stepText(route.steps[0].say, 'id'), 'Dari Main reception, jalan ke arah utara masuk ke koridor');
   assert.equal(stepText(route.steps.at(-1)!.say, 'id'), 'Tiba di Laboratory di Pharmacy & lab');
   // Slight turns show as turns, as they are said ("belok kanan").
-  assert.deepEqual(route.steps.map(stepGlyph), ['●', '↱', '↱', '↱', '⚑']);
+  assert.deepEqual(route.steps.map(stepGlyph), ['●', '↱', '↱', '⚑']);
   const fromSpot = planRoute(g, { x: 12, y: 18 }, find(list, 'Room 1'))!;
   assert.match(stepText(fromSpot.steps[0].say, 'id'), /^Dari posisi Anda/);
   assert.match(fromSpot.steps[0].text, /^From your position/);
@@ -163,4 +163,19 @@ test('each instruction says how far to go straight, then the turn: belok, never 
   const long = route.steps.findIndex((s, i) => i > 0 && s.meters > 2 && route.steps[i + 1]?.say.kind === 'turn');
   assert.match(legText(route, long, 'id'), new RegExp(`^Jalan lurus ${route.steps[long].meters} m.*, lalu belok`));
   assert.match(legText(route, long, 'en'), new RegExp(`^Go straight ${route.steps[long].meters} m.*, then turn`));
+});
+
+test('a route walks down the middle of a corridor and turns square at a junction', () => {
+  // Two wards joined by an L of corridor, 1 tile wide: north–south at x 5–6, then east–west at y 12–13.
+  const ward = (id: number, name: string, x: number, y: number): Piece => ({ id, name, kind: 'flat', x, y, w: 4, h: 3, rotation: 0, color: '#ffffff' });
+  const corridor = (id: number, x: number, y: number, w: number, h: number): Piece => ({ id, name: 'Corridor', kind: 'straight', x, y, w, h, rotation: 0, color: '#dddddd' });
+  const pieces = [ward(1, 'North ward', 3, 1), corridor(2, 5, 4, 1, 9), corridor(3, 6, 12, 8, 1), ward(4, 'East ward', 14, 11)];
+  const g = buildGrid(pieces, 24, 20), list = places(pieces);
+  const route = planRoute(g, find(list, 'North ward'), find(list, 'East ward'))!;
+  const inner = route.points.slice(1, -1);
+  const down = inner.filter((p, k) => k > 0 && Math.abs(p.x - inner[k - 1].x) < 1e-6 && p.y > 4 && p.y < 12);
+  for (const p of down) assert.ok(Math.abs(p.x - 5.5) < 0.01, `down the corridor at x ${p.x}, not its middle 5.5`);
+  const across = inner.filter((p, k) => k > 0 && Math.abs(p.y - inner[k - 1].y) < 1e-6 && p.x > 6);
+  for (const p of across) assert.ok(Math.abs(p.y - 12.5) < 0.01, `along the corridor at y ${p.y}, not its middle 12.5`);
+  assert.ok(inner.some((p) => Math.abs(p.x - 5.5) < 0.01 && Math.abs(p.y - 12.5) < 0.01), `turns at the junction's middle: ${JSON.stringify(route.points)}`);
 });

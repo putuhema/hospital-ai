@@ -475,6 +475,213 @@ function smooth(g: NavGrid, points: Point[]) {
   return out;
 }
 
+/** Walking cost of a straight line on the ground alone (no edge cost). */
+function groundCost(g: NavGrid, a: Point, b: Point) {
+  const length = distance(a, b),
+    samples = Math.max(1, Math.ceil(length * RES * 4));
+  let sum = 0;
+  for (let k = 0; k < samples; k++) {
+    const t = (k + 0.5) / samples;
+    sum += g.cost[cellAt(g, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })];
+  }
+  return (sum * length) / samples;
+}
+
+/** Widest walkway a route is centred in (tiles); anything wider is open floor or ground. */
+const CENTRE_WIDTH = 3;
+
+/**
+ * The middle of the walkway at `p`, across a stretch running `vertical` or
+ * not: the free cells either side of it on the same ground, with no wall
+ * between. Null where it is wider than a walkway (an open hall, the grounds).
+ */
+function middleAcross(g: NavGrid, p: Point, vertical: boolean): number | null {
+  const start = cellAt(g, p),
+    i0 = start % g.cols,
+    j0 = Math.floor(start / g.cols),
+    ground = g.cost[start],
+    limit = CENTRE_WIDTH * RES;
+  const reach = (sign: 1 | -1) => {
+    let k = 0;
+    for (;;) {
+      if (k >= limit) return null;
+      const c = vertical ? start + k * sign : start + k * sign * g.cols,
+        di = vertical ? sign : 0,
+        dj = vertical ? 0 : sign;
+      if (!open(g, c, di, dj)) return k;
+      const next = c + di + dj * g.cols;
+      if (g.cost[next] !== ground) return k;
+      k++;
+    }
+  };
+  const low = reach(-1),
+    high = reach(1);
+  if (low === null || high === null) return null;
+  const from = (vertical ? i0 : j0) - low,
+    to = (vertical ? i0 : j0) + high + 1;
+  return (from + to) / 2 / RES;
+}
+
+/**
+ * Tidy a straightened route into one a person would walk: a short diagonal
+ * cut across a corner becomes the corner itself, and each straight stretch
+ * along a corridor or path moves onto the walkway's middle. Where they
+ * start and end stays put, and nothing is changed that would cross a wall or
+ * leave the walkway.
+ */
+function tidy(g: NavGrid, route: Point[]): Point[] {
+  const p = route.map((q) => ({ ...q }));
+  const along = (a: Point, b: Point): "h" | "v" | null => {
+    const dx = Math.abs(b.x - a.x),
+      dy = Math.abs(b.y - a.y),
+      length = Math.hypot(dx, dy);
+    if (length < 1e-6) return null;
+    return dy <= length * 0.12 ? "h" : dx <= length * 0.12 ? "v" : null;
+  };
+  // A change is kept only if no wall is crossed, the ground walked on is no worse
+  // (a squared corner is a little longer, and that is fine) and it is barely longer.
+  const fits = (before: Point[], after: Point[], longer = 0.75) => {
+    for (let k = 1; k < after.length; k++) if (g.walls.some((w) => crosses(after[k - 1], after[k], w))) return false;
+    const length = (q: Point[]) => q.slice(1).reduce((s, b, k) => s + distance(q[k], b), 0),
+      ground = (q: Point[]) => q.slice(1).reduce((s, b, k) => s + groundCost(g, q[k], b), 0) / Math.max(1e-9, length(q));
+    return ground(after) <= ground(before) + 0.05 && length(after) <= length(before) + longer;
+  };
+
+  // Corners: straight, a short diagonal, then straight the other way. Again
+  // once the stretches are centred, which can bring a cut corner back.
+  const square = () => {
+    for (let k = 1; k + 2 < p.length; k++) {
+      const first = along(p[k - 1], p[k]),
+        last = along(p[k + 1], p[k + 2]);
+      if (!first || !last || first === last || along(p[k], p[k + 1]) || distance(p[k], p[k + 1]) > 1) continue;
+      const corner = first === "h" ? { x: p[k + 2].x, y: p[k - 1].y } : { x: p[k - 1].x, y: p[k + 2].y };
+      if (fits([p[k - 1], p[k], p[k + 1], p[k + 2]], [p[k - 1], corner, p[k + 2]])) p.splice(k, 2, corner);
+    }
+  };
+  square();
+
+  // The middle of the walkway along a–b, measured at `at` (fractions of the way):
+  // where most of them agree. A point where another walkway crosses measures
+  // nothing (it is open across) and is left out.
+  const middleOf = (a: Point, b: Point, vertical: boolean, at: number[]) => {
+    const middles = at
+      .map((t) => middleAcross(g, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, vertical))
+      .filter((m): m is number => m !== null)
+      .sort((x, y) => x - y);
+    if (middles.length < Math.max(2, at.length / 2)) return null;
+    return middles[middles.length - 1] - middles[0] > 0.3 ? null : middles[(middles.length - 1) >> 1];
+  };
+  const SPREAD = [0.15, 0.3, 0.45, 0.6, 0.75, 0.9];
+  const onto = (q: Point, vertical: boolean, middle: number) => (vertical ? { ...q, x: middle } : { ...q, y: middle });
+
+  // Each straight stretch between two turns, onto the middle of its walkway.
+  for (let k = 1; k + 2 < p.length; k++) {
+    const a = p[k],
+      b = p[k + 1],
+      way = along(a, b);
+    if (!way) continue;
+    const vertical = way === "v",
+      middle = middleOf(a, b, vertical, SPREAD);
+    if (middle === null) continue;
+    const moved = [onto(a, vertical, middle), onto(b, vertical, middle)];
+    if (fits([p[k - 1], a, b, p[k + 2]], [p[k - 1], ...moved, p[k + 2]])) [p[k], p[k + 1]] = moved;
+  }
+
+  // A stretch straight out of the start (or into the end): onto the middle too,
+  // easing over from the door where it starts, which stays where it is.
+  const ease = (end: Point, inner: Point, after: Point | undefined) => {
+    const way = along(end, inner);
+    if (!way) return null;
+    const vertical = way === "v",
+      // Measured away from the door (inside the building) and from the far corner (another walkway crosses).
+      middle = middleOf(end, inner, vertical, [0.35, 0.45, 0.55, 0.65, 0.75]);
+    if (middle === null) return null;
+    const off = Math.abs((vertical ? end.x : end.y) - middle);
+    if (off < 0.05) return null;
+    // Eased over at most about 18° off the stretch, or not at all: a steep
+    // sidestep at the door would read as a turn.
+    const length = distance(end, inner),
+      lead = Math.max(1, off * 3);
+    if (lead > length / 2) return null;
+    const t = lead / length,
+      eased = onto({ x: end.x + (inner.x - end.x) * t, y: end.y + (inner.y - end.y) * t }, vertical, middle),
+      moved = onto(inner, vertical, middle);
+    const before = after ? [end, inner, after] : [end, inner],
+      changed = after ? [end, eased, moved, after] : [end, eased, moved];
+    return fits(before, changed) ? { eased, moved } : null;
+  };
+  if (p.length >= 2) {
+    const first = ease(p[0], p[1], p[2]);
+    if (first) p.splice(1, 1, first.eased, first.moved);
+    const n = p.length,
+      last = ease(p[n - 1], p[n - 2], p[n - 3]);
+    if (last) p.splice(n - 2, 1, last.moved, last.eased);
+  }
+
+  square();
+
+  // Between two parallel walkways, a short connecting walkway: walk down its
+  // middle (turn, a few steps, turn back), not diagonally across it.
+  // (The crossing may be drawn as a few short pieces; they are taken together.)
+  for (let k = 1; k + 2 < p.length; k++) {
+    const way = along(p[k - 1], p[k]);
+    if (!way) continue;
+    let m = k + 1;
+    while (m + 1 < p.length && along(p[m], p[m + 1]) !== way && distance(p[k], p[m]) <= 6) m++;
+    if (m + 1 >= p.length || along(p[m], p[m + 1]) !== way || m === k) continue;
+    const b = p[k],
+      c = p[m],
+      across = way === "h" ? Math.abs(c.y - b.y) : Math.abs(c.x - b.x),
+      lengthwise = way === "h" ? Math.abs(c.x - b.x) : Math.abs(c.y - b.y);
+    if (distance(b, c) > 6 || across < 0.5 || across < lengthwise) continue;
+    // The connector runs across the two walkways: its middle is measured lengthwise.
+    const vertical = way === "h",
+      middle = middleAcross(g, { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 }, vertical);
+    if (middle === null) continue;
+    const from = vertical ? { x: middle, y: b.y } : { x: b.x, y: middle },
+      to = vertical ? { x: middle, y: c.y } : { x: c.x, y: middle };
+    // Squaring it adds about what the diagonal went along the walkways.
+    if (fits(p.slice(k - 1, m + 2), [p[k - 1], from, to, p[m + 1]], lengthwise + 0.75)) p.splice(k, m - k + 1, from, to);
+  }
+  square();
+
+  // Two walkways in line but a little offset: drift across gently instead of a
+  // sharp sidestep, so it reads as carrying straight on, not two turns.
+  for (let k = 1; k + 2 < p.length; k++) {
+    const a = p[k - 1],
+      b = p[k],
+      c = p[k + 1],
+      d = p[k + 2],
+      first = along(a, b),
+      side = distance(b, c);
+    if (!first || first !== along(c, d) || side > 0.6 || side < 1e-6 || along(b, c) === first) continue;
+    const length = distance(a, b),
+      u = { x: (b.x - a.x) / length, y: (b.y - a.y) / length },
+      // Same way on both sides of the sidestep, not doubling back.
+      ahead = (d.x - c.x) * u.x + (d.y - c.y) * u.y;
+    const lead = side * 1.5;
+    if (ahead <= lead || length <= lead) continue;
+    const from = { x: b.x - u.x * lead, y: b.y - u.y * lead },
+      to = { x: c.x + u.x * lead, y: c.y + u.y * lead };
+    if (fits([a, b, c, d], [a, from, to, d])) p.splice(k, 2, from, to);
+  }
+
+  // A repeated point, or one in the middle of a straight line (carrying on, not turning back), adds nothing.
+  const out = [p[0]];
+  for (let k = 1; k < p.length; k++) {
+    const q = p[k],
+      a = out[out.length - 1],
+      b = p[k + 1];
+    if (distance(q, a) < 1e-9) continue;
+    const straightOn =
+      b &&
+      Math.abs((q.x - a.x) * (b.y - a.y) - (q.y - a.y) * (b.x - a.x)) < 1e-6 &&
+      (q.x - a.x) * (b.x - q.x) + (q.y - a.y) * (b.y - q.y) > 0;
+    if (!straightOn) out.push(q);
+  }
+  return out;
+}
+
 /** Name of the area a point is in: a room, a building, a corridor or outside. */
 export function areaAt(pieces: Piece[], p: Point) {
   for (const b of pieces.filter(isBuilding)) {
@@ -566,6 +773,12 @@ function describe(
     // Fold tiny wiggles and straight continuations into the previous instruction.
     if (last && (turn === "straight" || meters < 1) && !through && !into) {
       last.meters += meters;
+    } else if (last && turn === "straight" && last.meters < 2.5 && last.say.kind !== "arrive" && !last.say.into) {
+      // A turn, a step or two, then straight on into somewhere: one instruction,
+      // "turn right into Poliklinik", not "turn right" and "carry on into Poliklinik".
+      last.meters += meters;
+      if (into) last.say.into = into;
+      if (through && !last.say.through) last.say.through = through;
     } else {
       const extra = { ...(through && { through }), ...(into && { into }) };
       says.push({
@@ -711,7 +924,7 @@ export function planRoute(
   if (!fromPlace || fromPlace.kind === "room" || fromPlace.kind === "landmark")
     points.unshift(fromPlace?.point ?? (from as Point));
   if (to.kind === "room" || to.kind === "landmark") points.push(to.point);
-  const route = smooth(g, points);
+  const route = tidy(g, smooth(g, points));
   let meters = 0;
   for (let i = 1; i < route.length; i++)
     meters += distance(route[i - 1], route[i]) * g.tileMeters;
