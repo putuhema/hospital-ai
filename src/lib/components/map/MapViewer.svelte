@@ -493,8 +493,8 @@
         sheetOpen = true;
     }
     /**
-     * Straight to directions: the route tab, its destination search ready to
-     * type in. Focused in the tap itself (after drawing the tab at once), as
+     * Straight to directions: the route tab, its first empty field (where they
+     * are, then where to) ready to type in. Focused in the tap itself (after drawing the tab at once), as
      * phones only bring up the keyboard for a focus the visitor asked for.
      */
     /**
@@ -515,10 +515,12 @@
     }
     function findWay() {
         open("route");
-        if (to) return;
+        // The first field still empty, in order: where they are, then where to.
+        const field = !from ? t("startingPoint") : !to ? t("destination") : null;
+        if (!field) return;
         flushSync();
         document
-            .querySelector<HTMLInputElement>(`.column .route-finder input[aria-label="${t("destination")}"]`)
+            .querySelector<HTMLInputElement>(`.column .route-finder input[aria-label="${field}"]`)
             ?.focus({ preventScroll: true });
     }
     // Phones: the sheet follows a finger on its top edge, and goes when
