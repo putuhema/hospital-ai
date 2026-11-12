@@ -6,6 +6,7 @@
         cutaway = $bindable(),
         overhead = $bindable(),
         routeShown,
+        plan = false,
     }: {
         prefs: DisplayPrefs;
         cutaway: boolean;
@@ -13,6 +14,8 @@
         overhead: boolean;
         /** Roofs are always off while a route is shown. */
         routeShown: boolean;
+        /** On the 2D plan: only the name labels apply. */
+        plan?: boolean;
     } = $props();
     const { t } = useLocale();
     function toggle(pref: "buildings" | "rooms" | "info") {
@@ -22,11 +25,11 @@
 </script>
 
 <div class="scene-options" role="group" aria-label={t("displayOptions")}>
-    <button
-        aria-pressed={overhead}
-        title={t(overhead ? "topViewOn" : "topViewOff")}
-        onclick={() => (overhead = !overhead)}>{t("topView")}</button
-    >{#if !routeShown}<button
+    {#if !plan}<button
+            aria-pressed={overhead}
+            title={t(overhead ? "topViewOn" : "topViewOff")}
+            onclick={() => (overhead = !overhead)}>{t("topView")}</button
+        >{/if}{#if !routeShown && !plan}<button
             aria-pressed={cutaway}
             onclick={() => (cutaway = !cutaway)}
             >{t(cutaway ? "showRoofs" : "lookInside")}</button
@@ -38,11 +41,11 @@
         aria-pressed={prefs.rooms}
         title={t(prefs.rooms ? "hideRoomNames" : "showRoomNames")}
         onclick={() => toggle("rooms")}>{t("rooms")}</button
-    ><button
-        aria-pressed={prefs.info}
-        title={t(prefs.info ? "hideHoverInfo" : "showHoverInfo")}
-        onclick={() => toggle("info")}>{t("hoverInfo")}</button
-    ></div>
+    >{#if !plan}<button
+            aria-pressed={prefs.info}
+            title={t(prefs.info ? "hideHoverInfo" : "showHoverInfo")}
+            onclick={() => toggle("info")}>{t("hoverInfo")}</button
+        >{/if}</div>
 
 <style>
     .scene-options {

@@ -319,8 +319,9 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
    * in front of a room's door (`doorView`) or along the way ahead
    * (`aheadView`). On the map the camera glides there.
    */
-  function frameRoute(bounds: THREE.Box3 | null, pad = 8, view?: View) {
-    const from = begin();
+  function frameRoute(bounds: THREE.Box3 | null, pad = 8, view?: View, start?: Pose) {
+    // Glides from where the camera shows now, or from `start` when the caller already turned it.
+    const from = start ?? begin();
     routeDistance = null;
     framed = bounds && { bounds: bounds.clone(), pad, view, at: performance.now() };
     if (!bounds) {
@@ -380,17 +381,20 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
   }
 
   /**
-   * Back to the starting view: the route or place framed last, as it was
-   * framed, or else the whole campus, north up at the map's usual tilt.
+   * Back to the starting view, whatever the visitor did to it: north up at
+   * the map's usual tilt (straight down in the top view), framing the route
+   * or place framed last, or else the whole campus. A stretch being followed
+   * or a room seen from its door is framed from its own angle, as it was.
    */
   function recenter() {
     steerHeld = false;
-    if (framed) return frameRoute(framed.bounds, framed.pad, framed.view);
+    if (framed?.view) return frameRoute(framed.bounds, framed.pad, framed.view);
     const from = begin();
     orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
     orbit.set(orbit.radius, overhead ? OVERHEAD : presentation ? MAP_TILT : orbit.phi, 0);
     camera.position.copy(controls.target).add(offset.setFromSpherical(orbit));
     camera.lookAt(controls.target);
+    if (framed) return frameRoute(framed.bounds, framed.pad, undefined, from);
     fit(0, 0, 100);
     glideFrom(from);
   }

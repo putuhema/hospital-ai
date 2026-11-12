@@ -18,6 +18,8 @@
         roomDoor,
     } from "$lib/model/interiors";
     import { buildingDoors, type Point, type Waypoint } from "$lib/wayfinding/navigation";
+    import { defaultPrefs, loadPrefs } from "$lib/scene/display-prefs";
+    import SceneOptions from "./SceneOptions.svelte";
     import type { Place } from "$lib/wayfinding/routing";
     let {
         pieces,
@@ -35,6 +37,7 @@
         insetTop = 0,
         insetBottom = 0,
         insetLeft = 0,
+        options = false,
         onpick,
     }: {
         pieces: Piece[];
@@ -57,11 +60,20 @@
         insetTop?: number;
         insetBottom?: number;
         insetLeft?: number;
+        /** Offer the name-label switches (the visitor map's layers menu shows them). */
+        options?: boolean;
         /** A click on the plan: the tile point and the place under it, if any. */
         onpick?: (point: Point, place: Place | null) => void;
     } = $props();
     const locale = useLocale(),
         t = locale.t;
+    // Which names show, shared with the 3D map and remembered in this browser.
+    let prefs = $state(defaultPrefs());
+    onMount(() => {
+        if (options) prefs = loadPrefs();
+    });
+    let unusedCutaway = $state(false),
+        unusedOverhead = $state(false);
     /** Drawing units per tile. */
     const S = 40;
 
@@ -223,6 +235,8 @@
         };
     }
     function down(e: PointerEvent) {
+        // The buttons over the plan (zoom, layers, recenter) are pressed, not dragged.
+        if ((e.target as Element).closest("button")) return;
         cancelAnimationFrame(glideFrame);
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         try {
@@ -440,14 +454,14 @@
                     ><path d="M0 0 C-4 -9 -13 -14 -13 -24 A13 13 0 1 1 13 -24 C13 -14 4 -9 0 0Z" /><circle cy="-24" r="5" /></g
                 >{/if}
             <!-- Names: room names once zoomed in, building names otherwise. -->
-            {#if roomsShown}{#each pieces.filter(isBuilding) as p}{#each p.roomAssets ?? [] as r}{#if roomFits(r)}<text
+            {#if roomsShown && prefs.rooms}{#each pieces.filter(isBuilding) as p}{#each p.roomAssets ?? [] as r}{#if roomFits(r)}<text
                                 class="room-label"
                                 x={(p.x + r.x + r.w / 2) * S}
                                 y={(p.y + r.y + r.h / 2) * S}
                                 font-size={11 * unit}
                                 stroke-width={3 * unit}>{r.name}</text
                             >{/if}{/each}{/each}{/if}
-            {#each buildingTags as tag (tag.id)}<g class="name-tag" class:faded={roomsShown}
+            {#each prefs.buildings ? buildingTags : [] as tag (tag.id)}<g class="name-tag" class:faded={roomsShown}
                     ><rect x={tag.x - tag.w / 2} y={tag.y - tag.h / 2} width={tag.w} height={tag.h} rx={tag.h / 2} stroke-width={1 * unit} /><text
                         x={tag.x}
                         y={tag.y + 0.5 * unit}
@@ -477,12 +491,12 @@
                     ><circle r="26" class="halo" /><circle r="10" /><text y="-36">{t("youAreHere")}</text></g
                 >{/if}
         </svg>{/if}
+    {#if options}<SceneOptions bind:prefs bind:cutaway={unusedCutaway} bind:overhead={unusedOverhead} routeShown={false} plan />{/if}
     {#if away}<button
             class="recenter"
             style:bottom={`${insetBottom + 12}px`}
             title={t("recenterHint")}
             onclick={() => frame(focus.box, focus.pad)}
-            onpointerdown={(e) => e.stopPropagation()}
             ><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
                 ><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="7" /></svg
             >{t("recenter")}</button
@@ -519,7 +533,8 @@
     .floor-plan.picking {
         cursor: crosshair;
     }
-    svg {
+    /* The drawing fills the plan; small icons (buttons, north) keep their own size. */
+    .floor-plan > svg {
         display: block;
         width: 100%;
         height: 100%;
