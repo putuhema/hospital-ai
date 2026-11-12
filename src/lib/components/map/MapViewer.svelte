@@ -203,11 +203,11 @@
             ? placeList.filter((p) => p.kind === "room" && p.pieceId === to!.pieceId && p.info?.doctors?.length)
             : [],
     );
-    // Each new destination opens on what is there, however it was chosen; on a
-    // phone just its name, so the map stays in sight (swipe up for the rest).
+    // Each new destination opens on what is there, however it was chosen (on a
+    // phone a swipe down folds it to its name).
     $effect(() => {
         void to?.id;
-        untrack(() => (about = wide));
+        untrack(() => (about = true));
     });
 
     /*

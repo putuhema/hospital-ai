@@ -23,7 +23,6 @@
     const liveData = useLive();
     let recent = $derived(now && fresh(liveData(), now.getTime()));
     let live = $derived(liveFor(info.simrs, recent));
-    let fromSimrs = $derived(!!info.doctors?.some((d) => d.code));
     /**
      * The doctors, each once: from the schedule, with today's queue from SIMRS
      * beside them (matched by SIMRS's doctor code, or the name), and any doctor
@@ -104,11 +103,8 @@
             {/each}
             {#each live?.clinics ?? [] as c (c.code)}<MyNumberForm clinic={c} {place} />{/each}
         </div>{/if}
-    {#if live || fromSimrs}<span class="from"
-            >{#if live}<i></i>{locale.t("liveFrom", { time: time(live.at) })}{/if}{#if fromSimrs}{live ? " · " : ""}{locale.t(
-                    "scheduleFromSimrs",
-                )}{/if}</span
-        >{/if}
+    <!-- When the live figures were last updated. -->
+    {#if live}<span class="from"><i></i>{locale.t("liveFrom", { time: time(live.at) })}</span>{/if}
 </section>
 
 <style>
