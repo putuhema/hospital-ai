@@ -39,7 +39,6 @@
         faq = [],
         shareUrl = null,
         slug,
-        editable = false,
         notice = null,
     }: {
         title: string;
@@ -57,8 +56,6 @@
         shareUrl?: string | null;
         /** Which hospital in the database, for the assistant; the first one without it. */
         slug?: string;
-        /** Show the link back to the editor (not on the public map). */
-        editable?: boolean;
         /** A problem with the layout itself, e.g. it could not be loaded. */
         notice?: Key | null;
     } = $props();
@@ -96,7 +93,6 @@
         /** Steps of the route ticked off; the map greys the way walked. */
         done = $state(0),
         journeyHeight = $state(0);
-    let exporter: (() => Promise<void>) | null = null;
     let questions = $derived(answered(faq));
     let landmarks = $derived(network.nodes.filter((n) => n.name.trim()));
 
@@ -569,13 +565,6 @@
             notify(t("copyAddress"));
         }
     }
-    async function download() {
-        try {
-            await exporter?.();
-        } catch {
-            error = t("modelsLoading");
-        }
-    }
 </script>
 
 <svelte:head
@@ -628,7 +617,7 @@
                     }}
                     onplace={() => {}}
                     onerror={(s) => (error = s)}
-                    registerExport={(fn) => (exporter = fn)}
+                    registerExport={() => {}}
                 />{:else}<div class="plan" style:--inset-bottom={`${insetBottom}px`}>
                     <FloorPlan
                         pieces={rooms}
@@ -658,17 +647,6 @@
                         onclick={() => locale.set(l)}>{l.toUpperCase()}</button
                     >{/each}
             </div>
-            <details class="more">
-                <summary aria-label={t("moreOptions")}
-                    ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
-                        ><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg
-                    ></summary
-                >
-                <div class="menu">
-                    {#if editable}<a href="/editor">{t("openEditor")}</a>{/if}
-                    <button onclick={download}>{t("exportModel")}</button>
-                </div>
-            </details>
         </header>{/snippet}
     {#if ready && !wide}{@render masthead()}{/if}
 
@@ -979,61 +957,12 @@
         color: var(--ink);
         box-shadow: 0 1px 3px #1b2a211f;
     }
-    .more {
-        position: relative;
-        flex-shrink: 0;
-    }
-    .more summary {
-        display: grid;
-        place-items: center;
-        width: 36px;
-        height: 36px;
-        border-radius: 12px;
-        list-style: none;
-        cursor: pointer;
-        color: var(--ink-2);
-        transition: background 160ms;
-    }
-    .more summary svg {
-        fill: currentColor;
-    }
-    .more summary::-webkit-details-marker {
-        display: none;
-    }
-    .more[open] summary {
-        background: var(--paper-2);
-    }
-    .menu {
-        position: absolute;
-        right: 0;
-        top: calc(100% + 6px);
-        z-index: 10;
-        min-width: 210px;
-        padding: 6px;
-        border-radius: 14px;
-        background: var(--card);
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 18px 40px -12px #1b2a2140;
-        display: flex;
-        flex-direction: column;
-        transform-origin: top right;
-        animation: menu-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
-    }
+    /* Panels opening from a button (the map's layers). */
     @keyframes menu-in {
         from {
             opacity: 0;
             transform: scale(0.96);
         }
-    }
-    .menu a,
-    .menu button {
-        padding: 10px 12px;
-        border-radius: 9px;
-        font-size: 13.5px;
-        color: var(--ink);
-        text-decoration: none;
-        text-align: left;
     }
 
     .tabs {
@@ -1604,11 +1533,6 @@
     }
 
     @media (hover: hover) and (pointer: fine) {
-        .menu a:hover,
-        .concierge .menu button:hover,
-        .concierge .more summary:hover {
-            background: var(--paper-2);
-        }
         .concierge .lang button:hover,
         .concierge .switcher button:hover {
             background: none;

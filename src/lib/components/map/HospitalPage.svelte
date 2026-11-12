@@ -16,7 +16,7 @@
         editable = false,
     }: {
         map: { data?: { slug: string; title: string; layout: string } | null; isLoading: boolean; error?: Error };
-        /** Link to the editor from the map's menu. */
+        /** On the "not published yet" page, a link to the editor to set the map up. */
         editable?: boolean;
     } = $props();
     // Today's queue and the beds from SIMRS, live as the bridge at the hospital sends them (convex/live.ts).
@@ -70,7 +70,6 @@
         faq={layout.faq}
         shareUrl={publicUrl(map.data.slug, page.url.origin)}
         slug={map.data.slug}
-        {editable}
         notice={offline ? "offlineNotice" : null}
     />{:else}<main class="missing">
         {#if map.isLoading}<p>{locale.t("loadingMap")}</p>{:else if map.error}<h1>{locale.t("mapFailed")}</h1>
