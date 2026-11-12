@@ -219,6 +219,17 @@
     // How much of the screen the conversation covers, so the camera frames the rest.
     let insetLeft = $derived(wide ? COLUMN : 0);
     // On phones, the chat bar (and the destination above it) cover the bottom.
+    /** Phones: what the name bar and map controls cover at the top of the plan. */
+    let planTop = $state(130);
+    // Measured once the page has taken its phone layout (the bars move then).
+    $effect(() => {
+        if (!ready || wide) return;
+        const frame = requestAnimationFrame(() => {
+            const bar = document.querySelector<HTMLElement>(".map-controls");
+            if (bar) planTop = Math.round(bar.getBoundingClientRect().bottom + 6);
+        });
+        return () => cancelAnimationFrame(frame);
+    });
     /** On a phone, following the steps: the map is for walking, so the bars that aren't go. */
     let navigating = $derived(ready && !wide && stepping && !!route);
     let insetBottom = $derived(wide ? 0 : to && journeyHeight ? journeyHeight + (navigating ? 24 : 92) : 90);
@@ -618,7 +629,7 @@
                     onplace={() => {}}
                     onerror={(s) => (error = s)}
                     registerExport={() => {}}
-                />{:else}<div class="plan" style:--inset-bottom={`${insetBottom}px`}>
+                />{:else}<div class="plan">
                     <FloorPlan
                         pieces={rooms}
                         places={placeList}
@@ -629,6 +640,10 @@
                         {landmarks}
                         destination={highlight}
                         {picking}
+                        insetTop={wide ? 76 : planTop}
+                        insetLeft={insetLeft}
+                        insetBottom={insetBottom}
+                        controls={wide}
                         onpick={(point, place) => choose(place, point)}
                     />
                 </div>{/if}{/if}
@@ -880,10 +895,10 @@
         position: absolute;
         inset: 0;
     }
+    /* The plan fills the screen like the 3D map; it frames what matters in the part left clear. */
     .plan {
         position: absolute;
         inset: 0;
-        padding: 80px 20px 20px calc(var(--column) + 8px);
     }
 
     /* The conversation column: a sheet of paper beside the map, with a clean edge. */
@@ -1602,9 +1617,6 @@
         top: calc(var(--top) + 66px);
         right: auto;
         left: 12px;
-    }
-    .mobile .plan {
-        padding: calc(env(safe-area-inset-top) + 120px) 8px calc(var(--inset-bottom) + 8px);
     }
 
     /* The chat bar */

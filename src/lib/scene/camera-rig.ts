@@ -379,6 +379,22 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     return true;
   }
 
+  /**
+   * Back to the starting view: the route or place framed last, as it was
+   * framed, or else the whole campus, north up at the map's usual tilt.
+   */
+  function recenter() {
+    steerHeld = false;
+    if (framed) return frameRoute(framed.bounds, framed.pad, framed.view);
+    const from = begin();
+    orbit.setFromVector3(offset.copy(camera.position).sub(controls.target));
+    orbit.set(orbit.radius, overhead ? OVERHEAD : presentation ? MAP_TILT : orbit.phi, 0);
+    camera.position.copy(controls.target).add(offset.setFromSpherical(orbit));
+    camera.lookAt(controls.target);
+    fit(0, 0, 100);
+    glideFrom(from);
+  }
+
   /** Turn the map so north is up again, keeping its tilt. */
   function faceNorth() {
     steerHeld = true;
@@ -436,6 +452,7 @@ export function createCameraRig(dom: HTMLElement, presentation: boolean) {
     camera,
     setOverhead,
     faceNorth,
+    recenter,
     steer,
     /** A new stretch: turning with the visitor may start again. */
     steerFrom: () => (steerHeld = false),

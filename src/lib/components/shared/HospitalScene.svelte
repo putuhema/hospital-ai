@@ -93,6 +93,9 @@
         /** Which way the map faces, in radians: 0 when north is up. */
         heading = $state(0);
     let faceNorth: () => void = () => {};
+    /** The visitor moved the map themselves: a button takes it back to the starting view. */
+    let away = $state(false),
+        recenter: () => void = () => {};
     let turned = $derived(Math.abs(Math.atan2(Math.sin(heading), Math.cos(heading))) > 0.05);
     let prefs = $state(defaultPrefs());
     onMount(() => {
@@ -180,6 +183,12 @@
         // scene, a label shown or hidden, or a route or pin animating.
         let dirty = true;
         controls.addEventListener("change", () => (dirty = true));
+        controls.addEventListener("start", () => (away = presentation));
+        recenter = () => {
+            rig.recenter();
+            away = false;
+            dirty = true;
+        };
         faceNorth = () => {
             rig.faceNorth();
             dirty = true;
@@ -350,6 +359,8 @@
                     around.max.y = Math.min(around.max.y, 2.5);
                     around.expandByVector(door === "north" || door === "south" ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0));
                 }
+                // Framed afresh: this is the starting view now.
+                if (moved) away = false;
                 if (moved)
                     if (ahead) rig.frameRoute(ahead.box, 3, ahead.view);
                     else if (routeBox) rig.frameRoute(routeBox, 8);
@@ -528,6 +539,15 @@
             ></button
         >
     {/if}
+    {#if presentation && away}<button
+            class="recenter"
+            style:bottom={`${insetBottom + 12}px`}
+            title={t("recenterHint")}
+            onclick={() => recenter()}
+            ><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
+                ><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="7" /></svg
+            >{t("recenter")}</button
+        >{/if}
     <div class="orbit-help" class:gone={explored || !!route?.length || !!focusShape}>
         <span
             >{#if presentation}{t("mapHelp")}{:else}{t(pan ? "dragToPan" : onmove ? "dragBuildings" : "dragToExplore")} · {t(
@@ -576,6 +596,47 @@
     /* On the map, the hint goes once the visitor has moved it. */
     .orbit-help.gone {
         opacity: 0;
+    }
+    /* Back to the starting view, once the visitor has moved the map from it. */
+    .recenter {
+        position: absolute;
+        right: 12px;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        height: 44px;
+        padding: 0 16px 0 13px;
+        border-radius: 22px;
+        background: #fffdf8;
+        color: #23463a;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow:
+            0 0 0 1px #1b2a2117,
+            0 10px 28px -12px #1b2a2166;
+        animation: recenter-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .recenter svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+    }
+    .recenter:active {
+        transform: scale(0.96);
+    }
+    @keyframes recenter-in {
+        from {
+            opacity: 0;
+            transform: translateY(6px) scale(0.96);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .recenter {
+            animation: none;
+        }
     }
     .compass {
         position: absolute;
