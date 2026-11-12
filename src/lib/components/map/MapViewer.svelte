@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount, untrack } from "svelte";
+    import { flushSync, onMount, untrack } from "svelte";
     import { afterNavigate, replaceState } from "$app/navigation";
     import { rise, unblur } from "$lib/motion";
     import HospitalScene from "$lib/components/shared/HospitalScene.svelte";
@@ -453,6 +453,19 @@
         show(next);
         sheetOpen = true;
     }
+    /**
+     * Straight to directions: the route tab, its destination search ready to
+     * type in. Focused in the tap itself (after drawing the tab at once), as
+     * phones only bring up the keyboard for a focus the visitor asked for.
+     */
+    function findWay() {
+        open("route");
+        if (to) return;
+        flushSync();
+        document
+            .querySelector<HTMLInputElement>(`.column .route-finder input[aria-label="${t("destination")}"]`)
+            ?.focus({ preventScroll: true });
+    }
     // Phones: the sheet follows a finger on its top edge, and goes when
     // pulled far enough or flicked down.
     let dragFrom = 0,
@@ -687,15 +700,27 @@
             ></button
         >
     </div>
-    {#if ready && !wide}<button class="launcher" onclick={() => open("chat")} in:rise={{ y: 12 }}>
-            <Logo size={26} title="" />
-            <span>{chat.messages.length ? t("continueChat") : t("askQuestion")}</span>
-            <i aria-hidden="true"
-                ><svg viewBox="0 0 24 24" width="18" height="18"
-                    ><path d="M5 18.5V7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8.5z" /></svg
-                ></i
+    <!-- Phones: the two things a visitor comes for, side by side. Most want
+         the way somewhere, so that is the big one; asking is beside it. -->
+    {#if ready && !wide}<div class="launcher" in:rise={{ y: 12 }}>
+            <button class="find" onclick={findWay}>
+                <i aria-hidden="true"
+                    ><svg viewBox="0 0 24 24" width="18" height="18"
+                        ><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg
+                    ></i
+                >
+                <span>{t("whereTo")}</span>
+            </button>
+            <button
+                class="ask"
+                onclick={() => open("chat")}
+                aria-label={chat.messages.length ? t("continueChat") : t("askQuestion")}
             >
-        </button>{/if}
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
+                    ><path d="M5 18.5V7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8.5z" /></svg
+                >{t("askOnTheWay")}{#if chat.messages.length}<b class="unread" aria-hidden="true"></b>{/if}
+            </button>
+        </div>{/if}
 
     {#if to}{#key to.id}<div
                 class="journey"
@@ -1534,8 +1559,8 @@
         .concierge .segmented button:hover,
         .concierge .round:hover:not(:disabled),
         .concierge .close:hover,
-        .concierge .launcher:hover {
-            background: var(--card);
+        .concierge .launcher .find:hover {
+            background: var(--paper);
         }
         .concierge .x:hover {
             background: var(--paper-2);
@@ -1606,22 +1631,45 @@
         bottom: var(--bottom);
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
         height: 60px;
-        padding: 0 8px 0 14px;
+        padding: 0 8px;
         border-radius: 22px;
         background: var(--card);
         color: var(--ink);
-        text-align: left;
         box-shadow:
             0 0 0 1px var(--line),
             0 16px 40px -16px #1b2a2166;
+    }
+    .launcher button {
+        display: flex;
+        align-items: center;
+        height: 44px;
+        border-radius: 16px;
+        font: inherit;
         transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
     }
-    .launcher:active {
-        transform: scale(0.98);
+    .launcher button:active {
+        transform: scale(0.97);
     }
-    .launcher span {
+    .launcher .find {
+        flex: 1;
+        min-width: 0;
+        gap: 10px;
+        padding: 0 6px;
+        text-align: left;
+    }
+    .launcher .find i {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--paper-2);
+        color: var(--forest);
+    }
+    .launcher .find span {
         flex: 1;
         min-width: 0;
         font-size: 16px;
@@ -1630,14 +1678,26 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .launcher i {
-        display: grid;
-        place-items: center;
-        width: 44px;
-        height: 44px;
-        border-radius: 16px;
+    .launcher .ask {
+        position: relative;
+        flex-shrink: 0;
+        gap: 7px;
+        padding: 0 16px 0 14px;
         background: var(--forest);
         color: var(--paper);
+        font-size: 15px;
+        font-weight: 600;
+    }
+    /* An earlier conversation to go back to. */
+    .launcher .unread {
+        position: absolute;
+        top: 7px;
+        right: 8px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--signal);
+        box-shadow: 0 0 0 2px var(--forest);
     }
 
     /* The sheet */
