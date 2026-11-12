@@ -65,9 +65,10 @@
 
     // Everything about the hospital (hours, doctors, BPJS…) is asked in the chat.
     type Tab = "chat" | "route";
+    // In the order of the phone's bottom bar: the way somewhere first, then asking.
     const TABS: { id: Tab; key: Key }[] = [
-        { id: "chat", key: "tabChat" },
         { id: "route", key: "tabRoute" },
+        { id: "chat", key: "tabChat" },
     ];
     /** Width the conversation takes on wide screens; the map is framed beside it. */
     const COLUMN = 468;
@@ -1659,6 +1660,7 @@
     }
 
     /* The chat bar */
+    /* Two buttons side by side, each its own card: the way somewhere, and asking. */
     .launcher {
         position: absolute;
         z-index: 6;
@@ -1666,23 +1668,19 @@
         right: 12px;
         bottom: var(--bottom);
         display: flex;
-        align-items: center;
-        gap: 8px;
-        height: 60px;
-        padding: 0 8px;
-        border-radius: 22px;
-        background: var(--card);
+        align-items: stretch;
+        gap: 10px;
+        height: 58px;
         color: var(--ink);
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 16px 40px -16px #1b2a2166;
     }
     .launcher button {
         display: flex;
         align-items: center;
-        height: 44px;
-        border-radius: 16px;
+        border-radius: 20px;
         font: inherit;
+        box-shadow:
+            0 0 0 1px var(--line),
+            0 16px 40px -16px #1b2a2166;
         transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     .launcher button:active {
@@ -1692,7 +1690,8 @@
         flex: 1;
         min-width: 0;
         gap: 10px;
-        padding: 0 6px;
+        padding: 0 12px;
+        background: var(--card);
         text-align: left;
     }
     .launcher .find i {
@@ -1718,7 +1717,7 @@
         position: relative;
         flex-shrink: 0;
         gap: 7px;
-        padding: 0 16px 0 14px;
+        padding: 0 20px 0 18px;
         background: var(--forest);
         color: var(--paper);
         font-size: 15px;
@@ -1727,8 +1726,8 @@
     /* An earlier conversation to go back to. */
     .launcher .unread {
         position: absolute;
-        top: 7px;
-        right: 8px;
+        top: 9px;
+        right: 10px;
         width: 7px;
         height: 7px;
         border-radius: 50%;
