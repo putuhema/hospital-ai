@@ -13,6 +13,7 @@ import {
   places,
   planRoute,
   walkMinutes,
+  legText,
   type NavGrid,
   type Place,
 } from "../wayfinding/routing.ts";
@@ -447,7 +448,8 @@ export function getDirections(
     to: summary(ctx, to),
     meters: route.meters,
     minutes: walkMinutes(route.meters),
-    steps: route.steps.map((s) => s.text),
+    // As the app shows them: straight on so far, then the turn.
+    steps: route.steps.map((_, i) => legText(route, i, "en")),
   };
 }
 

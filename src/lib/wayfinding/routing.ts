@@ -605,8 +605,9 @@ const HEADINGS: Record<Lang, Record<Heading, string>> = {
 };
 const WORDS = {
   en: {
+    // A slight bend is still "turn": visitors in a hurry look for left or right, not how sharply.
     turn: {
-      straight: "Continue straight", "bear-left": "Bear left", "bear-right": "Bear right",
+      straight: "Continue straight", "bear-left": "Turn left", "bear-right": "Turn right",
       left: "Turn left", right: "Turn right", around: "Turn around",
     },
     through: { corridor: " through the corridor", path: " along the path", grounds: " across the grounds" },
@@ -619,14 +620,20 @@ const WORDS = {
       listed
         ? `Arrive at ${place} — it's inside ${building}`
         : `Arrive at ${place}${building ? ` in ${building}` : ""}`,
+    go: (m: number) => (m <= 2 ? "Go a few steps" : `Go straight ${m} m`),
+    goOn: (m: number) => (m <= 2 ? "" : `, straight on ${m} m`),
+    then: (turn: string) => `, then ${turn}`,
+    carryOn: "Carry on",
+    reach: (place: string) => ` to ${place}`,
   },
   id: {
+    // Tikungan landai pun tetap "belok": pengunjung mencari kiri atau kanan, bukan seberapa tajam.
     turn: {
-      straight: "Jalan terus", "bear-left": "Serong ke kiri", "bear-right": "Serong ke kanan",
+      straight: "Jalan terus", "bear-left": "Belok kiri", "bear-right": "Belok kanan",
       left: "Belok kiri", right: "Belok kanan", around: "Putar balik",
     },
     through: { corridor: " melalui koridor", path: " menyusuri jalan setapak", grounds: " melintasi halaman" },
-    into: { corridor: " masuk ke koridor", path: " ke jalan setapak", outside: " lalu keluar gedung" },
+    into: { corridor: " masuk ke koridor", path: " ke jalan setapak", outside: " dan keluar gedung" },
     intoName: (name: string) => ` masuk ke ${name}`,
     by: (name: string) => ` di dekat ${name}`,
     past: (name: string) => `, melewati ${name}`,
@@ -635,6 +642,11 @@ const WORDS = {
       listed
         ? `Tiba di ${place} — letaknya di dalam ${building}`
         : `Tiba di ${place}${building ? ` di ${building}` : ""}`,
+    go: (m: number) => (m <= 2 ? "Jalan beberapa langkah" : `Jalan lurus ${m} m`),
+    goOn: (m: number) => (m <= 2 ? "" : `, lurus ${m} m`),
+    then: (turn: string) => `, lalu ${turn}`,
+    carryOn: "Terus",
+    reach: (place: string) => ` sampai di ${place}`,
   },
 };
 
@@ -647,6 +659,39 @@ export function stepText(say: StepSay, lang: Lang): string {
   return say.kind === "start"
     ? w.start(say.from, HEADINGS[lang][say.heading]) + rest
     : w.turn[say.turn] + (say.by ? w.by(say.by) : "") + rest;
+}
+
+/** The turn a step starts with, as said after "then": "turn right by UTD into the corridor". */
+function turnPhrase(say: Extract<StepSay, { kind: "turn" }>, lang: Lang) {
+  const w = WORDS[lang],
+    into = !say.into ? "" : "name" in say.into ? w.intoName(say.into.name) : w.into[say.into.walkway],
+    // After "go straight", carrying straight on reads "then carry on", not "then continue straight".
+    text = (say.turn === "straight" ? w.carryOn : w.turn[say.turn]) + (say.by ? w.by(say.by) : "") + into;
+  return text[0].toLowerCase() + text.slice(1);
+}
+
+/**
+ * One stretch of a route as a clear instruction: how far to go straight (and
+ * through what, past what), then the turn at its end, e.g. "Jalan lurus 26 m
+ * melalui koridor, lalu belok kanan di dekat UTD". The turn a stretch starts
+ * with ends the instruction before it; the last says where it ends.
+ */
+export function legText(route: Route, i: number, lang: Lang): string {
+  const w = WORDS[lang],
+    step = route.steps[i],
+    say = step.say;
+  if (say.kind === "arrive") return w.arrive(say.place, say.building, say.listed);
+  const along = (say.through ? w.through[say.through] : "") + (say.past ? w.past(say.past) : "");
+  const head =
+    say.kind === "start"
+      ? w.start(say.from, HEADINGS[lang][say.heading]) +
+        (!say.into ? "" : "name" in say.into ? w.intoName(say.into.name) : w.into[say.into.walkway]) +
+        w.goOn(step.meters) +
+        along
+      : w.go(step.meters) + along;
+  const next = route.steps[i + 1]?.say;
+  if (!next || next.kind === "start") return head;
+  return next.kind === "arrive" ? head + w.reach(next.place) : head + w.then(turnPhrase(next, lang));
 }
 
 /** Shortest walking route between two places (or a map point and a place). */
@@ -709,7 +754,8 @@ export function stepGlyph(step: Step): string {
   const say = step.say;
   if (say.kind === "start") return "●";
   if (say.kind === "arrive") return "⚑";
-  return { left: "↰", right: "↱", "bear-left": "↖", "bear-right": "↗", around: "↩", straight: "↑" }[say.turn];
+  // A slight turn shows as a turn, as it is said ("belok kanan").
+  return { left: "↰", right: "↱", "bear-left": "↰", "bear-right": "↱", around: "↩", straight: "↑" }[say.turn];
 }
 
 /**

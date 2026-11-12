@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { progress, stepGlyph, stepText, type Route } from "$lib/wayfinding/routing";
+    import { legText, progress, stepGlyph, stepText, type Route } from "$lib/wayfinding/routing";
     import { useLocale } from "$lib/i18n/locale.svelte";
     import type { SensorState } from "$lib/wayfinding/walk-sensor";
     let {
@@ -58,7 +58,7 @@
                 <span class="glyph">{stepGlyph(upcoming ?? current)}</span>
                 <span class="what"
                     ><b>{stepText((upcoming ?? current).say, locale.lang)}</b>{#if upcoming}<em>{locale.t("nextIn", { m: toNext })}</em>{/if}
-                    {#if upcoming && done === 0}<small>{stepText(current.say, locale.lang)}</small>{/if}</span
+                    {#if upcoming}<small>{legText(route, Math.min(done, steps.length - 1), locale.lang)}</small>{/if}</span
                 >
             </button>
         {/if}
@@ -106,7 +106,7 @@
             <button aria-pressed={i < done} onclick={() => mark(i)}>
                 <span class="glyph">{i < done ? "✓" : stepGlyph(step)}</span>
                 <span class="step"
-                    >{stepText(step.say, locale.lang)}{#if step.meters}<small>{step.meters} m</small>{/if}</span
+                    >{legText(route, i, locale.lang)}</span
                 >
             </button>
         </li>{/each}
@@ -327,12 +327,5 @@
         color: #8a998a;
         text-decoration: line-through;
         text-decoration-color: #8a998a80;
-    }
-    .step small {
-        display: block;
-        color: #7b8c70;
-        font-size: 11px;
-        font-weight: 400;
-        text-decoration: none;
     }
 </style>

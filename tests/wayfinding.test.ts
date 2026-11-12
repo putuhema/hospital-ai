@@ -74,7 +74,8 @@ test('steps are put into words in Indonesian, with arrows from what they mean', 
   const route = planRoute(g, find(list, 'Main reception'), find(list, 'Laboratory'))!;
   assert.equal(stepText(route.steps[0].say, 'id'), 'Dari Main reception, jalan ke arah utara masuk ke koridor');
   assert.equal(stepText(route.steps.at(-1)!.say, 'id'), 'Tiba di Laboratory di Pharmacy & lab');
-  assert.deepEqual(route.steps.map(stepGlyph), ['●', '↗', '↗', '↱', '⚑']);
+  // Slight turns show as turns, as they are said ("belok kanan").
+  assert.deepEqual(route.steps.map(stepGlyph), ['●', '↱', '↱', '↱', '⚑']);
   const fromSpot = planRoute(g, { x: 12, y: 18 }, find(list, 'Room 1'))!;
   assert.match(stepText(fromSpot.steps[0].say, 'id'), /^Dari posisi Anda/);
   assert.match(fromSpot.steps[0].text, /^From your position/);
@@ -143,4 +144,23 @@ test('named waypoints are landmarks too', () => {
   const g = buildGrid(starterPieces, 24, 20, 2, [{ name: 'Masjid', x: 3, y: 3 }]);
   assert.ok(g.marks.some((m) => m.name === 'Masjid' && m.rank === 0));
   assert.ok(g.marks.some((m) => m.name === 'Pharmacy'));
+});
+
+test('each instruction says how far to go straight, then the turn: belok, never serong', async () => {
+  const { legText } = await import('../src/lib/wayfinding/routing.ts');
+  const g = buildGrid(starterPieces, 24, 20), list = places(starterPieces);
+  for (const [a, b] of [['Nurse station', 'Outpatient clinic'], ['West patient ward', 'Waiting area']]) {
+    const route = planRoute(g, find(list, a), find(list, b))!;
+    const id = route.steps.map((_, i) => legText(route, i, 'id')),
+      en = route.steps.map((_, i) => legText(route, i, 'en'));
+    assert.ok(id.every((s) => !/serong/i.test(s)), id.join(' / '));
+    assert.ok(en.every((s) => !/bear/i.test(s)), en.join(' / '));
+    // Every stretch but the last ends with the turn after it, or where it arrives.
+    for (const s of id.slice(0, -1)) assert.match(s, /, lalu (belok (kiri|kanan)|terus|putar balik)| sampai di /, s);
+    assert.equal(id.at(-1), `Tiba di ${b}${find(list, b).building ? ` di ${find(list, b).building}` : ''}`);
+  }
+  const route = planRoute(g, find(list, 'Nurse station'), find(list, 'Outpatient clinic'))!;
+  const long = route.steps.findIndex((s, i) => i > 0 && s.meters > 2 && route.steps[i + 1]?.say.kind === 'turn');
+  assert.match(legText(route, long, 'id'), new RegExp(`^Jalan lurus ${route.steps[long].meters} m.*, lalu belok`));
+  assert.match(legText(route, long, 'en'), new RegExp(`^Go straight ${route.steps[long].meters} m.*, then turn`));
 });
