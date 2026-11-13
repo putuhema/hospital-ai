@@ -15,6 +15,7 @@
     import { attachPointer, type Hover } from "$lib/scene/pointer";
     import { clearGroup } from "$lib/scene/dispose";
     import { batchMeshes } from "$lib/scene/batch";
+    import { createCrowd } from "$lib/scene/crowd";
     import { defaultPrefs, loadPrefs } from "$lib/scene/display-prefs";
     import SceneOptions from "./SceneOptions.svelte";
     import SceneTooltip from "./SceneTooltip.svelte";
@@ -39,6 +40,7 @@
         walked = 0,
         onward = 0,
         leg = null,
+        strolls = [],
         highlight = null,
         labels = true,
         insetLeft = 0,
@@ -72,6 +74,8 @@
          * up to the next turn. The map looks along it, the turn marked on the floor.
          */
         leg?: { from: number; to: number } | null;
+        /** Walks between the buildings (in tiles), for people strolling while the map isn't used. */
+        strolls?: Point[][];
         /** A place to pick out, e.g. the one the assistant is talking about; hidden while a route shows. */
         highlight?: HighlightTarget | null;
         labels?: boolean;
@@ -120,6 +124,8 @@
         walked;
         onward;
         leg;
+        strolls;
+        prefs.people;
         focusShape;
         buildingNames;
         roomNames;
@@ -172,6 +178,18 @@
             marker = createHighlight();
         scene.add(buildings, labelGroup, overlay.group, marker.group);
         const declutter = createDeclutter();
+        // People strolling about while the map rests (not with reduced motion; fewer on a modest phone).
+        const crowd =
+            presentation && !matchMedia("(prefers-reduced-motion: reduce)").matches
+                ? createCrowd(scene, (navigator.hardwareConcurrency ?? 8) <= 4 ? 14 : 26)
+                : null;
+        let crowdFed: Point[][] | null = null,
+            crowdAt = 0,
+            /** When the visitor last touched the map; the crowd walks once they have let it be a moment. */
+            touched = 0;
+        const touch = () => (touched = performance.now());
+        dom.addEventListener("pointerdown", touch);
+        dom.addEventListener("wheel", touch, { passive: true });
         // The map is drawn only when something changes: the camera, the
         // scene, a label shown or hidden, or a route or pin animating.
         let dirty = true;
@@ -371,6 +389,13 @@
             stage.selectedBox.visible = !!object && !presentation;
             if (object) stage.selectedBox.box.setFromObject(object);
             if (!active) stage.ghost.visible = false;
+            if (crowd) {
+                if (strolls !== crowdFed) {
+                    crowdFed = strolls;
+                    crowd.setStrolls(strolls.map((path) => path.map((p) => ({ x: p.x * 2, z: p.y * 2 }))));
+                }
+                crowd.show(prefs.people);
+            }
             dirty = true;
         };
 
@@ -448,6 +473,11 @@
                 dirty = true;
             }
             if (declutter(labelGroup, camera, dom.clientWidth, dom.clientHeight, time)) dirty = true;
+            // The crowd steps along with any frame drawn anyway, and on its own (20 a second) once the map rests.
+            if (crowd && (dirty || (time - touched > 2500 && time - crowdAt >= 48))) {
+                crowdAt = time;
+                if (crowd.update(time)) dirty = true;
+            }
             if (!dirty) return;
             dirty = false;
             if (presentation) {
@@ -470,6 +500,9 @@
             overlay.dispose();
             marker.dispose();
             scenery?.dispose();
+            crowd?.dispose();
+            dom.removeEventListener("pointerdown", touch);
+            dom.removeEventListener("wheel", touch);
             // What's left: the stage's meshes and lines, and the templates.
             const geometries = new Set<THREE.BufferGeometry>();
             scene.traverse((o) => {

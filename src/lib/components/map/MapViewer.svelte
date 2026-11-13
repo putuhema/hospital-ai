@@ -107,6 +107,40 @@
     let grid = $derived(buildGrid(rooms, canvasWidth, canvasHeight, tileMeters, network.nodes));
     let route = $derived(from && to ? planRoute(grid, from, to) : null);
 
+    // Strolls for the people walking about the 3D map: trips between random
+    // buildings, planned one at a time when the browser has nothing else to do,
+    // so they never hold anything up; planned afresh when the layout changes.
+    let strolls = $state<Point[][]>([]);
+    $effect(() => {
+        const g = grid,
+            doors = placeList.filter((p) => p.kind === "building");
+        if (doors.length < 2) return;
+        let cancelled = false,
+            handle = 0;
+        const found: Point[][] = [];
+        // Safari has no requestIdleCallback: a short timeout instead.
+        const quiet = typeof requestIdleCallback === "function";
+        const idle = (run: () => void): number => (quiet ? requestIdleCallback(run, { timeout: 1500 }) : setTimeout(run, 60) as unknown as number);
+        const next = () => {
+            if (cancelled || found.length >= 14) return;
+            const a = doors[Math.floor(Math.random() * doors.length)],
+                b = doors[Math.floor(Math.random() * doors.length)];
+            const r = a !== b ? planRoute(g, a, b) : null;
+            if (r && r.points.length > 1) {
+                found.push(r.points);
+                // A few at a time, so the people set off early but the map doesn't redraw for each.
+                if (found.length % 4 === 0 || found.length === 14) strolls = [...found];
+            }
+            handle = idle(next);
+        };
+        handle = idle(next);
+        return () => {
+            cancelled = true;
+            if (quiet) cancelIdleCallback(handle);
+            else clearTimeout(handle);
+        };
+    });
+
     // The assistant. Canned replies from the map and the hospital information
     // until the chat server route is built.
     let assistant = $derived({ places: placeList, grid, now: new Date() });
@@ -625,6 +659,7 @@
                     {canvasHeight}
                     route={route?.points ?? null}
                     {walked}
+                    {strolls}
                     {onward}
                     {leg}
                     {highlight}

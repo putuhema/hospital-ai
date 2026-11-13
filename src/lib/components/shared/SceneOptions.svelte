@@ -18,7 +18,7 @@
         plan?: boolean;
     } = $props();
     const { t } = useLocale();
-    function toggle(pref: "buildings" | "rooms" | "info") {
+    function toggle(pref: "buildings" | "rooms" | "info" | "people") {
         prefs[pref] = !prefs[pref];
         savePrefs(prefs);
     }
@@ -45,6 +45,10 @@
             aria-pressed={prefs.info}
             title={t(prefs.info ? "hideHoverInfo" : "showHoverInfo")}
             onclick={() => toggle("info")}>{t("hoverInfo")}</button
+        ><button
+            aria-pressed={prefs.people}
+            title={t(prefs.people ? "hidePeople" : "showPeople")}
+            onclick={() => toggle("people")}>{t("people")}</button
         >{/if}</div>
 
 <style>

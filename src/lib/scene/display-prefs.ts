@@ -6,11 +6,13 @@ export type DisplayPrefs = {
   rooms: boolean;
   /** The building/room tooltip on hover. */
   info: boolean;
+  /** People strolling between the buildings while the map isn't being used. */
+  people: boolean;
 };
 
 const KEY = "forma-display";
 
-export const defaultPrefs = (): DisplayPrefs => ({ buildings: true, rooms: true, info: true });
+export const defaultPrefs = (): DisplayPrefs => ({ buildings: true, rooms: true, info: true, people: true });
 
 export function loadPrefs(): DisplayPrefs {
   const prefs = defaultPrefs();
@@ -20,6 +22,7 @@ export function loadPrefs(): DisplayPrefs {
     prefs.buildings = saved.buildings ?? saved.names ?? true;
     prefs.rooms = saved.rooms ?? saved.names ?? true;
     prefs.info = saved.info ?? true;
+    prefs.people = saved.people ?? true;
   } catch {}
   return prefs;
 }
