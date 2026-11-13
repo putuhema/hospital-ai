@@ -39,7 +39,6 @@
         walked = 0,
         onward = 0,
         leg = null,
-        facing = null,
         highlight = null,
         labels = true,
         insetLeft = 0,
@@ -73,12 +72,6 @@
          * up to the next turn. The map looks along it, the turn marked on the floor.
          */
         leg?: { from: number; to: number } | null;
-        /**
-         * While following: how far (radians, positive left) the visitor has
-         * turned since this stretch began, from the phone's gyroscope; null
-         * when it can't tell. The map turns with them.
-         */
-        facing?: (() => number | null) | null;
         /** A place to pick out, e.g. the one the assistant is talking about; hidden while a route shows. */
         highlight?: HighlightTarget | null;
         labels?: boolean;
@@ -203,8 +196,6 @@
             routeShown = "",
             focusShown = "",
             legShown = "",
-            /** The heading the current stretch is seen from (`aheadView`), when following one. */
-            legTheta: number | null = null,
             sited = "",
             lastZoom = zoom;
         const ready = () => templates.size === MODEL_KINDS.length;
@@ -329,9 +320,6 @@
                 legShown = nextLeg;
                 const routeBox = overlay.show(route),
                     ahead = route?.length && leg ? legView(route, leg) : null;
-                // A new stretch faces its own way; turning with the visitor starts afresh.
-                legTheta = ahead ? ahead.view.theta : null;
-                rig.steerFrom();
 
                 // The pin floats over the roof, or with the roofs off, above the building's name.
                 // A building is its outside and its interior; the pin goes over the taller.
@@ -450,11 +438,6 @@
             // The editor moves buildings and ghosts under the pointer: it always draws.
             if (!presentation) dirty = true;
             if (rig.tick()) dirty = true;
-            // The way the visitor faces points up the screen: the stretch's way, turned as they turn.
-            if (facing && legTheta !== null) {
-                const turned = facing();
-                if (turned !== null && rig.steer(legTheta + turned)) dirty = true;
-            }
             if (controls.update()) dirty = true;
             rig.bound();
             // The route's arrows and the pin move gently; 30 frames a second is plenty.

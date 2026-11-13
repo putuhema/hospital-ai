@@ -309,33 +309,14 @@
     }
     let follower = $derived(route ? createFollower(route, { scale: drawn() * untrack(savedCorrection) }) : null);
     let stopSensor: (() => void) | null = null,
-        stepTimes: number[] = [],
-        /** Degrees the visitor has turned from the way the current stretch goes (positive left). */
-        turned = 0;
+        stepTimes: number[] = [];
     const turning = createTurnWindow();
-    /** How far the route turns (degrees, positive left) from stretch `i` into the next. */
-    function routeTurn(i: number) {
-        if (!route) return 0;
-        const { points, steps } = route,
-          heading = (k: number) => {
-              const a = points[steps[k].at],
-                  b = points[steps[k + 1]?.at ?? points.length - 1];
-              return Math.atan2(b.y - a.y, b.x - a.x);
-          };
-        if (!steps[i + 2] && !steps[i + 1]) return 0;
-        const delta = heading(i + 1) - heading(i);
-        // Tiles run east and south, so this angle grows turning right: negated for "positive left".
-        return (-Math.atan2(Math.sin(delta), Math.cos(delta)) * 180) / Math.PI;
-    }
-    /** For the map to turn with the visitor: only while the phone is following them. */
-    const facing = () => (stepping && sensing === "on" ? (turned * Math.PI) / 180 : null);
     /** Start following; called from the tap that opens the steps, as iOS asks for motion access only then. */
     function follow() {
         stopSensor?.();
         sensing = null;
         pace = null;
         stepTimes = [];
-        turned = 0;
         turning.clear();
         stopSensor = startWalkSensor({
             step: (time) => {
@@ -345,26 +326,17 @@
                 // In map metres a second, as the distances left are measured on the map.
                 if (stepTimes.length >= 6)
                     pace = (STRIDE * follower.scale * (stepTimes.length - 1)) / ((time - stepTimes[0]) / 1000);
-                if (follower.step(time)) {
-                    done = follower.done;
-                    turned = 0;
-                }
+                if (follower.step(time)) done = follower.done;
                 onward = follower.along;
                 // Arrived: nothing left to follow.
                 if (follower.done >= (route?.steps.length ?? 0)) unfollow();
             },
             yaw: (rate, seconds, time) => {
-                // Slower than this is the sensor drifting, not the visitor turning.
-                if (Math.abs(rate) > 3) turned += rate * seconds;
                 if (!follower) return;
                 // A turn counts while it is still under way: at a junction, not a few metres past it.
-                const recent = turning.add(rate, seconds, time),
-                    at = follower.done;
+                const recent = turning.add(rate, seconds, time);
                 if (!follower.turn(recent.angle, recent.start)) return;
                 turning.clear();
-                // The map turns with them from the new stretch's way: what is left of
-                // the turn they are making is still to come.
-                turned = recent.angle - routeTurn(at);
                 done = follower.done;
                 onward = follower.along;
                 try {
@@ -388,7 +360,6 @@
         if (follower && follower.done !== done) {
             follower.sync(done);
             onward = 0;
-            turned = 0;
             turning.clear();
         }
     });
@@ -562,12 +533,10 @@
     }
     function findWay() {
         open("route");
-        // The first field still empty, in order: where they are, then where to.
-        const field = !from ? t("startingPoint") : !to ? t("destination") : null;
-        if (!field) return;
+        if (to) return;
         flushSync();
         document
-            .querySelector<HTMLInputElement>(`.column .route-finder input[aria-label="${field}"]`)
+            .querySelector<HTMLInputElement>(`.column .route-finder input[aria-label="${t("destination")}"]`)
             ?.focus({ preventScroll: true });
     }
     // Phones: the sheet follows a finger on its top edge, and goes when
@@ -658,7 +627,6 @@
                     {walked}
                     {onward}
                     {leg}
-                    {facing}
                     {highlight}
                     {insetLeft}
                     {insetBottom}
