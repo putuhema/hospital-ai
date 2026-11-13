@@ -5,7 +5,8 @@ import * as THREE from "three";
  * box and placement ghost. Sizes are in tiles; one tile is 2 m.
  */
 export function createStage(scene: THREE.Scene, presentation: boolean) {
-  scene.add(new THREE.HemisphereLight("#e3eef8", "#a3b88c", 2.4));
+  const hemi = new THREE.HemisphereLight("#e3eef8", "#a3b88c", 2.4);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight("#fff0d8", 3.1);
   sun.castShadow = true;
   // The map draws its shadows once per rebuild, at a size budget phones manage.
@@ -38,6 +39,12 @@ export function createStage(scene: THREE.Scene, presentation: boolean) {
   ghost.visible = false;
   scene.add(selectedBox, ghost);
 
+  let reach = 60;
+  /** Light the campus from `direction` (x east, z south, y up), e.g. the sun's at this hour. */
+  function aim(direction: THREE.Vector3) {
+    sun.position.copy(sun.target.position).addScaledVector(direction, reach * 1.2);
+  }
+
   /** Fit ground, grid and sun shadows to a canvas of `width` × `height` tiles. */
   function resize(width: number, height: number) {
     const W = width * 2,
@@ -52,6 +59,7 @@ export function createStage(scene: THREE.Scene, presentation: boolean) {
     grid.geometry = new THREE.BufferGeometry();
     grid.geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
     const extent = Math.max(width, height) * 1.5;
+    reach = extent + 20;
     sun.position.set(width - 15, extent + 20, height - 10);
     sun.target.position.set(width, 0, height);
     Object.assign(sun.shadow.camera, {
@@ -65,5 +73,5 @@ export function createStage(scene: THREE.Scene, presentation: boolean) {
     sun.shadow.camera.updateProjectionMatrix();
   }
 
-  return { ground, grid, selectedBox, ghost, resize };
+  return { ground, grid, selectedBox, ghost, resize, hemi, sun, aim };
 }

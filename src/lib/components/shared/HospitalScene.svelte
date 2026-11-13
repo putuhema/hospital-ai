@@ -16,6 +16,8 @@
     import { clearGroup } from "$lib/scene/dispose";
     import { batchMeshes } from "$lib/scene/batch";
     import { createCrowd } from "$lib/scene/crowd";
+    import { daylightAt, sunFrom } from "$lib/scene/daylight";
+    import { CHATTER } from "$lib/i18n/chatter";
     import { defaultPrefs, loadPrefs } from "$lib/scene/display-prefs";
     import SceneOptions from "./SceneOptions.svelte";
     import SceneTooltip from "./SceneTooltip.svelte";
@@ -41,6 +43,8 @@
         onward = 0,
         leg = null,
         strolls = [],
+        crowdSize = null,
+        tips = [],
         highlight = null,
         labels = true,
         insetLeft = 0,
@@ -76,6 +80,10 @@
         leg?: { from: number; to: number } | null;
         /** Walks between the buildings (in tiles), for people strolling while the map isn't used. */
         strolls?: Point[][];
+        /** How many people are about (busy hours and long queues bring more); null for the most. */
+        crowdSize?: number | null;
+        /** Real tips from the hospital, said now and then by the people walking about. */
+        tips?: string[];
         /** A place to pick out, e.g. the one the assistant is talking about; hidden while a route shows. */
         highlight?: HighlightTarget | null;
         labels?: boolean;
@@ -84,7 +92,11 @@
         /** Pixels at the bottom covered by a sheet; the campus rises clear of it. */
         insetBottom?: number;
     } = $props();
-    const { t } = useLocale();
+    const locale = useLocale(),
+        t = locale.t;
+    /** What someone walking by is saying: who, the line, and until when. */
+    let speech = $state<{ who: number; text: string; until: number } | null>(null),
+        bubble = $state<HTMLDivElement>();
     let cutaway = $state(false),
         overhead = $state(false),
         /** Which way the map faces, in radians: 0 when north is up. */
@@ -125,6 +137,7 @@
         onward;
         leg;
         strolls;
+        crowdSize;
         prefs.people;
         focusShape;
         buildingNames;
@@ -188,6 +201,71 @@
             /** When the visitor last touched the map; the crowd walks once they have let it be a moment. */
             touched = 0;
         const touch = () => (touched = performance.now());
+
+        // The light of the hour, from the visitor's clock (?hour=21 shows another
+        // hour): the sun crossing east to west, warm evenings, lit windows at night.
+        const forced = Number(new URLSearchParams(location.search).get("hour"));
+        const hourNow = () => {
+            if (Number.isFinite(forced) && new URLSearchParams(location.search).has("hour")) return forced;
+            const d = new Date();
+            return d.getHours() + d.getMinutes() / 60;
+        };
+        const GLOW = new THREE.Color("#ffcf7a");
+        function daylight() {
+            if (!presentation) return;
+            const h = hourNow(),
+                light = daylightAt(h);
+            stage.hemi.color.set(light.sky);
+            stage.hemi.groundColor.set(light.ground);
+            stage.hemi.intensity = light.hemi;
+            stage.sun.color.set(light.sun);
+            stage.sun.intensity = light.sunStrength;
+            stage.aim(sunFrom(h));
+            scenery?.setLawn(light.lawn);
+            renderer.setClearColor(light.lawn);
+            // Windows glow warm from dusk on.
+            buildings.traverse((o) => {
+                if (!(o instanceof THREE.Mesh) || !/window|glass|glazing/i.test(`${o.name} ${(o.material as THREE.Material).name}`)) return;
+                const m = o.material as THREE.MeshStandardMaterial;
+                if (!m.emissive) return;
+                m.emissive.copy(GLOW);
+                m.emissiveIntensity = light.windows * 0.9;
+            });
+            renderer.shadowMap.needsUpdate = true;
+            dirty = true;
+        }
+        const daylightTimer = presentation ? window.setInterval(daylight, 60_000) : 0;
+
+        // People say something when tapped, and now and then on their own while
+        // the map rests: one at a time, never while a route is being followed.
+        const lines = () => {
+            const own = CHATTER[locale.lang];
+            return tips.length && Math.random() < 0.3 ? tips[Math.floor(Math.random() * tips.length)] : own[Math.floor(Math.random() * own.length)];
+        };
+        function say(who: number) {
+            if (!crowd) return;
+            crowd.hold(who, 4.5);
+            speech = { who, text: lines(), until: performance.now() + 4500 };
+            dirty = true;
+        }
+        let nextChat = performance.now() + 12_000;
+        const sight = new THREE.Raycaster(),
+            headAt = new THREE.Vector3(),
+            onScreen = new THREE.Vector3();
+        /** Someone in view whom no roof or wall hides, to say something on their own. */
+        function someoneInSight() {
+            if (!crowd) return -1;
+            const seen = crowd.inView(camera).sort(() => Math.random() - 0.5);
+            for (const i of seen.slice(0, 6)) {
+                crowd.headOf(i, headAt);
+                const toward = headAt.clone().sub(camera.position),
+                    far = toward.length();
+                sight.set(camera.position, toward.normalize());
+                const hit = sight.intersectObjects(buildings.children, true)[0];
+                if (!hit || hit.distance > far - 0.3) return i;
+            }
+            return -1;
+        }
         dom.addEventListener("pointerdown", touch);
         dom.addEventListener("wheel", touch, { passive: true });
         // The map is drawn only when something changes: the camera, the
@@ -309,6 +387,8 @@
             if (rebuilt) {
                 built = next;
                 buildPieces();
+                // New buildings, new windows: light them for the hour.
+                if (presentation) daylight();
                 // The map opens on the canvas, filling the view, and stays
                 // within it; framed again when the canvas is resized.
                 if (presentation && canvasSize !== sited) {
@@ -390,6 +470,7 @@
             if (object) stage.selectedBox.box.setFromObject(object);
             if (!active) stage.ghost.visible = false;
             if (crowd) {
+                crowd.setActive(crowdSize ?? Infinity);
                 if (strolls !== crowdFed) {
                     crowdFed = strolls;
                     crowd.setStrolls(strolls.map((path) => path.map((p) => ({ x: p.x * 2, z: p.y * 2 }))));
@@ -426,6 +507,14 @@
             onplace,
             onmove,
             onhover: (h) => (hover = h),
+            // A tap on someone walking by: they say something, and no place is chosen.
+            ontap: (x, y) => {
+                if (!crowd || !prefs.people) return false;
+                const who = crowd.pickAt(camera, dom.clientWidth, dom.clientHeight, x, y);
+                if (who < 0) return false;
+                say(who);
+                return true;
+            },
             ondragend: () => {
                 built = "";
                 sync();
@@ -478,6 +567,23 @@
                 crowdAt = time;
                 if (crowd.update(time)) dirty = true;
             }
+            // Now and then, while the map rests and no route is followed, someone in view speaks.
+            if (crowd && prefs.people && !speech && !route?.length && time - touched > 2500 && performance.now() > nextChat) {
+                nextChat = performance.now() + 22_000 + Math.random() * 14_000;
+                const who = someoneInSight();
+                if (who >= 0) say(who);
+            }
+            // The bubble stays over the speaker's head, wherever the view goes.
+            if (speech) {
+                if (performance.now() > speech.until || !prefs.people) speech = null;
+                else if (bubble && crowd) {
+                    crowd.headOf(speech.who, onScreen).project(camera);
+                    const x = ((onScreen.x + 1) / 2) * dom.clientWidth,
+                        y = ((1 - onScreen.y) / 2) * dom.clientHeight;
+                    bubble.style.transform = `translate(${x}px, ${y}px)`;
+                    bubble.style.visibility = onScreen.z < 1 ? "visible" : "hidden";
+                }
+            }
             if (!dirty) return;
             dirty = false;
             if (presentation) {
@@ -487,6 +593,7 @@
             renderer.render(scene, camera);
         }
         sync();
+        daylight();
         animate();
 
         return () => {
@@ -501,6 +608,7 @@
             marker.dispose();
             scenery?.dispose();
             crowd?.dispose();
+            clearInterval(daylightTimer);
             dom.removeEventListener("pointerdown", touch);
             dom.removeEventListener("wheel", touch);
             // What's left: the stage's meshes and lines, and the templates.
@@ -555,6 +663,7 @@
             ></button
         >
     {/if}
+    {#if speech}<div class="npc-bubble" bind:this={bubble} role="status">{speech.text}</div>{/if}
     {#if presentation && away}<button
             class="recenter"
             style:bottom={`${insetBottom + 12}px`}
@@ -612,6 +721,46 @@
     /* On the map, the hint goes once the visitor has moved it. */
     .orbit-help.gone {
         opacity: 0;
+    }
+    /* What someone walking by says: a small bubble over their head. */
+    .npc-bubble {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 2;
+        pointer-events: none;
+        will-change: transform;
+        max-width: 220px;
+        margin: -14px 0 0;
+        padding: 8px 12px;
+        border-radius: 14px;
+        background: #fffdf8;
+        color: #1f3a2b;
+        font-size: 13px;
+        line-height: 1.35;
+        box-shadow:
+            0 0 0 1px #1b2a2117,
+            0 10px 24px -10px #1b2a2166;
+        translate: -50% -100%;
+        animation: bubble-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .npc-bubble::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -6px;
+        width: 12px;
+        height: 12px;
+        margin-left: -6px;
+        background: #fffdf8;
+        transform: rotate(45deg);
+        box-shadow: 1px 1px 0 #1b2a2117;
+    }
+    @keyframes bubble-in {
+        from {
+            opacity: 0;
+            scale: 0.85;
+        }
     }
     /* Back to the starting view, once the visitor has moved the map from it. */
     .recenter {

@@ -68,7 +68,11 @@ export function createCrowd(scene: THREE.Scene, count: number) {
 
   let strolls: Stroll[] = [],
     walkers: Walker[] = [],
-    last = 0;
+    last = 0,
+    /** How many are out and about now (the rest wait behind doors), up to `count`. */
+    active = count;
+  /** Where each walker stands (x, z) and how much of them shows, for picking one out. */
+  const at = new Float32Array(count * 3);
   const m = new THREE.Matrix4(),
     q = new THREE.Quaternion(),
     up = new THREE.Vector3(0, 1, 0),
@@ -110,7 +114,7 @@ export function createCrowd(scene: THREE.Scene, count: number) {
     walkers.forEach((w, i) => {
       if (i % 2 === 1 && Math.random() < 0.35) w.with = i - 1;
     });
-    mesh.count = walkers.length;
+    mesh.count = Math.min(active, walkers.length);
     place();
   }
 
@@ -127,6 +131,9 @@ export function createCrowd(scene: THREE.Scene, count: number) {
         sway = standing ? 0 : Math.sin(w.s * 3.2) * 0.04,
         bob = standing ? 0 : Math.abs(Math.sin((w.s * Math.PI) / 0.7)) * 0.05;
       position.set(p.x - p.dz * w.side, 0.05 + bob, p.z + p.dx * w.side);
+      at[i * 3] = position.x;
+      at[i * 3 + 1] = position.z;
+      at[i * 3 + 2] = i < active ? scale : 0;
       q.setFromAxisAngle(up, Math.atan2(p.dx, p.dz) + sway);
       size.setScalar(scale);
       mesh.setMatrixAt(i, m.compose(position, q, size));
@@ -166,10 +173,59 @@ export function createCrowd(scene: THREE.Scene, count: number) {
     return place();
   }
 
+  const head = new THREE.Vector3();
+  /** The top of walker `i`'s head, in the scene. */
+  function headOf(i: number, out = head) {
+    return out.set(at[i * 3], 1.75 * SIZE, at[i * 3 + 1]);
+  }
+  /** Whoever is shown nearest a screen point (pixels in a view of `width` × `height`), within `reach` pixels; -1 for none. */
+  function pickAt(camera: THREE.Camera, width: number, height: number, x: number, y: number, reach = 26) {
+    let best = -1,
+      gap = reach;
+    const p = new THREE.Vector3();
+    for (let i = 0; i < mesh.count; i++) {
+      if (at[i * 3 + 2] < 0.6) continue;
+      // Their middle, about chest height.
+      p.set(at[i * 3], 1 * SIZE, at[i * 3 + 1]).project(camera);
+      if (p.z > 1) continue;
+      const d = Math.hypot(((p.x + 1) / 2) * width - x, ((1 - p.y) / 2) * height - y);
+      if (d < gap) [best, gap] = [i, d];
+    }
+    return best;
+  }
+  /** Those in view right now (on screen, fully shown), to choose someone to speak. */
+  function inView(camera: THREE.Camera) {
+    const p = new THREE.Vector3(),
+      seen: number[] = [];
+    for (let i = 0; i < mesh.count; i++) {
+      if (at[i * 3 + 2] < 0.9) continue;
+      p.set(at[i * 3], 1.2 * SIZE, at[i * 3 + 1]).project(camera);
+      if (p.z < 1 && Math.abs(p.x) < 0.75 && p.y > -0.5 && p.y < 0.6) seen.push(i);
+    }
+    return seen;
+  }
+  /** Walker `i` stands still a while (to say something), with whoever walks beside them. */
+  function hold(i: number, seconds: number) {
+    const w = walkers[i];
+    if (!w) return;
+    const lead = w.with >= 0 ? walkers[w.with] : w;
+    lead.stopAt = lead.s;
+    lead.stopFor = seconds;
+  }
+
   return {
     mesh,
     setStrolls,
     update,
+    headOf,
+    pickAt,
+    inView,
+    hold,
+    /** How many are about (busy hours, long queues bring more); the others wait unseen. */
+    setActive(n: number) {
+      active = Math.max(0, Math.min(count, Math.round(n)));
+      mesh.count = Math.min(active, walkers.length);
+    },
     /** Shown or not (the "people" switch); nothing moves while hidden. */
     show(on: boolean) {
       mesh.visible = on;

@@ -27,6 +27,9 @@
     import { buildGrid, places, planRoute, progress, stepText, walkMinutes, type Place } from "$lib/wayfinding/routing";
     import { createFollower, STRIDE } from "$lib/wayfinding/follow";
     import { createTurnWindow } from "$lib/wayfinding/motion";
+    import { useLive } from "$lib/live.svelte";
+    import { fresh, liveFor } from "$lib/model/live";
+    import { busyHours } from "$lib/scene/daylight";
     import { startWalkSensor, type SensorState } from "$lib/wayfinding/walk-sensor";
     let {
         title,
@@ -107,11 +110,60 @@
     let grid = $derived(buildGrid(rooms, canvasWidth, canvasHeight, tileMeters, network.nodes));
     let route = $derived(from && to ? planRoute(grid, from, to) : null);
 
+    /*
+     * How busy the hospital is now, for the people walking about the 3D map:
+     * today's queue per building (from the live figures), and the hour. More
+     * people are about in clinic hours and when queues are long, and more of
+     * them head for the clinics where the queue is.
+     */
+    const liveData = useLive();
+    let clock = $state(new Date());
+    onMount(() => {
+        const timer = setInterval(() => (clock = new Date()), 5 * 60_000);
+        return () => clearInterval(timer);
+    });
+    let busy = $derived.by(() => {
+        const live = fresh(liveData(), clock.getTime()),
+            weights = new Map<number, number>();
+        if (!live) return { weights, total: null as number | null };
+        for (const p of placeList) {
+            const l = p.pieceId === undefined ? null : liveFor(p.info?.simrs, live);
+            if (!l) continue;
+            const n = l.clinics.reduce((s, c) => s + c.waiting * 2 + c.registered, 0);
+            weights.set(p.pieceId!, (weights.get(p.pieceId!) ?? 0) + n);
+        }
+        return { weights, total: live.clinics.reduce((s, c) => s + c.registered, 0) };
+    });
+    /** The busiest buildings: the walks are planned again only when these change. */
+    let busiest = $derived(
+        [...busy.weights]
+            .filter(([, n]) => n > 0)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([id]) => id)
+            .join(","),
+    );
+    let crowdSize = $derived.by(() => {
+        const base = busy.total === null ? 30 : Math.min(40, Math.max(14, 14 + busy.total / 3));
+        return Math.max(6, Math.round(base * busyHours(clock.getHours() + clock.getMinutes() / 60)));
+    });
+    /** Real tips from the hospital's questions & answers, for the people walking about to say. */
+    let tips = $derived(
+        questions
+            // The answer alone, as a passer-by would put it: "💡 Tarif parkir 2000."
+            .map((q) => q.answer.trim().replace(/[.!]*$/, "."))
+            .filter((s) => s.length > 8 && s.length <= 100)
+            .map((s) => `💡 ${s[0].toUpperCase()}${s.slice(1)}`),
+    );
+
     // Strolls for the people walking about the 3D map: trips between random
     // buildings, planned one at a time when the browser has nothing else to do,
-    // so they never hold anything up; planned afresh when the layout changes.
+    // so they never hold anything up; planned afresh when the layout changes,
+    // or when the busiest clinics do.
     let strolls = $state<Point[][]>([]);
     $effect(() => {
+        void busiest;
+        const weights = untrack(() => busy.weights);
         const g = grid,
             doors = placeList.filter((p) => p.kind === "building"),
             // The car parks, gates and named spots outside: visitors arriving and leaving
@@ -127,9 +179,17 @@
         const next = () => {
             if (cancelled || found.length >= 20) return;
             const any = (list: Place[]) => list[Math.floor(Math.random() * list.length)],
+                // Buildings with a long queue now draw more of the walks.
+                weight = (p: Place) => 1 + (weights.get(p.pieceId ?? -1) ?? 0) / 4,
+                total = doors.reduce((s, p) => s + weight(p), 0),
+                towardBusy = () => {
+                    let r = Math.random() * total;
+                    for (const p of doors) if ((r -= weight(p)) <= 0) return p;
+                    return doors[doors.length - 1];
+                },
                 arriving = outside.length > 0 && Math.random() < 0.55,
                 a = arriving ? any(outside) : any(doors),
-                b = any(doors);
+                b = towardBusy();
             const r = a !== b ? planRoute(g, a, b) : null;
             if (r && r.points.length > 1) {
                 // As many leave as arrive.
@@ -666,6 +726,8 @@
                     route={route?.points ?? null}
                     {walked}
                     {strolls}
+                    {crowdSize}
+                    {tips}
                     {onward}
                     {leg}
                     {highlight}

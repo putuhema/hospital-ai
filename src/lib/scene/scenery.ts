@@ -163,5 +163,12 @@ export function createScenery(scene: THREE.Scene) {
     scene.remove(root);
   }
 
-  return { update, dispose };
+  return {
+    update,
+    dispose,
+    /** The lawn's colour, as the light of the hour tints it. */
+    setLawn(color: string) {
+      (meadow.material as THREE.MeshLambertMaterial).color.set(color);
+    },
+  };
 }

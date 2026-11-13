@@ -37,6 +37,8 @@ export function attachPointer(options: {
   onhover: (hover: Hover | null) => void;
   /** A drag ended; the scene should rebuild models at their committed spots. */
   ondragend: () => void;
+  /** A tap (pixels in the view) that something else answers, e.g. a person walking by; true when it did. */
+  ontap?: (x: number, y: number) => boolean;
 }) {
   const { dom, camera, controls, buildings, ground, ghost, selectedBox } = options;
   const ray = new THREE.Raycaster(),
@@ -141,6 +143,8 @@ export function attachPointer(options: {
       if (tile) options.onplace(tile);
       return;
     }
+    const r = dom.getBoundingClientRect();
+    if (options.ontap?.(e.clientX - r.left, e.clientY - r.top)) return;
     const hit = pieceHit(),
       // A corridor canopy covers its floor, so where the click hit it is where it is on the floor.
       at = hit.point ?? groundPoint();
