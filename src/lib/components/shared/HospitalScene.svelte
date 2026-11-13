@@ -181,7 +181,7 @@
         // People strolling about while the map rests (not with reduced motion; fewer on a modest phone).
         const crowd =
             presentation && !matchMedia("(prefers-reduced-motion: reduce)").matches
-                ? createCrowd(scene, (navigator.hardwareConcurrency ?? 8) <= 4 ? 14 : 26)
+                ? createCrowd(scene, (navigator.hardwareConcurrency ?? 8) <= 4 ? 20 : 40)
                 : null;
         let crowdFed: Point[][] | null = null,
             crowdAt = 0,

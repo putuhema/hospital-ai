@@ -6,7 +6,8 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
  * campus feels alive. One instanced mesh: every walker is drawn in one call,
  * and a frame only moves a few dozen matrices. Each walker follows a stroll
  * (a walking route in metres) from door to door, appearing at the first and
- * fading out at the last, then sets off on another.
+ * fading out at the last, then sets off on another. Some walk in pairs, each
+ * bobs with their steps, and now and then one stops a moment on the way.
  */
 
 /** Clothes: hospital whites and scrubs, batik browns, everyday colours. */
@@ -23,6 +24,9 @@ export function along(points: { x: number; z: number }[], lengths: number[], s: 
   return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, dx: (b.x - a.x) / span, dz: (b.z - a.z) / span };
 }
 
+/** People are drawn a little larger than life, so they show at map scale. */
+const SIZE = 1.3;
+
 /** A little person: body and head, about 1.7 m tall, standing on the origin. */
 function person() {
   const body = new THREE.CylinderGeometry(0.17, 0.23, 1.15, 7).translate(0, 0.6, 0),
@@ -34,7 +38,21 @@ function person() {
 }
 
 type Stroll = { points: { x: number; z: number }[]; lengths: number[]; total: number };
-type Walker = { stroll: number; s: number; speed: number; side: number; wait: number };
+type Walker = {
+  stroll: number;
+  /** Metres along the stroll. */
+  s: number;
+  speed: number;
+  /** Metres to the side of the walkway's middle. */
+  side: number;
+  /** Seconds before setting off (unseen, behind the door). */
+  wait: number;
+  /** Where on the way they will stop a moment (metres; Infinity for not), and for how long (seconds). */
+  stopAt: number;
+  stopFor: number;
+  /** In a pair: the index of the one they walk beside, or -1. */
+  with: number;
+};
 
 export function createCrowd(scene: THREE.Scene, count: number) {
   const geometry = person(),
@@ -59,10 +77,15 @@ export function createCrowd(scene: THREE.Scene, count: number) {
 
   const pick = (w: Walker, fresh = false) => {
     w.stroll = Math.floor(Math.random() * strolls.length);
-    w.s = fresh ? Math.random() * strolls[w.stroll].total : 0;
-    w.speed = 1 + Math.random() * 0.5;
-    w.side = (Math.random() - 0.5) * 0.7;
+    const total = strolls[w.stroll].total;
+    w.s = fresh ? Math.random() * total : 0;
+    w.speed = 0.95 + Math.random() * 0.55;
+    w.side = (Math.random() - 0.5) * 0.6;
     w.wait = fresh ? 0 : Math.random() * 3;
+    // One in four stops a moment somewhere along the way.
+    const stops = Math.random() < 0.25 && total > 10;
+    w.stopAt = stops ? 4 + Math.random() * (total - 8) : Infinity;
+    w.stopFor = 2 + Math.random() * 4;
   };
 
   /** The strolls to walk, in metres; walkers spread along them at once. */
@@ -78,11 +101,15 @@ export function createCrowd(scene: THREE.Scene, count: number) {
       .filter((s) => s.total > 6);
     walkers = strolls.length
       ? Array.from({ length: count }, () => {
-          const w = { stroll: 0, s: 0, speed: 1, side: 0, wait: 0 };
+          const w: Walker = { stroll: 0, s: 0, speed: 1, side: 0, wait: 0, stopAt: Infinity, stopFor: 0, with: -1 };
           pick(w, true);
           return w;
         })
       : [];
+    // About a third walk with someone, beside them.
+    walkers.forEach((w, i) => {
+      if (i % 2 === 1 && Math.random() < 0.35) w.with = i - 1;
+    });
     mesh.count = walkers.length;
     place();
   }
@@ -94,10 +121,12 @@ export function createCrowd(scene: THREE.Scene, count: number) {
         p = along(s.points, s.lengths, w.s),
         // In through one door and out at the other: they grow and shrink over the first and last metre.
         appear = Math.min(1, w.s / 1, (s.total - w.s) / 1),
-        scale = w.wait > 0 ? 0 : Math.max(0, appear),
-        // A slight sway, as people walk.
-        sway = Math.sin(w.s * 3.2) * 0.04;
-      position.set(p.x - p.dz * w.side, 0.05, p.z + p.dx * w.side);
+        scale = w.wait > 0 ? 0 : Math.max(0, appear) * SIZE,
+        standing = w.s >= w.stopAt && w.stopFor > 0,
+        // A slight sway and a bob with each step, as people walk; still while standing.
+        sway = standing ? 0 : Math.sin(w.s * 3.2) * 0.04,
+        bob = standing ? 0 : Math.abs(Math.sin((w.s * Math.PI) / 0.7)) * 0.05;
+      position.set(p.x - p.dz * w.side, 0.05 + bob, p.z + p.dx * w.side);
       q.setFromAxisAngle(up, Math.atan2(p.dx, p.dz) + sway);
       size.setScalar(scale);
       mesh.setMatrixAt(i, m.compose(position, q, size));
@@ -112,8 +141,23 @@ export function createCrowd(scene: THREE.Scene, count: number) {
     last = time;
     if (!walkers.length || !mesh.visible) return false;
     for (const w of walkers) {
+      // A companion keeps beside the one they walk with, half a step behind.
+      const lead = w.with >= 0 ? walkers[w.with] : null;
+      if (lead && lead.with < 0) {
+        w.stroll = lead.stroll;
+        w.s = Math.max(0, lead.s - 0.5);
+        w.side = lead.side + (lead.side > 0 ? -0.55 : 0.55);
+        w.wait = lead.wait;
+        w.stopAt = lead.stopAt - 0.5;
+        w.stopFor = lead.stopFor;
+        continue;
+      }
       if (w.wait > 0) {
         w.wait -= dt;
+        continue;
+      }
+      if (w.s >= w.stopAt && w.stopFor > 0) {
+        w.stopFor -= dt;
         continue;
       }
       w.s += w.speed * dt;

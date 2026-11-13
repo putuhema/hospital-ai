@@ -113,7 +113,10 @@
     let strolls = $state<Point[][]>([]);
     $effect(() => {
         const g = grid,
-            doors = placeList.filter((p) => p.kind === "building");
+            doors = placeList.filter((p) => p.kind === "building"),
+            // The car parks, gates and named spots outside: visitors arriving and leaving
+            // cross the open paths and grounds, where they can be seen.
+            outside = placeList.filter((p) => p.kind === "area" || p.kind === "landmark");
         if (doors.length < 2) return;
         let cancelled = false,
             handle = 0;
@@ -122,14 +125,17 @@
         const quiet = typeof requestIdleCallback === "function";
         const idle = (run: () => void): number => (quiet ? requestIdleCallback(run, { timeout: 1500 }) : setTimeout(run, 60) as unknown as number);
         const next = () => {
-            if (cancelled || found.length >= 14) return;
-            const a = doors[Math.floor(Math.random() * doors.length)],
-                b = doors[Math.floor(Math.random() * doors.length)];
+            if (cancelled || found.length >= 20) return;
+            const any = (list: Place[]) => list[Math.floor(Math.random() * list.length)],
+                arriving = outside.length > 0 && Math.random() < 0.55,
+                a = arriving ? any(outside) : any(doors),
+                b = any(doors);
             const r = a !== b ? planRoute(g, a, b) : null;
             if (r && r.points.length > 1) {
-                found.push(r.points);
+                // As many leave as arrive.
+                found.push(Math.random() < 0.5 ? r.points : [...r.points].reverse());
                 // A few at a time, so the people set off early but the map doesn't redraw for each.
-                if (found.length % 4 === 0 || found.length === 14) strolls = [...found];
+                if (found.length % 4 === 0 || found.length === 20) strolls = [...found];
             }
             handle = idle(next);
         };
