@@ -836,7 +836,8 @@
                     crowdFed = strolls;
                     crowd.setStrolls(strolls.map((path) => path.map((p) => ({ x: p.x * 2, z: p.y * 2 }))));
                 }
-                crowd.show(prefs.people);
+                // Not before the buildings are there: no one stands about on bare grass while they load.
+                crowd.show(prefs.people && ready());
             }
             dirty = true;
         };

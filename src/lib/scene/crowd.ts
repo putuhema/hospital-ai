@@ -90,7 +90,10 @@ type Walker = {
   kind: Kind;
   /** Height against a grown-up's. */
   height: number;
-  stroll: number;
+  /** The walk they are on: their own, so new walks arriving never move them. */
+  stroll: Stroll;
+  /** Not about just now (fewer people wanted): waiting unseen behind a door. */
+  benched: boolean;
   /** Metres along the stroll. */
   s: number;
   speed: number;
@@ -131,6 +134,9 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   }
   scene.add(group);
 
+  /** Walks enough to spread the people over, before bringing them out; with fewer, a few seconds' wait. */
+  const ENOUGH = 8;
+  let firstAt = 0;
   let strolls: Stroll[] = [],
     walkers: Walker[] = [],
     last = 0,
@@ -159,9 +165,12 @@ export function createCrowd(scene: THREE.Scene, count: number) {
     return { kind: "adult", height: 0.94 + Math.random() * 0.12 };
   }
 
-  const pick = (w: Walker, fresh = false) => {
-    w.stroll = Math.floor(Math.random() * strolls.length);
-    const length = strolls[w.stroll].total;
+  /** Walker `i` sets off on a walk: from a door, or (`fresh`, when the map opens) somewhere along it. */
+  const pick = (w: Walker, i: number, fresh = false) => {
+    // Fewer people wanted: they go in at the end of their walk, rather than vanishing on the way.
+    w.benched = i >= active;
+    if (strolls.length) w.stroll = random(strolls);
+    const length = w.stroll.total;
     w.s = fresh ? Math.random() * length : 0;
     w.speed =
       w.kind === "cat" ? 0.45 + Math.random() * 0.3 : w.kind === "elder" ? 0.6 + Math.random() * 0.25 : w.kind === "child" ? 1.2 + Math.random() * 0.5 : 0.95 + Math.random() * 0.55;
@@ -186,7 +195,11 @@ export function createCrowd(scene: THREE.Scene, count: number) {
     for (const mesh of all) if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
 
-  /** The strolls to walk, in metres; walkers spread along them at once. */
+  /**
+   * The walks to choose from, in metres. The first ones bring the people out, spread along them; later
+   * ones (they arrive a few at a time) only join the choice: everyone already about walks on as they
+   * were, in the same clothes, so nobody jumps when more arrive.
+   */
   function setStrolls(paths: { x: number; z: number }[][]) {
     strolls = paths
       .filter((p) => p.length > 1)
@@ -197,13 +210,18 @@ export function createCrowd(scene: THREE.Scene, count: number) {
         return { points, lengths, total: lengths[lengths.length - 1] };
       })
       .filter((s) => s.total > 6);
-    walkers = strolls.length
-      ? Array.from({ length: total }, (_, i) => {
-          const w: Walker = { ...cast(i), stroll: 0, s: 0, speed: 1, side: 0, wait: 0, stopAt: Infinity, stopFor: 0, with: -1, umbrella: false, hop: 0 };
-          pick(w, true);
-          return w;
-        })
-      : [];
+    if (strolls.length && !firstAt) firstAt = performance.now();
+    if (strolls.length >= ENOUGH) populate();
+  }
+
+  /** Bring the people out, spread along the walks there are; once only. */
+  function populate() {
+    if (walkers.length || !strolls.length) return;
+    walkers = Array.from({ length: total }, (_, i) => {
+      const w: Walker = { ...cast(i), stroll: strolls[0], benched: false, s: 0, speed: 1, side: 0, wait: 0, stopAt: Infinity, stopFor: 0, with: -1, umbrella: false, hop: 0 };
+      pick(w, i, true);
+      return w;
+    });
     // About a third walk with someone, beside them; most children walk with a grown-up.
     walkers.forEach((w, i) => {
       const lead = walkers[i - 1];
@@ -216,19 +234,19 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   }
 
   function counts() {
-    const n = Math.min(active, walkers.length);
-    for (const mesh of all) mesh.count = n;
+    // Everyone is drawn; those benched have no size.
+    for (const mesh of all) mesh.count = walkers.length;
   }
 
   /** Put every walker where they are. */
   function place() {
     walkers.forEach((w, i) => {
-      const s = strolls[w.stroll],
+      const s = w.stroll,
         p = along(s.points, s.lengths, w.s),
         cat = w.kind === "cat",
         // In through one door and out at the other: they grow and shrink over the first and last metre.
         appear = Math.max(0, Math.min(1, w.s, s.total - w.s)),
-        scale = w.wait > 0 || i >= active ? 0 : appear * (cat ? CAT_SIZE : SIZE * w.height),
+        scale = w.wait > 0 || w.benched ? 0 : appear * (cat ? CAT_SIZE : SIZE * w.height),
         standing = w.s >= w.stopAt && w.stopFor > 0,
         // A slight sway and a bob with each step; children skip, higher. A hop when tapped.
         stride = w.kind === "child" ? 0.5 : 0.7,
@@ -256,7 +274,7 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   function seen(camera: THREE.Camera) {
     viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(viewProjection);
-    for (let i = 0; i < Math.min(active, walkers.length); i++)
+    for (let i = 0; i < walkers.length; i++)
       if (at[i * 4 + 2] > 0 && frustum.containsPoint(point.set(at[i * 4], 1, at[i * 4 + 1]))) return true;
     return false;
   }
@@ -265,31 +283,39 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   function update(time: number, camera?: THREE.Camera) {
     const dt = last ? Math.min(0.2, (time - last) / 1000) : 0;
     last = time;
+    // A small campus may never have many walks: out they come after a few seconds anyway.
+    if (!walkers.length && firstAt && performance.now() - firstAt > 3000) populate();
     if (!walkers.length || !group.visible) return false;
-    for (const w of walkers) {
+    walkers.forEach((w, i) => {
       if (w.hop > 0) w.hop = Math.max(0, w.hop - dt);
       // A companion keeps beside the one they walk with, half a step behind.
       const lead = w.with >= 0 ? walkers[w.with] : null;
       if (lead && lead.with < 0) {
         w.stroll = lead.stroll;
+        w.benched = lead.benched;
         w.s = Math.max(0, lead.s - 0.5);
         w.side = lead.side + (lead.side > 0 ? -0.55 : 0.55);
         w.wait = lead.wait;
         w.stopAt = lead.stopAt - 0.5;
         w.stopFor = lead.stopFor;
-        continue;
+        return;
+      }
+      if (w.benched) {
+        // More people wanted: out of a door they come.
+        if (i < active) pick(w, i);
+        return;
       }
       if (w.wait > 0) {
         w.wait -= dt;
-        continue;
+        return;
       }
       if (w.s >= w.stopAt && w.stopFor > 0) {
         w.stopFor -= dt;
-        continue;
+        return;
       }
       w.s += w.speed * dt;
-      if (w.s >= strolls[w.stroll].total) pick(w);
-    }
+      if (w.s >= w.stroll.total) pick(w, i);
+    });
     place();
     return camera ? seen(camera) : true;
   }
@@ -303,7 +329,7 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   function pickAt(camera: THREE.Camera, width: number, height: number, x: number, y: number, reach = 26) {
     let best = -1,
       gap = reach;
-    for (let i = 0; i < Math.min(active, walkers.length); i++) {
+    for (let i = 0; i < walkers.length; i++) {
       if (at[i * 4 + 2] < 0.6) continue;
       // Their middle, about chest height (a cat's back).
       point.set(at[i * 4], at[i * 4 + 3] * 0.6, at[i * 4 + 1]).project(camera);
@@ -316,7 +342,7 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   /** Those in view right now (on screen, fully shown), to choose someone to speak. */
   function inView(camera: THREE.Camera) {
     const list: number[] = [];
-    for (let i = 0; i < Math.min(active, walkers.length); i++) {
+    for (let i = 0; i < walkers.length; i++) {
       if (at[i * 4 + 2] < 0.9) continue;
       point.set(at[i * 4], at[i * 4 + 3] * 0.7, at[i * 4 + 1]).project(camera);
       if (point.z < 1 && Math.abs(point.x) < 0.75 && point.y > -0.5 && point.y < 0.6) list.push(i);
@@ -349,10 +375,12 @@ export function createCrowd(scene: THREE.Scene, count: number) {
     setHour(h: number) {
       hour = h;
     },
-    /** How many people are about (busy hours, long queues bring more); the others wait unseen. The cats stay. */
+    /**
+     * How many people are about (busy hours, long queues bring more); the others wait unseen. The cats
+     * stay. A change comes gently: the extra ones go in at the end of their walk, new ones come out of a door.
+     */
     setActive(n: number) {
       active = cats + Math.max(0, Math.min(count, Math.round(n)));
-      counts();
     },
     /** Shown or not (the "people" switch); nothing moves while hidden. */
     show(on: boolean) {

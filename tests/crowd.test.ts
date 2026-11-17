@@ -42,17 +42,18 @@ test('the crowd moves about as often as they visibly move: rarely far out, 20 a 
   assert.ok(sunny(12) && !sunny(8) && !sunny(18));
 });
 
+/** `n` strolls of 30 m fanning out from the origin. */
+const fan = (n: number) =>
+  Array.from({ length: n }, (_, i) => [{ x: 0, z: 0 }, { x: Math.cos((i / n) * Math.PI * 2) * 30, z: Math.sin((i / n) * Math.PI * 2) * 30 }]);
+
 test('cats, children and older people are about; a tapped one hops; nobody in view means no frame', async () => {
   const THREE = await import('three');
   const { createCrowd } = await import('../src/lib/scene/crowd.ts');
   const scene = new THREE.Scene();
   const crowd = createCrowd(scene, 40);
   crowd.setHour(12);
-  // Two long strolls, 40 m east and 30 m north.
-  crowd.setStrolls([
-    [{ x: 0, z: 0 }, { x: 40, z: 0 }],
-    [{ x: 0, z: 0 }, { x: 0, z: 30 }],
-  ]);
+  // Eight long strolls fanning out from the middle: enough to bring the people out.
+  crowd.setStrolls(fan(8));
   const kinds = Array.from({ length: 43 }, (_, i) => crowd.kindOf(i));
   assert.deepEqual(kinds.slice(0, 3), ['cat', 'cat', 'cat'], 'three cats, first, so they stay about');
   assert.ok(kinds.slice(3).every((k) => k !== 'cat'));
@@ -70,10 +71,6 @@ test('cats, children and older people are about; a tapped one hops; nobody in vi
   camera.updateMatrixWorld();
   assert.equal(crowd.update(1200, camera), false);
 
-  // Fewer people in quiet hours, but the cats stay.
-  crowd.setActive(0);
-  assert.equal(crowd.group.children.every((m) => (m as { count?: number }).count === 3), true);
-  crowd.setActive(40);
 
   // Tapped: a hop for half a second, then still while they speak.
   assert.equal(crowd.lively(), false);
@@ -93,4 +90,37 @@ test('children, older people and cats have their own lines in both languages', a
     assert.equal(lines.id.length, lines.en.length);
     assert.ok(lines.id.length >= 4 && [...lines.id, ...lines.en].every((s) => s.length > 3 && s.length < 80));
   }
+});
+
+test('loading without a jolt: walks arriving later move no one, and fewer people go in at the end of their walk', async () => {
+  const THREE = await import('three');
+  const { createCrowd } = await import('../src/lib/scene/crowd.ts');
+  const crowd = createCrowd(new THREE.Scene(), 20);
+  // A first few walks: not enough yet to spread everyone over, so no one is out.
+  crowd.setStrolls(fan(4));
+  assert.equal(crowd.headOf(5).y, 0, 'nobody out with only four walks');
+  // Enough walks: out they come, spread along them.
+  crowd.setStrolls(fan(8));
+  crowd.update(1000);
+  const before = Array.from({ length: 22 }, (_, i) => crowd.headOf(i).clone());
+  assert.ok(before.some((p) => p.y > 1), 'people are out');
+  // More walks arrive while the map loads: everyone stays where they were.
+  crowd.setStrolls(fan(20));
+  crowd.update(1000);
+  const after = Array.from({ length: 22 }, (_, i) => crowd.headOf(i).clone());
+  assert.ok(after.every((p, i) => p.distanceTo(before[i]) < 1e-9), 'nobody jumped');
+
+  // Quiet hours: fewer people wanted. Nobody vanishes on the spot…
+  crowd.setActive(0);
+  crowd.update(1100);
+  const shown = () => Array.from({ length: 22 }, (_, i) => crowd.headOf(i).y).filter((y) => y > 0.5).length;
+  assert.ok(shown() > 10, 'still about right after');
+  // …they go in at the end of their walk; the cats stay.
+  for (let t = 1200; t < 200_000; t += 200) crowd.update(t);
+  assert.equal(shown(), 2, 'only the cats are about');
+  // Busy again: people come out of the doors.
+  crowd.setActive(20);
+  for (let t = 200_000; t < 215_000; t += 200) crowd.update(t);
+  assert.ok(shown() > 10);
+  crowd.dispose();
 });
