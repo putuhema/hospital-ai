@@ -21,22 +21,27 @@ export const get = query({
       .query("chatAnswers")
       .withIndex("by_key", (q) => q.eq("key", key))
       .first();
-    return row && row.expires > Date.now() ? (row.events as unknown[]) : null;
+    return row && row.expires > Date.now() ? { events: row.events as unknown[], missing: row.missing ?? null } : null;
   },
 });
 
 /** Keep an answer for the next visitor who asks the same. */
 export const put = mutation({
-  args: { secret: v.string(), key: v.string(), events: v.array(v.any()) },
-  handler: async (ctx, { secret, key, events }) => {
+  args: {
+    secret: v.string(),
+    key: v.string(),
+    events: v.array(v.any()),
+    missing: v.optional(v.object({ topic: v.string(), subject: v.string() })),
+  },
+  handler: async (ctx, { secret, key, events, missing }) => {
     allowed(secret);
     const expires = Date.now() + ANSWER_TTL;
     const row = await ctx.db
       .query("chatAnswers")
       .withIndex("by_key", (q) => q.eq("key", key))
       .first();
-    if (row) await ctx.db.patch(row._id, { events, expires });
-    else await ctx.db.insert("chatAnswers", { key, events, expires });
+    if (row) await ctx.db.patch(row._id, { events, missing, expires });
+    else await ctx.db.insert("chatAnswers", { key, events, missing, expires });
   },
 });
 

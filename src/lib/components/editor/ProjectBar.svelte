@@ -58,7 +58,7 @@
 
 <header>
     <div class="breadcrumb">
-        <b class="product">P-Map Editor</b> <span>/</span> {title || "Untitled map"}
+        <b class="product">AIRMA Editor</b> <span>/</span> {title || "Untitled map"}
     </div>
     <div class="header-actions">
         <button class="help" onclick={onguide}>? <span>Quick guide</span></button><a class="help" href="/editor/accounts"

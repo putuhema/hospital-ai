@@ -1,4 +1,4 @@
-# TODO — P-Map
+# TODO — AIRMA
 
 What's done, and what can still be improved, for hospital visitors and for the people running the map. Ordered by priority within each group; the recommended next steps are marked **(next)**.
 
@@ -26,8 +26,8 @@ What's done, and what can still be improved, for hospital visitors and for the p
 - [ ] **Several floors.** Rooms on upper floors, with stairs and lifts connecting them. Routing covers the ground floor only.
 - [ ] **Step-free routes.** A "wheelchair / pushchair" option that uses lifts and avoids stairs (depends on several floors).
 - [ ] **Directions by landmark.** "Pass the café on your left" instead of "head south-east 12 m"; optional photos at confusing turns.
-- [ ] **Readability.** Larger text option, high contrast, reading steps aloud.
-- [ ] **Small wins.** Printable directions; an always-visible "IGD" / nearest exit shortcut; nearest accessible toilet; walking time at a slower pace.
+- [ ] **Readability.** ~~Larger text option~~ (done: _AA_ in the header); high contrast, reading steps aloud.
+- [ ] **Small wins.** Printable directions; ~~an always-visible "IGD" shortcut~~ (done: the red _IGD_ button in the header); nearest exit; nearest accessible toilet; walking time at a slower pace.
 
 ## 5. Speed and reliability
 
@@ -42,6 +42,10 @@ What's done, and what can still be improved, for hospital visitors and for the p
 - [x] **Visitor map UI.** The haze over the far side of the map starts much further out and thickens gently, so the campus and the fields around it stay clear (there was no CSS gradient left).
 
 ## Done
+
+- [x] **Unanswered questions.** AIRMA notes what it couldn't answer (`note_missing_info`); the editor lists them, most asked first, under _Hospital information → Belum terjawab_, and Monday 09.00 WITA an email lists last week's top five (set `RESEND_API_KEY`, `GAPS_DIGEST_TO`, `GAPS_DIGEST_FROM` on Convex).
+- [x] **Queue alerts.** _Ingatkan saya_ on the queue banner: Web Push when three numbers are left and when it's their turn, even with the screen off (VAPID keys on Convex, `PUBLIC_VAPID_KEY` in the app). iPhone: only once AIRMA is on the Home Screen.
+- [x] **Share a place on WhatsApp.** The green button on a place's card sends its name and a link that opens AIRMA on it.
 
 - [x] **Follow the steps on the map.** On phones, _Langkah_ opens the steps in the card over the map, not the full sheet, and the camera keeps the route above the card. Tap a step once it's done: the walked part of the route greys (3D and plan), the dot moves on, and a bar shows the steps and metres left. Doctors not in say why: _Belum praktik_, _Jam praktik sudah habis_ or _Tidak praktik hari ini_.
 - [x] **Tap a place to see what is there.** Tapping a room or building on the map opens its card with the details: description, phone, opening hours and the doctors who practise there, with whether each is in now; a building lists its clinics. _Rute_ is one tap away and the chat stays open. The phone sheet no longer shows for a moment on first load. New room type _Perinatology_ (Perinatologi) with incubators, found by "bayi", "NICU", "inkubator".

@@ -71,7 +71,7 @@
     const isAdmin = (a: Account) => (a.role ?? "").split(",").some((r) => r.trim() === "admin");
 </script>
 
-<svelte:head><title>Accounts · P-Map Editor</title></svelte:head>
+<svelte:head><title>Accounts · AIRMA Editor</title></svelte:head>
 
 <div class="accounts-page">
     <a class="back" href="/editor">← Back to the editor</a>

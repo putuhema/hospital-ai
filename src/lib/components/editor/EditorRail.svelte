@@ -5,7 +5,7 @@
 </script>
 
 <nav class="rail">
-    <a class="brand" href="/editor" title="P-Map Editor"><Logo size={36} title="P-Map Editor home" /></a><button
+    <a class="brand" href="/editor" title="AIRMA Editor"><Logo size={36} title="AIRMA Editor home" /></a><button
         class="rail-active"
         title="Layout editor"
         aria-label="Layout editor"

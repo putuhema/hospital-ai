@@ -51,7 +51,7 @@
     const qr = (link: string) => renderSVG(link, { border: 2, ecc: "M" });
 </script>
 
-<svelte:head><title>QR signs — P-Map Editor</title></svelte:head>
+<svelte:head><title>QR signs — AIRMA Editor</title></svelte:head>
 <div class="signs-page">
     <aside class="controls">
         <a class="back" href="/editor">← Back to editor</a>

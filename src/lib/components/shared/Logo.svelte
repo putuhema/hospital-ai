@@ -1,6 +1,6 @@
 <script lang="ts">
-    /** The P-Map mark: a map pin with a P cut into it. */
-    let { size = 32, title = "P-Map" }: { size?: number; title?: string } = $props();
+    /** The AIRMA mark: a map pin with an A cut into it, and a spark beside it. */
+    let { size = 32, title = "AIRMA" }: { size?: number; title?: string } = $props();
 </script>
 
 <svg width={size} height={size} viewBox="0 0 32 32" role="img" aria-label={title}
@@ -10,6 +10,6 @@
     /><path
         fill="#f4f7ef"
         fill-rule="evenodd"
-        d="M11.8 7.6h5.6a4.6 4.6 0 0 1 0 9.2h-2.5v4.8h-3.1zm3.1 2.8v3.6h2.4a1.8 1.8 0 0 0 0-3.6z"
-    /><circle cx="21.6" cy="20.2" r="1.7" fill="#a8c08a" /></svg
+        d="M14.3 7.6h3.4l5 14h-3.2l-.95-2.9h-5.1l-.95 2.9H9.3zM16 11.2l1.7 5h-3.4z"
+    /><circle cx="22.3" cy="9.8" r="1.7" fill="#a8c08a" /></svg
 >

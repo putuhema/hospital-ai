@@ -50,7 +50,7 @@
 <main class="sign-in-page">
     <div class="guide sign-in">
         <Logo size={36} title="" />
-        <small>P-MAP EDITOR</small>
+        <small>AIRMA EDITOR</small>
         {#if account}
             <h2>This account can't edit</h2>
             <p>

@@ -5,6 +5,9 @@
     import { useMyTurn } from "$lib/my-turn.svelte";
     import { useLive } from "$lib/live.svelte";
     import { fresh, turnOf } from "$lib/model/live";
+    import { useConvexClient } from "convex-svelte";
+    import { alertSupport, startAlerts } from "$lib/turn-alerts";
+    import { page } from "$app/state";
     let { onopen }: { /** Show the place the number was set on. */ onopen: (place: string) => void } = $props();
     const locale = useLocale();
     const t = locale.t;
@@ -35,6 +38,26 @@
                 return t("turnUnknown");
         }
     });
+    // Alerts with the phone in a pocket: the server watches the number (turn-alerts.ts).
+    const convex = useConvexClient();
+    let support = $state<"yes" | "install" | "no">("no"),
+        asking = $state(false),
+        alertNote = $state("");
+    onMount(() => (support = alertSupport()));
+    async function remind() {
+        if (!ticket || !mine) return;
+        if (support === "install") return void (alertNote = t("alertInstall"));
+        asking = true;
+        const slug = page.params.slug;
+        const result = await startAlerts(convex, slug, ticket, locale.lang);
+        asking = false;
+        if (result === "on") {
+            mine.setAlerting(true);
+            alertNote = "";
+        } else alertNote = t(result === "denied" ? "alertDenied" : "alertFailed");
+    }
+    let canRemind = $derived(!!turn && (turn.state === "waiting" || turn.state === "unknown"));
+
     // A buzz when it gets close and when it's their turn, once each.
     let buzzed = "";
     $effect(() => {
@@ -58,10 +81,26 @@
                 {#if turn.state === "waiting" && turn.serving !== undefined}<em>{t("turnServing", { no: no(turn.serving) })}</em>{/if}
             </span>
         </button>
+        {#if mine?.alerting}<button
+                class="bell on"
+                aria-label={t("alertOn")}
+                title={t("alertOff")}
+                onclick={() => mine?.setAlerting(false)}
+                ><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
+                    ><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5h4" /></svg
+                ></button
+            >{:else if support !== "no" && canRemind}<button class="bell" disabled={asking} onclick={remind}
+                ><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
+                    ><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5h4" /></svg
+                ><span>{t("alertMe")}</span></button
+            >{/if}
         <button class="stop" aria-label={t("turnStop")} title={t("turnStop")} onclick={() => mine?.clear()}
             ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button
         >
-    </div>{/if}
+    </div>
+    {#if alertNote}<p class="alert-note" role="status">{alertNote}</p>{:else if mine?.alerting}<p class="alert-note">
+            {t("alertOnNote")}
+        </p>{/if}{/if}
 
 <style>
     .my-turn {
@@ -139,6 +178,52 @@
         font-style: normal;
         font-size: 12px;
         opacity: 0.8;
+    }
+    .bell {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+        margin: 8px 0;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 999px;
+        background: #2d4a38;
+        color: white;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .bell.on {
+        padding: 0 8px;
+        background: #e3ecdd;
+        color: #2d4a38;
+    }
+    .now .bell {
+        background: white;
+        color: #2d4a38;
+    }
+    .bell:disabled {
+        opacity: 0.6;
+    }
+    .bell svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+    }
+    .alert-note {
+        max-width: 360px;
+        margin: 6px 0 0;
+        padding: 6px 10px;
+        border-radius: 10px;
+        background: #fffdf8f2;
+        box-shadow: 0 0 0 1px #dfe4d9;
+        color: #4b5d47;
+        font-size: 12px;
+        line-height: 1.4;
     }
     .stop {
         flex-shrink: 0;

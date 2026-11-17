@@ -22,6 +22,7 @@ import { dateOf, doctorStatus, shortDate, specialtyOf, type Doctor } from "../mo
 import { shortcuts } from "../wayfinding/shortcuts.ts";
 import { topicOf, topics, type FaqEntry } from "../model/faq.ts";
 import { faqMatches } from "./faq-match.ts";
+import { MAX_SUBJECT, subjectOf, topicNamed, type MissingInfo } from "./gaps.ts";
 import { clinicKey, COUNTER_KEY, doctorToday, liveFor, quotaLeft, started, wardKey, type ClinicLive, type CounterLive, type Live, type WardLive } from "../model/live.ts";
 
 /** What the tools know: the hospital map and the time at the hospital. */
@@ -36,6 +37,8 @@ export type AssistantContext = {
   live?: Live | null;
   /** Set once a tool has answered from the live figures: such a reply is true only now, so it isn't kept for the next visitor. */
   liveUsed?: boolean;
+  /** Set by `note_missing_info`: what the visitor asked that the hospital hasn't written about (gaps.ts). */
+  missing?: MissingInfo;
 };
 
 /** The context for a layout (as `parseLayout` returns it) at a moment. */
@@ -497,6 +500,14 @@ export function showOnMap(
   };
 }
 
+/** Tell the hospital what the visitor asked that nothing here answers. The visitor never sees it. */
+export function noteMissingInfo(ctx: AssistantContext, { topic, subject }: { topic: string; subject: string }): object {
+  const s = subjectOf(subject);
+  if (!s) return { error: '"subject" is empty.' };
+  ctx.missing = { topic: topicNamed(topic), subject: s };
+  return { noted: true };
+}
+
 type Schema = { type: "object"; properties: Record<string, object>; required: string[] };
 export type ToolDefinition = { name: string; description: string; input_schema: Schema };
 
@@ -641,6 +652,32 @@ export const toolDefinitions: ToolDefinition[] = [
       required: ["place_id"],
     },
   },
+  {
+    name: "note_missing_info",
+    description:
+      "Tell the hospital that the visitor asked something your tools and the hospital information don't answer " +
+      "(e.g. visiting hours not written yet, an ATM or hemodialysis not on the map), so they can add it. " +
+      "The visitor doesn't see it, so don't mention it. Call it once, alongside your reply, only when you couldn't answer; not for " +
+      "off-topic requests, medical advice or emergencies.",
+    input_schema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          enum: topics.map((t) => t.id),
+          description:
+            "Where the answer belongs: pendaftaran (registration), bpjs (BPJS & payment), besuk (visiting), fasilitas (facilities and places), layanan (services), kontak (contacts), lainnya (other).",
+        },
+        subject: {
+          type: "string",
+          description:
+            `The thing that was missing, as short as possible, in plain Indonesian, lowercase: one or two words, the same ones each time it is asked, ` +
+            `without words like "layanan", "pengunjung" or "informasi" and without the visitor's details, e.g. "jam besuk", "wifi", "cuci darah", "rujukan bpjs" (at most ${MAX_SUBJECT} characters).`,
+        },
+      },
+      required: ["topic", "subject"],
+    },
+  },
 ];
 
 const tools: Record<string, (ctx: AssistantContext, input: never) => object> = {
@@ -654,6 +691,7 @@ const tools: Record<string, (ctx: AssistantContext, input: never) => object> = {
   find_nearest: findNearest,
   get_directions: getDirections,
   show_on_map: showOnMap,
+  note_missing_info: noteMissingInfo,
 };
 
 /** Checks input against a tool's schema: required fields, and strings and integers where expected. */

@@ -1,22 +1,23 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { parseLayout, starterPieces, type Piece } from "$lib/model/layout";
-    import { answered, topicOf, topics, type FaqEntry, type TopicId } from "$lib/model/faq";
+    import { answered, MAX_FAQ, topicOf, topics, type FaqEntry, type TopicId } from "$lib/model/faq";
     import type { Doctor } from "$lib/model/doctors";
     import { emptyNetwork, type WalkingNetwork } from "$lib/wayfinding/navigation";
     import { layoutSnapshot } from "$lib/editor/export";
     import { clinics, withDoctors, withInfo } from "$lib/editor/hospital-info";
     import { normalize } from "$lib/wayfinding/search";
     import FaqEditor from "$lib/components/editor/FaqEditor.svelte";
+    import GapsList from "$lib/components/editor/GapsList.svelte";
     import DoctorsEditor from "$lib/components/editor/DoctorsEditor.svelte";
     import ShareMenu from "$lib/components/editor/ShareMenu.svelte";
     import { HospitalStore } from "$lib/editor/saving.svelte";
     import { mergeMessage } from "$lib/editor/merge";
-    import { useQuery } from "convex-svelte";
+    import { useConvexClient, useQuery } from "convex-svelte";
     import { api } from "../../../convex/_generated/api";
     import type { Place } from "$lib/wayfinding/routing";
 
-    type Section = TopicId | "doctors";
+    type Section = TopicId | "doctors" | "unanswered";
 
     // The hospital as saved in the database. This page changes only the
     // hospital information and the doctors, and saves it back.
@@ -49,7 +50,7 @@
     };
     onMount(() => {
         const hash = location.hash.slice(1);
-        if (hash === "doctors" || topics.some((t) => t.id === hash)) section = hash as Section;
+        if (hash === "doctors" || hash === "unanswered" || topics.some((t) => t.id === hash)) section = hash as Section;
     });
     function go(to: Section) {
         section = to;
@@ -64,6 +65,34 @@
     let topic = $derived(topics.find((t) => t.id === section));
     const count = (id: TopicId) => faq.filter((e) => topicOf(e) === id).length;
     let live = $derived(answered(faq).length);
+
+    // What visitors asked that AIRMA couldn't answer (lib/assistant/gaps.ts).
+    const convex = useConvexClient();
+    const gaps = useQuery(api.gaps.list, () => ({ slug: store.slug ?? undefined }));
+    let open = $derived(gaps.data ?? []);
+    /** Start the answer under its topic, with the question as the visitor asked it; done here. */
+    function answer(gap: (typeof open)[number]) {
+        if (faq.length >= MAX_FAQ) return notify(`That's the most questions a map can hold (${MAX_FAQ}).`);
+        faq = [...faq, { question: gap.questions[0] ?? gap.subject, answer: "", topic: gap.topic as TopicId }];
+        void markDone(gap, false);
+        go(gap.topic as TopicId);
+        notify("Added — write the answer below");
+        // The new question is the topic's last; bring it into view and into the answer box.
+        requestAnimationFrame(() => {
+            const boxes = document.querySelectorAll<HTMLTextAreaElement>(".faq-editor textarea");
+            const box = boxes[boxes.length - 1];
+            box?.scrollIntoView({ block: "center", behavior: "smooth" });
+            box?.focus({ preventScroll: true });
+        });
+    }
+    async function markDone(gap: (typeof open)[number], say = true) {
+        try {
+            await convex.mutation(api.gaps.done, { id: gap._id });
+            if (say) notify(`“${gap.subject}” marked as done`);
+        } catch {
+            notify("Couldn't update it — try again");
+        }
+    }
 
     // Doctors.
     let all = $derived(clinics(pieces));
@@ -104,6 +133,12 @@
             What visitors can read and ask about besides the map. Saved as you type and live straight away.
         </p>
         <nav aria-label="Sections">
+            <small>From visitors</small>
+            <button class:active={section === "unanswered"} onclick={() => go("unanswered")}
+                >Belum terjawab<span class="en">Unanswered</span><span class="n" class:alert={open.length}
+                    >{open.length || ""}</span
+                ></button
+            >
             <small>Questions & answers</small>
             {#each topics as t}<button class:active={section === t.id} onclick={() => go(t.id)}
                     >{t.name.id}<span class="en">{t.name.en}</span><span class="n">{count(t.id) || ""}</span></button
@@ -124,7 +159,18 @@
     <main>
         {#if store.status === "loading"}<p class="note">{store.problem || "Loading the hospital…"}</p>
         {:else if store.status === "failed"}<p class="note">{store.problem} Your changes are kept and saved once it works again.</p>{/if}
-        {#if store.status === "loading"}{:else if topic}<header>
+        {#if store.status === "loading"}{:else if section === "unanswered"}<header>
+                <h2>Belum terjawab</h2>
+                <p>
+                    What visitors asked that AIRMA couldn't answer, most asked first. Write an answer and AIRMA uses it
+                    from then on; mark as done what needs no answer. Questions are kept without who asked, long numbers
+                    are blanked, and a subject is forgotten after 90 days without questions.
+                </p>
+            </header>
+            {#if gaps.error}<p class="note">Couldn't load them: {gaps.error.message}</p>
+            {:else if gaps.isLoading}<p class="empty">Loading…</p>
+            {:else}<GapsList gaps={open} onanswer={answer} ondone={(g) => markDone(g)} />{/if}
+        {:else if topic}<header>
                 <h2>{topic.name.id}</h2>
                 <p>
                     {topic.name.en}. Visitors find these under <b>Informasi rumah sakit</b>, grouped by topic,
@@ -260,6 +306,14 @@
         margin-left: auto;
         font-size: 11px;
         opacity: 0.75;
+    }
+    nav .n.alert {
+        padding: 0 7px;
+        border-radius: 999px;
+        background: #d0a54a;
+        color: white;
+        font-weight: 600;
+        opacity: 1;
     }
     .foot {
         margin-top: auto;

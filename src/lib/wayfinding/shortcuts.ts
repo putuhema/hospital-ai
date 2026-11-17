@@ -1,6 +1,8 @@
 import { categories, type LandmarkCategory } from "../model/categories.ts";
 import { roomTypes } from "../model/interiors.ts";
-import type { Place } from "./routing.ts";
+import { planRoute, type NavGrid, type Place } from "./routing.ts";
+import type { Point } from "./navigation.ts";
+import { search } from "./search.ts";
 
 /** A kind of place to jump to, e.g. the nearest toilets or parking. */
 export type Shortcut = {
@@ -26,4 +28,27 @@ export function shortcuts(list: Place[], limit = Infinity): Shortcut[] {
     .sort((a, b) => rank(a.key) - rank(b.key))
     .slice(0, limit)
     .map(({ key: _, ...s }) => s);
+}
+
+/**
+ * The emergency department (IGD) to go to: the nearest by walking from
+ * `from`, or the best-named one without a start. Found the way visitors
+ * search ("igd" also finds Emergency rooms and "Gawat Darurat"); a maternity
+ * emergency (IGD PONEK) only when there is no other.
+ */
+export function emergencyPlace(list: Place[], grid: NavGrid, from: Place | Point | null): Place | null {
+  const matches = search(list, "igd");
+  if (!matches.length) return null;
+  const top = matches[0].score;
+  let options = matches.filter((m) => m.score >= top * 0.8).map((m) => m.place);
+  const general = options.filter((p) => !/ponek|maternal|kebidanan|obstetri/i.test(p.name));
+  if (general.length) options = general;
+  if (!from || options.length === 1) return options[0];
+  let best = options[0],
+    bestMeters = Infinity;
+  for (const p of options) {
+    const r = planRoute(grid, from, p);
+    if (r && r.meters < bestMeters) [best, bestMeters] = [p, r.meters];
+  }
+  return best;
 }

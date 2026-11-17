@@ -272,7 +272,7 @@
 </script>
 
 <svelte:head
-    ><title>{title} — P-Map Editor</title><meta
+    ><title>{title} — AIRMA Editor</title><meta
         name="description"
         content="Design hospital layouts with modular buildings and corridors on a grid."
     /></svelte:head

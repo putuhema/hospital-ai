@@ -1,4 +1,4 @@
-# P-Map Editor
+# AIRMA Editor
 
 Build a hospital campus map, then give visitors walking directions on it. A SvelteKit editor with grid placement and Blender-authored models rendered with Three.js, plus a shareable wayfinding map. The map is the home page (`/`); the editor is at `/editor`.
 

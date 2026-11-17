@@ -115,7 +115,11 @@ export async function POST({ request, getClientAddress }) {
       : null;
   if (secret && cacheKey) {
     const kept = await convex.query(api.answers.get, { secret, key: cacheKey });
-    if (kept) return new Response(kept.map((e) => JSON.stringify(e) + "\n").join(""), { headers: NDJSON });
+    if (kept) {
+      // Still counted for the editor when the kept answer was one the assistant couldn't give.
+      if (kept.missing) await noteGap(convex, secret, hospital.slug, kept.missing, messages);
+      return new Response(kept.events.map((e) => JSON.stringify(e) + "\n").join(""), { headers: NDJSON });
+    }
   }
 
   // Each question counts against the visitor's limits and the hospital's daily one (lib/assistant/limits.ts).
@@ -145,8 +149,11 @@ export async function POST({ request, getClientAddress }) {
         }
         // Kept for the next visitor who asks the same, when it is a whole answer.
         // (An answer from the live figures is only true now.)
+        if (secret && ctx.missing) await noteGap(convex, secret, hospital.slug, ctx.missing, messages);
         if (secret && cacheKey && !ctx.liveUsed && sent.some((e) => e.type === "text" && e.text.trim()))
-          await convex.mutation(api.answers.put, { secret, key: cacheKey, events: merged(sent) }).catch((err) => console.error("Could not keep the answer:", err));
+          await convex
+            .mutation(api.answers.put, { secret, key: cacheKey, events: merged(sent), ...(ctx.missing && { missing: ctx.missing }) })
+            .catch((err) => console.error("Could not keep the answer:", err));
       } catch (err) {
         if (!abort.signal.aborted) {
           console.error("Assistant reply failed:", err);
@@ -161,6 +168,15 @@ export async function POST({ request, getClientAddress }) {
     },
   });
   return new Response(stream, { headers: NDJSON });
+}
+
+/**
+ * The question the assistant couldn't answer, kept for the editor (lib/assistant/gaps.ts). Awaited, as a
+ * serverless function may stop once it responds, but a failure never spoils the reply.
+ */
+function noteGap(convex: ConvexHttpClient, secret: string, slug: string, missing: { topic: string; subject: string }, messages: ChatMessage[]) {
+  const question = messageText(messages.at(-1)!);
+  return convex.mutation(api.gaps.note, { secret, slug, ...missing, question }).catch((err) => console.error("Could not note the question:", err));
 }
 
 /** Text events joined into runs, so a kept answer is a few events, not one per word. */

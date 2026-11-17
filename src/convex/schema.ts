@@ -90,12 +90,50 @@ export default defineSchema({
     .index("by_key", ["key", "window"])
     .index("by_window", ["window"]),
 
+  /**
+   * Questions the assistant couldn't answer, per subject ("jam besuk", "atm"),
+   * for the editor to fill in (lib/assistant/gaps.ts). Anonymous; forgotten
+   * 90 days after the last question.
+   */
+  gaps: defineTable({
+    hospitalId: v.id("hospitals"),
+    subject: v.string(),
+    topic: v.string(),
+    count: v.number(),
+    questions: v.array(v.string()),
+    firstAt: v.number(),
+    lastAt: v.number(),
+    doneAt: v.optional(v.number()),
+  })
+    .index("by_hospital", ["hospitalId", "subject"])
+    .index("by_last", ["lastAt"]),
+
+  /**
+   * Visitors who asked to be told when their queue number is near (lib/model/turn-alerts.ts):
+   * the ticket and the phone's Web Push address, for the day; nothing about who they are.
+   */
+  turnAlerts: defineTable({
+    hospitalId: v.id("hospitals"),
+    ticket: v.any(),
+    lang: v.union(v.literal("id"), v.literal("en")),
+    endpoint: v.string(),
+    keys: v.object({ p256dh: v.string(), auth: v.string() }),
+    /** The steps sent already: "soon", "now". */
+    sent: v.array(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_hospital", ["hospitalId"])
+    .index("by_endpoint", ["endpoint"])
+    .index("by_created", ["createdAt"]),
+
   /** Recent answers to a conversation's first question, replayed instead of asking the model again. */
   chatAnswers: defineTable({
     /** A hash of the hospital version, the question, the language, where the visitor is and the model. */
     key: v.string(),
     /** The reply's text and cards, as the chat shows them. */
     events: v.any(),
+    /** What the assistant noted it couldn't answer, so a replayed answer still counts. */
+    missing: v.optional(v.object({ topic: v.string(), subject: v.string() })),
     expires: v.number(),
   })
     .index("by_key", ["key"])

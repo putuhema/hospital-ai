@@ -96,3 +96,41 @@ sw.addEventListener("fetch", (event) => {
     }),
   );
 });
+
+/** A queue alert from the server (convex/alertsSend.ts): "3 lagi sebelum 012", "Giliran Anda". */
+sw.addEventListener("push", (event) => {
+  let message: { title?: string; body?: string; tag?: string; url?: string } = {};
+  try {
+    message = event.data?.json() ?? {};
+  } catch {
+    message = { body: event.data?.text() };
+  }
+  event.waitUntil(
+    sw.registration.showNotification(message.title ?? "AIRMA", {
+      body: message.body,
+      tag: message.tag,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: message.url ?? "/" },
+      // The same number again replaces the last alert, and still buzzes.
+      renotify: !!message.tag,
+      vibrate: [300, 150, 300],
+    } as NotificationOptions),
+  );
+});
+
+/** Tapping the alert opens the map on the place the number was set on. */
+sw.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data as { url?: string })?.url ?? "/", sw.location.origin).href;
+  event.waitUntil(
+    sw.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (windows) => {
+      const open = windows.find((w) => new URL(w.url).origin === sw.location.origin);
+      if (open) {
+        await open.focus();
+        return void (await (open as WindowClient).navigate(url).catch(() => null));
+      }
+      await sw.clients.openWindow(url);
+    }),
+  );
+});

@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
-	"description": "Sends SIMRS Khanza's live queue and bed totals to the P-Map visitor app.",
+	"description": "Sends SIMRS Khanza's live queue and bed totals to the AIRMA visitor app.",
 	"engines": {
 		"node": ">=22.18"
 	},

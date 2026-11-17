@@ -5,7 +5,7 @@ import { api } from "../../convex/_generated/api";
 /**
  * The web app manifest, so visitors can add the map to their home screen.
  * `?start=` is the page it was installed from, / or the public address
- * /m/<slug>; the installed app opens there, under the hospital's name.
+ * /m/<slug>; the installed app opens there, as AIRMA.
  */
 export async function GET({ url }) {
   const start = url.searchParams.get("start") ?? "/";
@@ -13,12 +13,13 @@ export async function GET({ url }) {
   const hospital = await new ConvexHttpClient(PUBLIC_CONVEX_URL)
     .query(api.hospital.version, slug ? { slug } : {})
     .catch(() => null);
-  const name = hospital?.title ?? "P-Map";
+  const title = hospital?.title;
+  const name = title ? `AIRMA · ${title}` : "AIRMA";
   const manifest = {
     id: slug ? `/m/${slug}` : "/",
     name,
-    short_name: name.length > 12 ? name.replace(/^(RSUD|RSU|RS)\s+/i, "") : name,
-    description: "Peta, arah dan jadwal dokter rumah sakit.",
+    short_name: "AIRMA",
+    description: "AI Assistant Rumah Sakit Mamuju Tengah: peta, arah dan jadwal dokter.",
     lang: "id",
     start_url: slug ? `/m/${slug}` : "/",
     scope: "/",

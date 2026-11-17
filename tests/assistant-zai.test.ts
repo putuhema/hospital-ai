@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { replyZai } from '../src/lib/server/assistant-zai.ts';
+import { replyZai, withoutNoteMention } from '../src/lib/server/assistant-zai.ts';
 import { assistantContext } from '../src/lib/assistant/tools.ts';
 import { parseLayout, starterPieces } from '../src/lib/model/layout.ts';
 import type { ChatMessage, ReplyEvent } from '../src/lib/assistant/chat.ts';
@@ -109,4 +109,31 @@ test('a tool call written out as a note is not shown to the visitor', async () =
     { text: `Jam pendaftaran belum tersedia.\n\n[show_on_map: place ${pharmacy.id}]\n\nSilakan tanya bagian informasi.` },
   ]);
   assert.equal(text(await run(client, [user('pendaftaran jam berapa?')])), 'Jam pendaftaran belum tersedia.\n\nSilakan tanya bagian informasi.');
+});
+
+test('a reply that comes with note_missing_info is shown, kept for the hospital, and not asked again', async () => {
+  const { client, requests } = fakeZai([
+    { calls: [{ name: 'search_hospital_info', args: JSON.stringify({ query: 'jam besuk' }) }] },
+    {
+      text: 'Maaf, jam besuk belum tersedia. Silakan tanya bagian informasi.',
+      calls: [{ name: 'note_missing_info', args: JSON.stringify({ topic: 'besuk', subject: 'Jam Besuk' }) }],
+    },
+  ]);
+  const local = { ...ctx };
+  const out: ReplyEvent[] = [];
+  for await (const e of replyZai(client, 'glm-5', { title: 'RS Uji', faq: [], ctx: local, messages: [user('jam besuk kapan?')], context: { lang: 'id' }, signal: new AbortController().signal }))
+    out.push(e);
+  assert.equal(text(out), 'Maaf, jam besuk belum tersedia. Silakan tanya bagian informasi.');
+  assert.deepEqual(local.missing, { topic: 'besuk', subject: 'jam besuk' });
+  assert.equal(requests.length, 2);
+  assert.ok(!out.some((e) => e.type === 'status' && e.tool === 'note_missing_info'));
+});
+
+test('saying the question was noted for the hospital is taken out of the reply', () => {
+  assert.equal(
+    withoutNoteMention('Maaf, informasi cuci darah belum tersedia. Saya sudah mencatat ini agar rumah sakit dapat menambahkannya.\n\nSilakan tanya bagian informasi.'),
+    'Maaf, informasi cuci darah belum tersedia.\n\nSilakan tanya bagian informasi.',
+  );
+  assert.equal(withoutNoteMention("Sorry, that isn't listed. I've noted it for the hospital. Ask at the desk."), "Sorry, that isn't listed. Ask at the desk.");
+  assert.equal(withoutNoteMention('Pendaftaran pasien baru buka pukul 08.00.'), 'Pendaftaran pasien baru buka pukul 08.00.');
 });

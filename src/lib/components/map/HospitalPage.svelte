@@ -5,10 +5,11 @@
     import { page } from "$app/state";
     import { onMount } from "svelte";
     import { Locale } from "$lib/i18n/locale.svelte";
-    import { useQuery } from "convex-svelte";
+    import { useQuery, useConvexClient } from "convex-svelte";
     import { api } from "../../../convex/_generated/api";
     import { provideLive } from "$lib/live.svelte";
     import { MyTurn, provideMyTurn } from "$lib/my-turn.svelte";
+    import { stopAlerts } from "$lib/turn-alerts";
 
     // The hospital from the database; it updates live as the editor saves.
     let {
@@ -27,6 +28,8 @@
     // svelte-ignore state_referenced_locally
     const myTurn = new MyTurn(map.data?.slug ?? "default");
     provideMyTurn(myTurn);
+    const convex = useConvexClient();
+    myTurn.onstop = () => void stopAlerts(convex);
     // Only for the messages before the map is there; the map keeps its own.
     const locale = new Locale();
     // Without a connection the page and the hospital's data come from the phone (service-worker.ts).
@@ -54,7 +57,7 @@
 </script>
 
 <svelte:head>
-    {#if map.data}<title>{map.data.title} — P-Map</title>{:else}<title>P-Map</title>{/if}
+    {#if map.data}<title>{map.data.title} — AIRMA</title>{:else}<title>AIRMA</title>{/if}
     <!-- Installable: the home screen app opens on this page. -->
     <link rel="manifest" href="/manifest.webmanifest?start={encodeURIComponent(page.url.pathname)}" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />

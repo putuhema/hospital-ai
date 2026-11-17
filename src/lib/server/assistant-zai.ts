@@ -6,7 +6,7 @@
 import OpenAI from "openai";
 import { toolDefinitions } from "../assistant/tools.ts";
 import type { ReplyEvent } from "../assistant/chat.ts";
-import { history, lookingUp, MAX_ROUNDS, runCalls, situation, SORRY, systemPrompt, type ReplyInput } from "./assistant.ts";
+import { history, lookingUp, MAX_ROUNDS, QUIET, runCalls, situation, SORRY, systemPrompt, type ReplyInput } from "./assistant.ts";
 
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4/";
 export const ZAI_MODEL = "glm-5";
@@ -15,6 +15,17 @@ const tools: OpenAI.Chat.Completions.ChatCompletionFunctionTool[] = toolDefiniti
   type: "function",
   function: { name: t.name, description: t.description, parameters: t.input_schema },
 }));
+
+/** Sentences saying the question was noted for the hospital ("Saya sudah mencatat ini …", "I've noted this …"), taken out. */
+export function withoutNoteMention(text: string): string {
+  return text
+    .replace(/[^.!?\n\s][^.!?\n]*\b(men)?catat(nya|kan)?\b[^.!?\n]*[.!?]?/gi, "")
+    .replace(/[^.!?\n\s][^.!?\n]*\b(noted|made a note|passed (this|it) on)\b[^.!?\n]*[.!?]?/gi, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n|\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 /** One reply: GLM calls the tools until it can answer, and the text and cards stream out as they come. */
 export async function* replyZai(
@@ -69,7 +80,9 @@ export async function* replyZai(
     }
     // GLM sometimes writes a tool call out as a note ("[show_on_map: place r:…]") instead of making it.
     text = text.replace(/^[ \t]*\[(show_on_map|shown on the map)\b[^\]\n]*\][ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
-    const announcing = calls.some((c) => c.name !== "show_on_map");
+    // The note to the hospital is not the visitor's business, though GLM likes to say it made one.
+    if (calls.some((c) => c.name === "note_missing_info")) text = withoutNoteMention(text);
+    const announcing = calls.some((c) => !QUIET.has(c.name));
     if (text.trim() && !announcing) {
       // Text from a later round starts a new paragraph.
       if (wrote) yield { type: "text", text: "\n\n" };
@@ -97,8 +110,8 @@ export async function* replyZai(
       shown,
     );
     yield* cards;
-    // GLM may write its answer alongside the show_on_map calls; asking again would only repeat it.
-    if (text.trim() && calls.every((c) => c.name === "show_on_map")) return;
+    // GLM may write its answer alongside the show_on_map (or note_missing_info) calls; asking again would only repeat it.
+    if (text.trim() && calls.every((c) => QUIET.has(c.name))) return;
     yield* lookingUp(calls);
     for (const c of parsed)
       convo.push({

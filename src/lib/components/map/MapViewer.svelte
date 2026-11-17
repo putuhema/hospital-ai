@@ -24,6 +24,7 @@
     import { walkwayAt } from "$lib/model/interiors";
     import { hoursStatus } from "$lib/model/place-info";
     import type { Point, WalkingNetwork } from "$lib/wayfinding/navigation";
+    import { emergencyPlace } from "$lib/wayfinding/shortcuts";
     import { buildGrid, places, planRoute, progress, stepText, walkMinutes, type Place } from "$lib/wayfinding/routing";
     import { createFollower, STRIDE } from "$lib/wayfinding/follow";
     import { createTurnWindow } from "$lib/wayfinding/motion";
@@ -96,6 +97,35 @@
         /** Steps of the route ticked off; the map greys the way walked. */
         done = $state(0),
         journeyHeight = $state(0);
+    /** Bigger text for older eyes; remembered on this phone. */
+    let largeText = $state(false);
+    const TEXT_KEY = "airma-large-text";
+    onMount(() => {
+        try {
+            largeText = localStorage.getItem(TEXT_KEY) === "1";
+        } catch {
+            // Private browsing: normal size.
+        }
+    });
+    function toggleText() {
+        largeText = !largeText;
+        try {
+            if (largeText) localStorage.setItem(TEXT_KEY, "1");
+            else localStorage.removeItem(TEXT_KEY);
+        } catch {
+            // Kept for this visit only.
+        }
+    }
+    /** The IGD, straight away: the nearest one, with the route when we know where they are. */
+    function emergency() {
+        const igd = emergencyPlace(placeList, grid, from);
+        if (!igd) return void open("chat");
+        to = igd;
+        about = false;
+        stepping = false;
+        if (!wide) sheetOpen = false;
+        else show("route");
+    }
     let questions = $derived(answered(faq));
     let landmarks = $derived(network.nodes.filter((n) => n.name.trim()));
 
@@ -668,6 +698,16 @@
         if (drag > 120 || speed > 0.5) sheetOpen = false;
         drag = 0;
     }
+    /**
+     * A WhatsApp message with the place and a link that opens AIRMA on it, so
+     * family can find the ward: "Perawatan Kelas 1 · Gedung B di RSUD …".
+     */
+    function whatsApp(place: Place) {
+        const base = shareUrl ?? (typeof location === "undefined" ? "" : location.origin + location.pathname);
+        const where = place.building && place.building !== place.name ? `${place.name} · ${place.building}` : place.name;
+        const text = t("shareWhatsAppText", { place: where, hospital: title, link: `${base}?to=${encodeURIComponent(place.id)}` });
+        return `https://wa.me/?text=${encodeURIComponent(text)}`;
+    }
     /** The route when there is one, else the map. Phones open their share sheet. */
     async function share() {
         const link = shareUrl ? shareUrl + (to ? location.search : "") : to ? location.href : location.origin;
@@ -688,7 +728,7 @@
 </script>
 
 <svelte:head
-    ><title>{title} — P-Map</title><meta name="description" content={t("metaDescription")} /><meta
+    ><title>{title} — AIRMA</title><meta name="description" content={t("metaDescription")} /><meta
         name="theme-color"
         content="#f6f3ea"
     /></svelte:head
@@ -705,6 +745,7 @@
 />
 <div
     class="concierge"
+    class:large-text={largeText}
     class:picking
     class:mobile={ready && !wide}
     class:sheet-open={ready && !wide && sheetOpen}
@@ -766,6 +807,16 @@
                 <small>{t("guide")}</small>
                 <h1>{title}</h1>
             </div>
+            <button class="igd" onclick={emergency} aria-label={t("emergencyGo")} title={t("emergencyGo")}
+                ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>IGD</button
+            >
+            <button
+                class="text-size"
+                aria-pressed={largeText}
+                aria-label={t(largeText ? "textNormal" : "textLarge")}
+                title={t(largeText ? "textNormal" : "textLarge")}
+                onclick={toggleText}><span aria-hidden="true">A<b>A</b></span></button
+            >
             <div class="lang" role="group" aria-label={t("language")}>
                 {#each LANGS as l}<button
                         lang={l}
@@ -934,6 +985,19 @@
                             }}
                             >{t("steps")}</button
                         >{:else}<button class="go" onclick={() => open("route")}>{route ? t("steps") : t("directions")}</button>{/if}
+                    <a
+                        class="x wa"
+                        href={whatsApp(to)}
+                        target="_blank"
+                        rel="noopener"
+                        aria-label={t("shareWhatsApp")}
+                        title={t("shareWhatsApp")}
+                        ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
+                            ><path
+                                d="M12 3.5a8.5 8.5 0 0 0-7.4 12.7L3.5 20.5l4.4-1.1A8.5 8.5 0 1 0 12 3.5zm-3 4.6c.2 0 .4 0 .6.4l.8 1.9c.1.2 0 .4-.1.6l-.5.6c-.1.1-.2.3 0 .5a6.6 6.6 0 0 0 3.2 2.8c.2.1.4 0 .5-.1l.7-.8c.2-.2.3-.2.5-.1l1.9.9c.2.1.3.2.3.4 0 .6-.3 1.3-.8 1.6-.6.4-1.5.6-2.6.2a9.5 9.5 0 0 1-4.9-4.2c-.6-1-.8-2-.4-2.8.2-.5.5-.7.8-.8z"
+                            /></svg
+                        ></a
+                    >
                     <button class="x" aria-label={t("clearDestination")} onclick={() => (to = null)}
                         ><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg
                         ></button
@@ -1068,6 +1132,69 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+    /* Phones: the hospital's name on up to two lines beside the IGD, text size and language buttons. */
+    .mobile h1 {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        font-size: 16px;
+        white-space: normal;
+    }
+    .mobile .masthead .igd svg {
+        display: none;
+    }
+    .mobile .masthead .igd {
+        padding: 0 9px;
+    }
+    .igd {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        flex-shrink: 0;
+        height: 30px;
+        padding: 0 10px 0 8px;
+        border-radius: 10px;
+        background: #b8402d;
+        color: white;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        box-shadow: 0 4px 12px -6px #b8402d;
+    }
+    .igd svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 3.2;
+        stroke-linecap: round;
+    }
+    .text-size {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 34px;
+        height: 30px;
+        border-radius: 10px;
+        background: var(--paper-2);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .text-size b {
+        font-size: 15px;
+    }
+    .text-size[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--card);
+    }
+    /* Bigger text: the conversation, the place card and the queue banner grow; the map stays as it is.
+       Zoom keeps percentage widths, so the parts still fit their frame. */
+    .large-text .column > :not(.masthead),
+    .large-text .journey > *,
+    .large-text .my-turn-slot > *,
+    .large-text .launcher > * {
+        zoom: 1.2;
     }
     .lang {
         display: flex;
@@ -1553,13 +1680,16 @@
         color: var(--muted);
     }
     .where b {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
         font-family: var(--display);
         font-size: 16px;
         font-weight: 540;
         font-variation-settings: "opsz" 24;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        line-height: 1.2;
     }
     .where small {
         font-size: 12.5px;
@@ -1589,6 +1719,9 @@
     .concierge .go[aria-pressed="true"] {
         background: var(--paper-2);
         color: var(--forest);
+    }
+    .x.wa {
+        color: #1f8f4e;
     }
     .x {
         display: grid;

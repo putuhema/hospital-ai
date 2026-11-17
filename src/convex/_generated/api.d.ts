@@ -8,9 +8,13 @@
  * @module
  */
 
+import type * as alerts from "../alerts.js";
+import type * as alertsSend from "../alertsSend.js";
 import type * as answers from "../answers.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
+import type * as gaps from "../gaps.js";
+import type * as gapsDigest from "../gapsDigest.js";
 import type * as hospital from "../hospital.js";
 import type * as http from "../http.js";
 import type * as limits from "../limits.js";
@@ -23,9 +27,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  alerts: typeof alerts;
+  alertsSend: typeof alertsSend;
   answers: typeof answers;
   auth: typeof auth;
   crons: typeof crons;
+  gaps: typeof gaps;
+  gapsDigest: typeof gapsDigest;
   hospital: typeof hospital;
   http: typeof http;
   limits: typeof limits;
