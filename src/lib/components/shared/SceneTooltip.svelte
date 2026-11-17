@@ -15,6 +15,8 @@
         y: number;
     } = $props();
     const locale = useLocale();
+    // Its rooms, only when it has some: an empty building shows just its name.
+    let count = $derived((piece.rooms?.length ?? 0) + (piece.roomAssets?.length ?? 0));
 </script>
 
 <div class="room-tooltip" style={`left:${x}px;top:${y}px`} role="tooltip">
@@ -22,14 +24,12 @@
             {locale.type(roomType(room.type).name)}
         </p>
         <div>{room.w * 2} × {room.h * 2} m · {room.w * room.h * 4} m²</div>
-        <small>{piece.name}</small>{:else}<p>
-            {locale.t("roomCount", { n: (piece.rooms?.length ?? 0) + (piece.roomAssets?.length ?? 0) })}
+        <small>{piece.name}</small>{:else if count}<p>
+            {locale.t("roomCount", { n: count })}
         </p>
         {#each piece.roomAssets ?? [] as r}<div>{r.name}</div>{/each}{#each piece.rooms ?? [] as r}<div>
                 {r}
-            </div>{/each}{#if !piece.rooms?.length && !piece.roomAssets?.length}<small
-                >{locale.t("noRoomsYet")}</small
-            >{/if}{/if}
+            </div>{/each}{/if}
 </div>
 
 <style>
