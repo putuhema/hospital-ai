@@ -21,7 +21,11 @@
     import type { Key } from "$lib/i18n/messages";
     import type { Piece } from "$lib/model/layout";
     import { answered, type FaqEntry } from "$lib/model/faq";
-    import { walkwayAt } from "$lib/model/interiors";
+    import { walkwayAt, whereAt } from "$lib/model/interiors";
+    import RoamPad from "./RoamPad.svelte";
+    import MiniMap from "./MiniMap.svelte";
+    import type { RoamInput } from "$lib/scene/roam";
+    import { WANTED, type Game, type GameEvent } from "$lib/scene/guide-game";
     import { hoursStatus } from "$lib/model/place-info";
     import type { Point, WalkingNetwork } from "$lib/wayfinding/navigation";
     import { emergencyPlace } from "$lib/wayfinding/shortcuts";
@@ -97,6 +101,128 @@
         /** Steps of the route ticked off; the map greys the way walked. */
         done = $state(0),
         journeyHeight = $state(0);
+    /** Walking about the 3D map yourself, third person; the stick's steering on phones, and where they are. */
+    let roaming = $state(false),
+        roamWhere = $state("");
+    const roamPad: RoamInput = { x: 0, y: 0, run: false };
+    /** A touch screen: the on-screen stick; keys and the mouse otherwise. */
+    let touchScreen = $state(false);
+    onMount(() => (touchScreen = matchMedia("(pointer: coarse)").matches));
+    // "Antar pengunjung" (scene/guide-game.ts) while walking about: the round, as the scene reports it,
+    // the best score on this phone, and a word when something happens.
+    const BEST_KEY = "airma-guide-best";
+    let playing = $state(0),
+        game = $state.raw<Game | null>(null),
+        bestScore = $state(0),
+        newBest = $state(false),
+        flash = $state<{ title: string; line?: string; good?: boolean } | null>(null),
+        flashTimer = 0;
+    /** Where lost visitors may want to go: the pharmacy, wards, clinics, the lab and the like. */
+    let gameTargets = $derived.by(() => {
+        const wanted = placeList.filter((p) => (p.kind === "room" || p.kind === "building") && WANTED.test(`${p.name} ${p.detail}`));
+        return wanted.length >= 3 ? wanted : placeList.filter((p) => p.kind === "building");
+    });
+    let audio: AudioContext | null = null;
+    /** A short bright "ding", two notes. */
+    function ding(big = false) {
+        try {
+            audio ??= new AudioContext();
+            const now = audio.currentTime;
+            (big ? [784, 988, 1319] : [988, 1319]).forEach((hz, i) => {
+                const osc = audio!.createOscillator(),
+                    gain = audio!.createGain();
+                osc.type = "triangle";
+                osc.frequency.value = hz;
+                const at = now + i * 0.07;
+                gain.gain.setValueAtTime(0.0001, at);
+                gain.gain.exponentialRampToValueAtTime(0.16, at + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+                osc.connect(gain).connect(audio!.destination);
+                osc.start(at);
+                osc.stop(at + 0.25);
+            });
+        } catch {
+            // No sound on this device.
+        }
+    }
+    function say(next: typeof flash, ms = 2200) {
+        flash = next;
+        clearTimeout(flashTimer);
+        flashTimer = window.setTimeout(() => (flash = null), ms);
+    }
+    const buzz = (pattern: number | number[]) => {
+        try {
+            navigator.vibrate?.(pattern);
+        } catch {
+            // Not on this phone.
+        }
+    };
+    function startGame() {
+        try {
+            bestScore = Number(localStorage.getItem(BEST_KEY)) || 0;
+        } catch {
+            bestScore = 0;
+        }
+        newBest = false;
+        flash = null;
+        playing += 1;
+    }
+    function stopGame() {
+        playing = 0;
+        game = null;
+        flash = null;
+    }
+    /** What the scene reports: the round as it stands, and what just happened. */
+    function onGame(next: Game, events: GameEvent[]) {
+        game = next;
+        for (const e of events)
+            if (e.type === "picked") {
+                ding();
+                buzz(30);
+                say({ title: e.fare.who.name, line: t("guideAsk", { place: e.fare.to.name }) }, 2600);
+            } else if (e.type === "delivered") {
+                ding(true);
+                buzz([40, 40, 60]);
+                say({
+                    title: t(e.rating === "fast" ? "guideFast" : e.rating === "good" ? "guideGood" : "guideSlow"),
+                    line: t("guideThanks", { seconds: e.seconds, points: e.points }),
+                    good: true,
+                });
+            } else if (e.type === "over" && next.score > bestScore) {
+                bestScore = next.score;
+                newBest = true;
+                try {
+                    localStorage.setItem(BEST_KEY, String(bestScore));
+                } catch {
+                    // Private browsing: kept for this visit.
+                }
+            }
+    }
+    /** "0:47" on the game clock. */
+    function clockText(seconds: number) {
+        const whole = Math.ceil(seconds);
+        return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+    }
+    function startRoam() {
+        view = "3D";
+        roaming = true;
+        stopGame();
+        roamWhere = "";
+        sheetOpen = false;
+        layersOpen = false;
+    }
+    /** "Di Poliklinik · Ruang Tunggu" while walking: the room and building they're in, or outside. */
+    /** Where the walker is and faces, and the route the arrow follows, for the mini map. */
+    let roamAt = $state.raw<(Point & { facing: number; route: Point[] }) | null>(null),
+        lastWhere = { x: NaN, y: NaN };
+    function roamedTo(at: Point & { facing: number; route: Point[] }) {
+        roamAt = at;
+        // "You are in" needn't change ten times a second: only after a few steps.
+        if (Math.hypot(at.x - lastWhere.x, at.y - lastWhere.y) < 0.25) return;
+        lastWhere = { x: at.x, y: at.y };
+        const here = whereAt(rooms, at);
+        roamWhere = here ? (here.room ? `${here.room.name} · ${here.piece.name}` : here.piece.name) : t("roamOutside");
+    }
     /** Bigger text for older eyes; remembered on this phone. */
     let largeText = $state(false);
     const TEXT_KEY = "airma-large-text";
@@ -736,6 +862,7 @@
 <svelte:window
     bind:innerHeight={height}
     onkeydown={(e) => {
+        if (e.key === "Escape" && roaming) return void (roaming = false);
         if (e.key === "Escape") {
             picking = false;
             layersOpen = false;
@@ -746,6 +873,7 @@
 <div
     class="concierge"
     class:large-text={largeText}
+    class:roaming
     class:picking
     class:mobile={ready && !wide}
     class:sheet-open={ready && !wide && sheetOpen}
@@ -774,6 +902,14 @@
                     {highlight}
                     {insetLeft}
                     {insetBottom}
+                    {roaming}
+                    navGrid={grid}
+                    roamStart={from ? ("id" in from ? from.point : from) : null}
+                    {roamPad}
+                    onroam={roamedTo}
+                    {playing}
+                    {gameTargets}
+                    ongame={onGame}
                     onselect={(id, roomId, point) => {
                         const keys = roomId ? [`r:${id}:${roomId}`] : [`b:${id}`, `a:${id}`];
                         choose(placeList.find((p) => keys.includes(p.id)) ?? null, point);
@@ -909,6 +1045,11 @@
                     >{t(v === "3D" ? "view3d" : "viewPlan")}</button
                 >{/each}
         </div>
+        <button class="round roam" aria-label={t("roamStart")} title={t("roamStart")} onclick={startRoam}
+            ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
+                ><circle cx="13" cy="4.5" r="2" /><path d="m9 21 2.5-6.5L14 17v4M7 12l3-4 4 1 2 4M11.5 14.5 13 9" /></svg
+            ></button
+        >
         <button class="round" aria-label={t(to ? "shareRoute" : "shareMap")} title={t(to ? "shareRoute" : "shareMap")} onclick={share}
             ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
                 ><path d="M12 15V4m-4 4 4-4 4 4M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" /></svg
@@ -1039,6 +1180,60 @@
                 >{t("cancel")}</button
             >
         </div>{/if}
+    {#if roaming}<div class="roam-ui" in:rise={{ y: 8 }}>
+            <p class="roam-where" role="status">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
+                    ><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.2" /></svg
+                >{roamWhere || t("roamOutside")}
+            </p>
+            <button
+                class="roam-done"
+                onclick={() => {
+                    stopGame();
+                    roaming = false;
+                }}>{t("roamDone")}</button
+            >
+            {#if playing && game && game.state !== "over"}<div class="game-hud" aria-live="polite">
+                    <b class="clock" class:low={game.clock < 10}>{clockText(game.clock)}</b>
+                    <span><small>{t("guideScore")}</small>{game.score.toLocaleString("id-ID")}</span>
+                    <span><small>{t("guideDelivered")}</small>{game.delivered}</span>
+                </div>
+                <p class="fare">
+                    {#if game.state === "guiding" && game.fare}<span class="tag">{t("guideLeading")}</span>{t("guideTake", {
+                            who: game.fare.who.name,
+                            place: game.fare.to.name,
+                        })}{:else if game.fare}<span class="tag find">?</span>{t("guideFind", { who: game.fare.who.name })}{:else}{t(
+                            "guideNone",
+                        )}{/if}
+                </p>{/if}
+            {#if flash}<div class="game-flash" class:good={flash.good} role="status" in:rise={{ y: 10 }}>
+                    <b>{flash.title}</b>{#if flash.line}<span>{flash.line}</span>{/if}
+                </div>{/if}
+            {#if playing && game?.state === "over"}<div class="game-over" in:rise={{ y: 12 }}>
+                    <h2>{t("guideOver")}</h2>
+                    <p>{t("guideResult", { n: game.delivered })}</p>
+                    <b class="final">{game.score.toLocaleString("id-ID")}</b>
+                    <small>{newBest ? t("guideNewBest") : t("guideBest", { n: bestScore.toLocaleString("id-ID") })}</small>
+                    <div class="game-actions">
+                        <button class="primary" onclick={startGame}>{t("guideAgain")}</button>
+                        <button onclick={stopGame}>{t("guideWalk")}</button>
+                    </div>
+                </div>{:else if !playing}<button class="game-start" onclick={startGame}
+                    ><span aria-hidden="true">🧭</span>{t("guideStart")}</button
+                >{/if}
+            <div class="roam-map">
+                <MiniMap
+                    pieces={rooms}
+                    at={roamAt}
+                    lost={playing && game?.state === "seeking" && game.fare ? { x: game.fare.from.x / 2, y: game.fare.from.z / 2 } : null}
+                    goal={playing && game?.state === "guiding" && game.fare ? { x: game.fare.to.x / 2, y: game.fare.to.z / 2 } : null}
+                    label={t("miniMap")}
+                />
+            </div>
+            {#if touchScreen}<div class="roam-pad"><RoamPad input={roamPad} label={t("roamPad")} /></div>
+                <p class="roam-hint">{t("roamHintTouch")}</p>
+            {:else}<p class="roam-hint">{t("roamHintKeys")}</p>{/if}
+        </div>{/if}
     <div class="my-turn-slot">
         <MyTurnBanner
             onopen={(id) => {
@@ -1147,6 +1342,327 @@
     }
     .mobile .masthead .igd {
         padding: 0 9px;
+    }
+    /* Walking about the map: the rest of the map's controls step aside. */
+    .roaming .launcher,
+    .roaming .journey,
+    .roaming .map-controls,
+    .roaming :global(.compass),
+    .roaming :global(.recenter),
+    .roaming :global(.orbit-help),
+    .roaming :global(.scene-options) {
+        display: none;
+    }
+    .mobile.roaming .column {
+        visibility: hidden;
+    }
+    .roam-ui {
+        position: absolute;
+        inset: 0 0 0 var(--column);
+        z-index: 8;
+        pointer-events: none;
+    }
+    .mobile .roam-ui {
+        left: 0;
+    }
+    .roam-ui > * {
+        pointer-events: auto;
+    }
+    .roam-where {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        translate: -50% 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        max-width: calc(100% - 140px);
+        margin: 0;
+        padding: 9px 14px;
+        border-radius: 999px;
+        background: #fffdf8f2;
+        box-shadow:
+            0 0 0 1px var(--line),
+            0 10px 28px -14px #1b2a2166;
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .roam-where svg {
+        flex-shrink: 0;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+    }
+    .mobile .roam-where {
+        top: calc(var(--top) + 66px);
+        left: 12px;
+        translate: none;
+        max-width: calc(100% - 130px);
+    }
+    .game-hud {
+        position: absolute;
+        top: 70px;
+        left: 50%;
+        translate: -50% 0;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 6px 16px 6px 8px;
+        border-radius: 999px;
+        background: #1b2a21d9;
+        color: white;
+        box-shadow: 0 10px 24px -12px #1b2a21aa;
+        font-variant-numeric: tabular-nums;
+    }
+    .mobile .game-hud {
+        top: calc(var(--top) + 116px);
+        left: 12px;
+        translate: none;
+    }
+    .game-hud .clock {
+        min-width: 64px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #f2b134;
+        color: #3d2700;
+        font-size: 18px;
+        text-align: center;
+    }
+    .game-hud .clock.low {
+        background: #e2574c;
+        color: white;
+        animation: tick 1s steps(2) infinite;
+    }
+    @keyframes tick {
+        50% {
+            opacity: 0.6;
+        }
+    }
+    .game-hud span {
+        display: flex;
+        flex-direction: column;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+    .game-hud small {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.7;
+    }
+    .fare {
+        position: absolute;
+        top: 122px;
+        left: 50%;
+        translate: -50% 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        max-width: min(520px, calc(100% - 32px));
+        margin: 0;
+        padding: 8px 14px 8px 8px;
+        border-radius: 14px;
+        background: #fffdf8f2;
+        box-shadow:
+            0 0 0 1px var(--line),
+            0 10px 28px -14px #1b2a2166;
+        font-size: 14px;
+        font-weight: 600;
+    }
+    .mobile .fare {
+        top: calc(var(--top) + 166px);
+        left: 12px;
+        translate: none;
+        max-width: calc(100% - 24px);
+    }
+    .fare .tag {
+        flex-shrink: 0;
+        padding: 3px 8px;
+        border-radius: 8px;
+        background: #7cc47f;
+        color: #173b1d;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .fare .tag.find {
+        width: 24px;
+        padding: 3px 0;
+        border-radius: 50%;
+        background: #f2b134;
+        color: #3d2700;
+        font-size: 14px;
+        text-align: center;
+    }
+    .game-flash {
+        position: absolute;
+        top: 34%;
+        left: 50%;
+        translate: -50% 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        max-width: calc(100% - 40px);
+        padding: 12px 20px;
+        border-radius: 18px;
+        background: #fffdf8;
+        box-shadow: 0 16px 36px -14px #1b2a21aa;
+        text-align: center;
+        pointer-events: none;
+    }
+    .game-flash b {
+        font-size: 18px;
+    }
+    .game-flash span {
+        font-size: 14px;
+        color: var(--muted);
+    }
+    .game-flash.good {
+        background: #f2b134;
+        color: #3d2700;
+    }
+    .game-flash.good span {
+        color: #5a3c06;
+    }
+    .game-over {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        translate: -50% -50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        width: min(340px, calc(100% - 32px));
+        padding: 22px 20px 18px;
+        border-radius: 22px;
+        background: #fffdf8;
+        box-shadow: 0 24px 60px -20px #1b2a21bb;
+        text-align: center;
+    }
+    .game-over h2 {
+        margin: 0;
+        font-family: var(--display);
+        font-size: 24px;
+    }
+    .game-over p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+    }
+    .game-over .final {
+        font-size: 40px;
+        font-variant-numeric: tabular-nums;
+    }
+    .game-over small {
+        color: var(--muted);
+        font-size: 13px;
+    }
+    .game-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .game-actions button {
+        height: 42px;
+        padding: 0 16px;
+        border-radius: 12px;
+        background: var(--paper-2);
+        font-weight: 700;
+    }
+    .game-actions .primary {
+        background: var(--ink);
+        color: var(--card);
+    }
+    .game-start {
+        position: absolute;
+        left: 50%;
+        bottom: 64px;
+        translate: -50% 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 48px;
+        padding: 0 22px;
+        border-radius: 999px;
+        background: #f2b134;
+        color: #3d2700;
+        font-size: 15px;
+        font-weight: 800;
+        box-shadow: 0 14px 30px -12px #7a4d00aa;
+    }
+    .mobile .game-start {
+        left: auto;
+        right: 12px;
+        translate: none;
+        bottom: calc(var(--bottom, 16px) + 92px);
+    }
+    .roam-done {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        height: 40px;
+        padding: 0 18px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--card);
+        font-size: 14px;
+        font-weight: 700;
+        box-shadow: 0 10px 24px -12px #1b2a21aa;
+    }
+    .mobile .roam-done {
+        top: calc(var(--top) + 66px);
+        right: 12px;
+    }
+    .roam-map {
+        position: absolute;
+        left: 20px;
+        bottom: 20px;
+    }
+    .mobile .roam-map {
+        left: auto;
+        right: 12px;
+        bottom: auto;
+        top: calc(var(--top) + 116px);
+    }
+    .mobile .roam-map :global(.mini-map) {
+        width: 124px !important;
+        height: 124px !important;
+    }
+    .roam-pad {
+        position: absolute;
+        left: 22px;
+        bottom: calc(var(--bottom, 16px) + 8px);
+    }
+    .roam-hint {
+        position: absolute;
+        left: 50%;
+        bottom: 20px;
+        translate: -50% 0;
+        margin: 0;
+        padding: 7px 12px;
+        border-radius: 10px;
+        background: #1b2a21b3;
+        color: white;
+        font-size: 12px;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+    .mobile .roam-hint {
+        left: auto;
+        right: 12px;
+        translate: none;
+        bottom: calc(var(--bottom, 16px) + 16px);
+        max-width: 46%;
+        white-space: normal;
+        text-align: right;
     }
     .igd {
         display: flex;

@@ -306,6 +306,35 @@ export function buildGrid(
   return { cols, rows, cost, eastWall, southWall, walls: segments, pieces, tileMeters, marks: marksOf(pieces, landmarks) };
 }
 
+/**
+ * Whether someone can step from `a` to `b` (tiles, a short step) without going
+ * through a wall or off the canvas: for walking about the 3D map. Doors are
+ * gaps in the walls, so they let you through.
+ */
+export function canStep(g: NavGrid, a: Point, b: Point): boolean {
+  if (b.x < 0 || b.y < 0 || b.x >= g.cols / RES || b.y >= g.rows / RES) return false;
+  const c = cellAt(g, a),
+    to = cellAt(g, b),
+    ti = to % g.cols,
+    tj = Math.floor(to / g.cols);
+  // Across the cells in between, one axis at a time; a diagonal may go either way round.
+  const walk = (xFirst: boolean) => {
+    let cell = c;
+    for (let n = 0; n < 64 && cell !== to; n++) {
+      const i = cell % g.cols,
+        j = Math.floor(cell / g.cols);
+      const di = Math.sign(ti - i),
+        dj = Math.sign(tj - j);
+      const stepX = xFirst ? di !== 0 : dj === 0;
+      const [si, sj] = stepX ? [di, 0] : [0, dj];
+      if (!open(g, cell, si, sj)) return false;
+      cell += si + sj * g.cols;
+    }
+    return cell === to;
+  };
+  return walk(true) || walk(false);
+}
+
 const cellAt = (g: NavGrid, p: Point) =>
   Math.min(g.rows - 1, Math.max(0, Math.floor(p.y * RES))) * g.cols +
   Math.min(g.cols - 1, Math.max(0, Math.floor(p.x * RES)));

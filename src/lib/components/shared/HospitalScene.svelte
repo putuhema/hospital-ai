@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import * as THREE from "three";
     import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
-    import { center, isArea, isBuilding, isOpenAir } from "$lib/model/interiors";
+    import { center, isArea, isBuilding, isOpenAir, whereAt } from "$lib/model/interiors";
     import type { Piece } from "$lib/model/layout";
     import type { Point } from "$lib/wayfinding/navigation";
     import { createScenery, LAWN } from "$lib/scene/scenery";
@@ -16,6 +16,9 @@
     import { clearGroup } from "$lib/scene/dispose";
     import { batchMeshes } from "$lib/scene/batch";
     import { createCrowd, stepEvery } from "$lib/scene/crowd";
+    import { chasePose, createAvatar, createBeacon, createLost, keysInput, wayAlong, look, roamer, step, zoom as zoomRoam, type RoamInput, type Roamer } from "$lib/scene/roam";
+    import { canStep, planRoute, type NavGrid, type Place } from "$lib/wayfinding/routing";
+    import { budgetFor, newGame, PEOPLE, tick as tickGame, type Fare, type Game, type GameEvent } from "$lib/scene/guide-game";
     import { daylightAt, sunFrom } from "$lib/scene/daylight";
     import { CHATTER, CHATTER_BY } from "$lib/i18n/chatter";
     import { defaultPrefs, loadPrefs } from "$lib/scene/display-prefs";
@@ -49,6 +52,14 @@
         labels = true,
         insetLeft = 0,
         insetBottom = 0,
+        roaming = false,
+        navGrid = null,
+        roamStart = null,
+        roamPad = null,
+        onroam,
+        playing = 0,
+        gameTargets = [],
+        ongame,
     }: {
         presentation?: boolean;
         pan?: boolean;
@@ -91,6 +102,25 @@
         insetLeft?: number;
         /** Pixels at the bottom covered by a sheet; the campus rises clear of it. */
         insetBottom?: number;
+        /** Walking about yourself, third person (scene/roam.ts): the camera follows a figure you steer. */
+        roaming?: boolean;
+        /** Where the walls are, so the figure can't walk through them. */
+        navGrid?: NavGrid | null;
+        /** Where to start walking (tiles); a gate or a door when not given. */
+        roamStart?: Point | null;
+        /** Steering from an on-screen stick (phones), read every frame. */
+        roamPad?: RoamInput | null;
+        /**
+         * Where the figure is (tiles) and which way it faces (radians, 0 towards +y), ten times a second,
+         * with the route the arrow follows (tiles), for the mini map and "you are in".
+         */
+        onroam?: (at: Point & { facing: number; route: Point[] }) => void;
+        /** The guiding game (scene/guide-game.ts) while walking about: a new number starts a new round; 0 for none. */
+        playing?: number;
+        /** Where lost visitors may want to go: the pharmacy, wards, clinics and the like. */
+        gameTargets?: Place[];
+        /** The game as it stands, a few times a second, and what just happened. */
+        ongame?: (game: Game, events: GameEvent[]) => void;
     } = $props();
     const locale = useLocale(),
         t = locale.t;
@@ -144,6 +174,7 @@
         roomNames;
         insetLeft;
         insetBottom;
+        roaming;
         greenery;
         canvasWidth;
         canvasHeight;
@@ -201,6 +232,328 @@
             /** When the visitor last touched the map; the crowd walks once they have let it be a moment. */
             touched = 0;
         const touch = () => (touched = performance.now());
+
+        // Walking about yourself (scene/roam.ts): the figure, the keys held, and the camera's lens before.
+        const avatar = presentation ? createAvatar() : null;
+        if (avatar) scene.add(avatar.group);
+        // The guiding game: a lost visitor, the beam where they want to go, and the round under way.
+        const lost = avatar ? createLost() : null,
+            beacon = avatar ? createBeacon() : null;
+        if (lost && beacon) scene.add(lost.group, beacon.group);
+        let game: Game | null = null,
+            round = 0,
+            fareTo: Place | null = null,
+            wayPoints: { x: number; z: number }[] = [],
+            plannedAt = 0,
+            reportedAt = 0,
+            who = Math.floor(Math.random() * PEOPLE.length);
+        const fareTargets = new WeakMap<Fare, Place>();
+        /** The next lost visitor: somewhere along the walks, 15 m or more from the walker, wanting a place a walk away. */
+        function makeFare(): Fare | null {
+            const walks = strolls.filter((w) => w.length > 1);
+            if (!navGrid || !walks.length || !gameTargets.length) return null;
+            for (let tries = 0; tries < 12; tries++) {
+                const w = walks[Math.floor(Math.random() * walks.length)],
+                    i = Math.floor(Math.random() * (w.length - 1)),
+                    k = Math.random();
+                const spot = { x: w[i].x + (w[i + 1].x - w[i].x) * k, y: w[i].y + (w[i + 1].y - w[i].y) * k };
+                if (me && Math.hypot(spot.x * 2 - me.x, spot.y * 2 - me.z) < 15) continue;
+                const place = gameTargets[Math.floor(Math.random() * gameTargets.length)];
+                const route = planRoute(navGrid, spot, place);
+                if (!route || route.meters < 20) continue;
+                const end = route.points.at(-1)!;
+                const fare: Fare = {
+                    who: PEOPLE[who++ % PEOPLE.length],
+                    from: { x: spot.x * 2, z: spot.y * 2 },
+                    to: { x: end.x * 2, z: end.y * 2, name: place.name },
+                    budget: budgetFor(route.meters),
+                };
+                fareTargets.set(fare, place);
+                return fare;
+            }
+            return null;
+        }
+        /** Show the visitor waiting for the walker, or nothing. */
+        function waiting(fare: Fare | null) {
+            beacon?.hide();
+            fareTo = null;
+            wayPoints = [];
+            plannedAt = 0;
+            if (fare) lost?.wait(fare.who.look, fare.from.x, fare.from.z);
+            else lost?.hide();
+        }
+        function endGame() {
+            game = null;
+            lost?.hide();
+            beacon?.hide();
+            avatar?.pointTo(null);
+        }
+        /** A round of the game, stepped with the walker: start a new one when asked, steer the arrow, report. */
+        function playGame(time: number, dt: number) {
+            if (!me || !avatar) return;
+            if (playing && playing !== round) {
+                round = playing;
+                game = newGame(makeFare());
+                waiting(game.fare);
+                ongame?.(game, []);
+            }
+            if (!game || !playing) {
+                if (game) endGame();
+                return avatar.pointTo(null);
+            }
+            const out = tickGame(game, dt, { x: me.x, z: me.z }, makeFare);
+            game = out.game;
+            for (const e of out.events) {
+                if (e.type === "picked") {
+                    lost?.follow();
+                    beacon?.show(e.fare.to.x, e.fare.to.z);
+                    fareTo = fareTargets.get(e.fare) ?? null;
+                    plannedAt = 0;
+                    wayPoints = [];
+                } else if (e.type === "delivered") waiting(game.fare);
+                else if (e.type === "over") {
+                    lost?.hide();
+                    beacon?.hide();
+                }
+            }
+            lost?.update(time, { x: me.x, z: me.z });
+            beacon?.update(time);
+            // The arrow follows the walking route: to the one waiting, then to where they want to go.
+            const goal: Place | null =
+                game.state === "guiding"
+                    ? fareTo
+                    : game.state === "seeking" && game.fare
+                      ? // Where they stand, as a spot on the map.
+                        { id: "lost", name: "", kind: "landmark", detail: "", point: { x: game.fare.from.x / 2, y: game.fare.from.z / 2 } }
+                      : null;
+            if (goal && navGrid) {
+                if (time - plannedAt > 500) {
+                    plannedAt = time;
+                    const route = planRoute(navGrid, { x: me.x / 2, y: me.z / 2 }, goal);
+                    wayPoints = route ? route.points.map((p) => ({ x: p.x * 2, z: p.y * 2 })) : [];
+                }
+                avatar.pointTo(wayAlong(wayPoints, me.x, me.z));
+            } else avatar.pointTo(null);
+            if (out.events.length || time - reportedAt > 150) {
+                reportedAt = time;
+                ongame?.(game, out.events);
+            }
+        }
+        let me: Roamer | null = null,
+            /** 0 outdoors, 1 inside a building, eased between. */
+            indoors = 0,
+            roamedAt = 0,
+            toldAt = 0,
+            mapFov = camera.fov;
+        const held = new Set<string>();
+        const typing = (e: KeyboardEvent) => (e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]");
+        const ROAM_KEYS = new Set(["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift"]);
+        function keyDown(e: KeyboardEvent) {
+            const k = e.key.toLowerCase();
+            if (!me || typing(e) || !ROAM_KEYS.has(k)) return;
+            held.add(k);
+            // The arrows would scroll the page.
+            e.preventDefault();
+        }
+        const keyUp = (e: KeyboardEvent) => held.delete(e.key.toLowerCase());
+        const letGo = () => held.clear();
+        addEventListener("keydown", keyDown);
+        addEventListener("keyup", keyUp);
+        addEventListener("blur", letGo);
+        // Dragging turns the camera around the figure; two fingers pinch it nearer or farther.
+        const fingers = new Map<number, { x: number; y: number }>();
+        let pinch = 0;
+        function lookDown(e: PointerEvent) {
+            if (!me) return;
+            fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (fingers.size === 2) {
+                const [a, b] = [...fingers.values()];
+                pinch = Math.hypot(a.x - b.x, a.y - b.y);
+            }
+        }
+        function lookMove(e: PointerEvent) {
+            const was = fingers.get(e.pointerId);
+            if (!me || !was) return;
+            fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (fingers.size >= 2) {
+                const [a, b] = [...fingers.values()],
+                    apart = Math.hypot(a.x - b.x, a.y - b.y);
+                if (pinch) me = zoomRoam(me, pinch / Math.max(1, apart));
+                pinch = apart;
+            } else me = look(me, e.clientX - was.x, e.clientY - was.y);
+            dirty = true;
+        }
+        const lookUp = (e: PointerEvent) => {
+            fingers.delete(e.pointerId);
+            if (fingers.size < 2) pinch = 0;
+        };
+        function lookWheel(e: WheelEvent) {
+            if (!me) return;
+            e.preventDefault();
+            me = zoomRoam(me, Math.exp(e.deltaY * 0.0015));
+            dirty = true;
+        }
+        dom.addEventListener("pointerdown", lookDown);
+        addEventListener("pointermove", lookMove);
+        addEventListener("pointerup", lookUp);
+        addEventListener("pointercancel", lookUp);
+        dom.addEventListener("wheel", lookWheel, { passive: false });
+        /** In metres on the ground: whether a short step is clear of walls (the grid is in tiles). */
+        const clear = (a: { x: number; z: number }, b: { x: number; z: number }) =>
+            !navGrid || canStep(navGrid, { x: a.x / 2, y: a.z / 2 }, { x: b.x / 2, y: b.z / 2 });
+
+        /** A stroll starts in a doorway, on the wall: start a metre along it instead (tiles). */
+        function offDoor(path: Point[] | undefined) {
+            if (!path) return null;
+            const [a, b] = path,
+                d = Math.hypot(b.x - a.x, b.y - a.y) || 1,
+                k = Math.min(1, 1 / d);
+            return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+        }
+        /** Start or stop walking about, as `roaming` says. */
+        function roam() {
+            if (!avatar || roaming === !!me) return;
+            if (roaming) {
+                const start = roamStart ?? offDoor(strolls.find((w) => w.length > 1)) ?? { x: canvasWidth / 2, y: canvasHeight / 2 };
+                me = roamer(start.x * 2, start.y * 2, rig.heading());
+                avatar.group.visible = true;
+                round = 0;
+                controls.enabled = false;
+                // A wider lens, close behind them, as in a game.
+                chasing.copy(controls.target);
+                mapFov = camera.fov;
+                camera.fov = 55;
+                camera.updateProjectionMatrix();
+            } else {
+                const at = me!;
+                me = null;
+                solidAll();
+                held.clear();
+                avatar.group.visible = false;
+                endGame();
+                controls.enabled = true;
+                camera.fov = mapFov;
+                camera.updateProjectionMatrix();
+                // Back to the map, over where they stopped.
+                controls.target.set(at.x, 0, at.z);
+                camera.lookAt(controls.target);
+                rig.frameRoute(new THREE.Box3(new THREE.Vector3(at.x - 14, 0, at.z - 14), new THREE.Vector3(at.x + 14, 1, at.z + 14)), 10);
+            }
+            dirty = true;
+        }
+        const chaseTarget = new THREE.Vector3(),
+            chasing = new THREE.Vector3();
+
+        // Walking into a building (or under a corridor's roof): it fades to see-through, so you stay in
+        // sight, and its rooms show. A building between the camera and you fades too, as in a game.
+        // Each turns solid again, easing back, once you leave it or it is no longer in the way.
+        // Other buildings keep their roofs.
+        // Its roof (everything above head height) goes altogether; the walls below fade.
+        const SEE_THROUGH = 0.16,
+            IN_THE_WAY = 0.22,
+            ABOVE_HEAD = 2.4;
+        type Faded = {
+            looks: { m: THREE.Material; opacity: number; transparent: boolean; depthWrite: boolean }[];
+            /** The roof and what else is above head height, hidden while faded. */
+            lifted: THREE.Object3D[];
+            rooms: THREE.Object3D | null;
+            fade: number;
+        };
+        const faded = new Map<number, Faded>();
+        let inWay = new Set<number>(),
+            lookedAt = 0;
+        const sightLine = new THREE.Raycaster();
+        function solid(id: number) {
+            const f = faded.get(id);
+            if (!f) return;
+            for (const l of f.looks) Object.assign(l.m, { opacity: l.opacity, transparent: l.transparent, depthWrite: l.depthWrite, needsUpdate: true });
+            for (const o of f.lifted) o.visible = true;
+            if (f.rooms) buildings.remove(f.rooms);
+            f.rooms?.traverse((o) => {
+                if (o instanceof THREE.Mesh) {
+                    o.geometry.dispose();
+                    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+                }
+            });
+            faded.delete(id);
+        }
+        const solidAll = () => [...faded.keys()].forEach(solid);
+        function fadeIn(piece: Piece, rooms: boolean): Faded {
+            const looks: Faded["looks"] = [],
+                lifted: THREE.Object3D[] = [],
+                seen = new Set<THREE.Material>(),
+                box = new THREE.Box3();
+            for (const o of buildings.children)
+                if (o.userData.pieceId === piece.id)
+                    o.traverse((m) => {
+                        if (!(m instanceof THREE.Mesh)) return;
+                        if (box.setFromObject(m).min.y > ABOVE_HEAD) {
+                            m.visible = false;
+                            lifted.push(m);
+                            return;
+                        }
+                        for (const mat of Array.isArray(m.material) ? m.material : [m.material])
+                            if (!seen.has(mat)) {
+                                seen.add(mat);
+                                looks.push({ m: mat, opacity: mat.opacity, transparent: mat.transparent, depthWrite: mat.depthWrite });
+                                Object.assign(mat, { transparent: true, depthWrite: false, needsUpdate: true });
+                            }
+                    });
+            const f: Faded = { looks, lifted, rooms: null, fade: 1 };
+            faded.set(piece.id, f);
+            if (rooms) showRooms(piece, f);
+            return f;
+        }
+        /** Its rooms and inner walls, as with the roofs off: the walls that stop you, in sight. */
+        function showRooms(piece: Piece, f: Faded) {
+            if (f.rooms || !isBuilding(piece)) return;
+            f.rooms = pieceModel(piece, templates.get(piece.kind), pieces, true).interior;
+            if (!f.rooms) return;
+            // Made for this visit: freed with the buildings if they are rebuilt meanwhile.
+            f.rooms.traverse((o) => (o.userData.generated = true));
+            buildings.add(f.rooms);
+        }
+        /** The pieces between the camera and the walker, looked for a few times a second. */
+        function inTheWay(head: THREE.Vector3) {
+            const toward = head.clone().sub(camera.position),
+                far = toward.length();
+            sightLine.set(camera.position, toward.normalize());
+            sightLine.far = far - 0.6;
+            const ids = new Set<number>();
+            for (const hit of sightLine.intersectObjects(buildings.children, true)) {
+                let o: THREE.Object3D | null = hit.object;
+                while (o && o.parent !== buildings) o = o.parent;
+                const id = o?.userData.pieceId;
+                if (typeof id === "number") ids.add(id);
+            }
+            return ids;
+        }
+        /** Fade what the walker is in and what hides them; ease the rest back to solid. */
+        function seeThrough(at: Point, head: THREE.Vector3, time: number, dt: number) {
+            const here = whereAt(pieces, at)?.piece,
+                roofed = here && !isOpenAir(here) ? here : null;
+            if (time - lookedAt > 120) {
+                lookedAt = time;
+                inWay = inTheWay(head);
+            }
+            const want = new Map<number, number>();
+            for (const id of inWay) want.set(id, IN_THE_WAY);
+            if (roofed) want.set(roofed.id, SEE_THROUGH);
+            for (const [id, to] of want) {
+                const piece = pieces.find((p) => p.id === id);
+                if (!piece) continue;
+                const f = faded.get(id) ?? fadeIn(piece, id === roofed?.id);
+                if (id === roofed?.id) showRooms(piece, f);
+                f.fade = Math.max(to, f.fade - dt * 3);
+                for (const l of f.looks) l.m.opacity = l.opacity * f.fade;
+            }
+            for (const [id, f] of faded) {
+                if (want.has(id)) continue;
+                f.fade = Math.min(1, f.fade + dt * 3);
+                for (const l of f.looks) l.m.opacity = l.opacity * f.fade;
+                if (f.fade >= 1) solid(id);
+            }
+        }
 
         // The light of the hour, from the visitor's clock (?hour=21 shows another
         // hour): the sun crossing east to west, warm evenings, lit windows at night.
@@ -308,6 +661,8 @@
         }
 
         function buildPieces() {
+            // The models are made anew: the building walked into is faded again next frame.
+            faded.clear();
             clearBuildings();
             for (const p of pieces) {
                 // Open-air pieces are built without a Blender template.
@@ -371,6 +726,7 @@
 
         sync = () => {
             if (destroyed) return;
+            roam();
             if (!presentation) controls.mouseButtons.LEFT = pan ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
             const size = `${canvasWidth}:${canvasHeight}`;
             if (size !== canvasSize) {
@@ -556,9 +912,39 @@
             frame = requestAnimationFrame(animate);
             // The editor moves buildings and ghosts under the pointer: it always draws.
             if (!presentation) dirty = true;
-            if (rig.tick()) dirty = true;
-            if (controls.update()) dirty = true;
-            rig.bound();
+            if (me && avatar) {
+                // Walking about: steer the figure, and the camera follows behind, easing after it.
+                const dt = roamedAt ? (time - roamedAt) / 1000 : 0;
+                roamedAt = time;
+                const keys = keysInput(held),
+                    pad = roamPad && Math.hypot(roamPad.x, roamPad.y) > 0.05 ? roamPad : null;
+                me = step(me, pad ?? keys, dt, clear);
+                avatar.place(me);
+                playGame(time, dt);
+                // Indoors the camera looks down more steeply, over the walls, and comes a little nearer.
+                const here = whereAt(pieces, { x: me.x / 2, y: me.z / 2 })?.piece;
+                indoors += ((here && !isOpenAir(here) ? 1 : 0) - indoors) * (1 - Math.exp(-dt * 4));
+                const { position, target } = chasePose({
+                        ...me,
+                        pitch: THREE.MathUtils.lerp(me.pitch, Math.max(me.pitch, 1.08), indoors),
+                        distance: me.distance * (1 - 0.15 * indoors),
+                    }),
+                    ease = 1 - Math.exp(-dt * 9);
+                camera.position.lerp(position, ease);
+                chasing.lerp(chaseTarget.copy(target), ease);
+                camera.lookAt(chasing);
+                seeThrough({ x: me.x / 2, y: me.z / 2 }, target, time, dt);
+                if (time - toldAt > 100) {
+                    toldAt = time;
+                    onroam?.({ x: me.x / 2, y: me.z / 2, facing: me.facing, route: game ? wayPoints.map((p) => ({ x: p.x / 2, y: p.z / 2 })) : [] });
+                }
+                dirty = true;
+            } else {
+                roamedAt = 0;
+                if (rig.tick()) dirty = true;
+                if (controls.update()) dirty = true;
+                rig.bound();
+            }
             // The route's arrows and the pin move gently; 30 frames a second is plenty.
             if ((route?.length || focusShape || !presentation) && time - pulsed > (presentation ? 32 : 0)) {
                 pulsed = time;
@@ -620,6 +1006,15 @@
             marker.dispose();
             scenery?.dispose();
             crowd?.dispose();
+            avatar?.dispose();
+            lost?.dispose();
+            beacon?.dispose();
+            removeEventListener("keydown", keyDown);
+            removeEventListener("keyup", keyUp);
+            removeEventListener("blur", letGo);
+            removeEventListener("pointermove", lookMove);
+            removeEventListener("pointerup", lookUp);
+            removeEventListener("pointercancel", lookUp);
             clearInterval(daylightTimer);
             dom.removeEventListener("pointerdown", touch);
             dom.removeEventListener("wheel", touch);

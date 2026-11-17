@@ -396,3 +396,17 @@ export function corridorDoors(b: Piece, pieces: Piece[]): Door[] {
   }
   return doors;
 }
+
+/** The piece (and room, if any) a point (tiles) stands in, for "you are in …" while walking about the map. */
+export function whereAt(pieces: Piece[], point: { x: number; y: number }): { piece: Piece; room?: RoomAsset } | null {
+  // Rooms and buildings before the corridors and paths they may touch.
+  const ordered = [...pieces].sort((a, b) => Number(isOpenAir(a)) - Number(isOpenAir(b)));
+  for (const piece of ordered) {
+    if (!inPolygon(point, footprint(piece))) continue;
+    const room = piece.roomAssets?.find(
+      (r) => point.x >= piece.x + r.x && point.x <= piece.x + r.x + r.w && point.y >= piece.y + r.y && point.y <= piece.y + r.y + r.h,
+    );
+    return { piece, ...(room && { room }) };
+  }
+  return null;
+}
