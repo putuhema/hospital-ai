@@ -15,9 +15,9 @@
     import { attachPointer, type Hover } from "$lib/scene/pointer";
     import { clearGroup } from "$lib/scene/dispose";
     import { batchMeshes } from "$lib/scene/batch";
-    import { createCrowd } from "$lib/scene/crowd";
+    import { createCrowd, stepEvery } from "$lib/scene/crowd";
     import { daylightAt, sunFrom } from "$lib/scene/daylight";
-    import { CHATTER } from "$lib/i18n/chatter";
+    import { CHATTER, CHATTER_BY } from "$lib/i18n/chatter";
     import { defaultPrefs, loadPrefs } from "$lib/scene/display-prefs";
     import SceneOptions from "./SceneOptions.svelte";
     import SceneTooltip from "./SceneTooltip.svelte";
@@ -221,6 +221,7 @@
             stage.sun.color.set(light.sun);
             stage.sun.intensity = light.sunStrength;
             stage.aim(sunFrom(h));
+            crowd?.setHour(h);
             scenery?.setLawn(light.lawn);
             renderer.setClearColor(light.lawn);
             // Windows glow warm from dusk on.
@@ -238,14 +239,18 @@
 
         // People say something when tapped, and now and then on their own while
         // the map rests: one at a time, never while a route is being followed.
-        const lines = () => {
-            const own = CHATTER[locale.lang];
-            return tips.length && Math.random() < 0.3 ? tips[Math.floor(Math.random() * tips.length)] : own[Math.floor(Math.random() * own.length)];
+        const one = (list: string[]) => list[Math.floor(Math.random() * list.length)];
+        /** What walker `who` says: a cat meows, children and older people have their own lines now and then. */
+        const lines = (who: number) => {
+            const kind = crowd?.kindOf(who) ?? "adult";
+            if (kind === "cat") return one(CHATTER_BY.cat[locale.lang]);
+            if (kind !== "adult" && Math.random() < 0.6) return one(CHATTER_BY[kind][locale.lang]);
+            return tips.length && Math.random() < 0.3 ? one(tips) : one(CHATTER[locale.lang]);
         };
         function say(who: number) {
             if (!crowd) return;
             crowd.hold(who, 4.5);
-            speech = { who, text: lines(), until: performance.now() + 4500 };
+            speech = { who, text: lines(who), until: performance.now() + 4500 };
             dirty = true;
         }
         let nextChat = performance.now() + 12_000;
@@ -562,10 +567,17 @@
                 dirty = true;
             }
             if (declutter(labelGroup, camera, dom.clientWidth, dom.clientHeight, time)) dirty = true;
-            // The crowd steps along with any frame drawn anyway, and on its own (20 a second) once the map rests.
-            if (crowd && (dirty || (time - touched > 2500 && time - crowdAt >= 48))) {
-                crowdAt = time;
-                if (crowd.update(time)) dirty = true;
+            // The crowd steps along with any frame drawn anyway, and on its own once the map rests: about as
+            // often as they move a pixel (a few times a second far out, 20 up close), drawing only when
+            // someone is in view. A tapped one's hop plays smoothly straight away.
+            if (crowd && prefs.people) {
+                const lively = crowd.lively(),
+                    pixelsPerMetre = dom.clientHeight / (2 * rig.focusDistance() * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+                const every = lively ? 32 : stepEvery(pixelsPerMetre, time - touched);
+                if (dirty || ((lively || time - touched > 2500) && time - crowdAt >= every)) {
+                    crowdAt = time;
+                    if (crowd.update(time, camera)) dirty = true;
+                }
             }
             // Now and then, while the map rests and no route is followed, someone in view speaks.
             if (crowd && prefs.people && !speech && !route?.length && time - touched > 2500 && performance.now() > nextChat) {

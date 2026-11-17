@@ -43,3 +43,19 @@ export const CHATTER: Record<Lang, string[]> = {
     "Smile, it helps you get better 🙂",
   ],
 };
+
+/** Lines of their own for children, older people and the hospital's cats. */
+export const CHATTER_BY: Record<"child" | "elder" | "cat", Record<Lang, string[]>> = {
+  child: {
+    id: ["Ma, nanti beli es krim ya! 🍦", "Aku nggak takut disuntik kok!", "Wah, ada kucing! 🐱", "Masih jauh nggak, Pa?", "Aku mau jadi dokter nanti!"],
+    en: ["Mum, ice cream after, okay? 🍦", "I'm not scared of injections!", "Look, a cat! 🐱", "Are we there yet, Dad?", "I want to be a doctor one day!"],
+  },
+  elder: {
+    id: ["Pelan-pelan saja, Nak, lutut saya…", "Dulu rumah sakit ini belum sebesar ini.", "Obat darah tingginya jangan lupa diminum.", "Cucu saya yang pasang aplikasinya 😄"],
+    en: ["Slowly now, my knees…", "This hospital wasn't this big in my day.", "Don't forget the blood pressure pills.", "My grandchild put this app on for me 😄"],
+  },
+  cat: {
+    id: ["Meong~ 🐱", "Mrrr… ada ikan asin?", "Meong! (Ini lantai saya.)", "Zzz… jangan ganggu, lagi jaga IGD 😼", "Meong? Kantin ke arah sana."],
+    en: ["Meow~ 🐱", "Mrrr… any salted fish?", "Meow! (This is my floor.)", "Zzz… don't disturb, I'm guarding the ER 😼", "Meow? The canteen's that way."],
+  },
+};
