@@ -16,7 +16,6 @@
     import { cannedReplier, suggestions, type ReplyContext } from "$lib/assistant/chat";
     import { serverReplier } from "$lib/assistant/remote";
     import { Locale, provideLocale } from "$lib/i18n/locale.svelte";
-    import { LANGS } from "$lib/i18n/lang";
     import { localizeRooms } from "$lib/i18n/places";
     import type { Key } from "$lib/i18n/messages";
     import type { Piece } from "$lib/model/layout";
@@ -24,6 +23,7 @@
     import { walkwayAt, whereAt } from "$lib/model/interiors";
     import RoamPad from "./RoamPad.svelte";
     import MiniMap from "./MiniMap.svelte";
+    import SettingsDrawer from "./SettingsDrawer.svelte";
     import type { RoamInput } from "$lib/scene/roam";
     import { WANTED, type Game, type GameEvent } from "$lib/scene/guide-game";
     import { hoursStatus } from "$lib/model/place-info";
@@ -233,8 +233,14 @@
             // Private browsing: normal size.
         }
     });
-    function toggleText() {
-        largeText = !largeText;
+    let settingsOpen = $state(false);
+    /** Close the settings, back to the gear that opened them. */
+    function closeSettings() {
+        settingsOpen = false;
+        document.querySelector<HTMLButtonElement>(".masthead .settings")?.focus({ preventScroll: true });
+    }
+    function setText(large: boolean) {
+        largeText = large;
         try {
             if (largeText) localStorage.setItem(TEXT_KEY, "1");
             else localStorage.removeItem(TEXT_KEY);
@@ -862,6 +868,8 @@
 <svelte:window
     bind:innerHeight={height}
     onkeydown={(e) => {
+        // The drawer first, then walking about.
+        if (e.key === "Escape" && settingsOpen) return closeSettings();
         if (e.key === "Escape" && roaming) return void (roaming = false);
         if (e.key === "Escape") {
             picking = false;
@@ -947,20 +955,18 @@
                 ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>IGD</button
             >
             <button
-                class="text-size"
-                aria-pressed={largeText}
-                aria-label={t(largeText ? "textNormal" : "textLarge")}
-                title={t(largeText ? "textNormal" : "textLarge")}
-                onclick={toggleText}><span aria-hidden="true">A<b>A</b></span></button
+                class="settings"
+                aria-haspopup="dialog"
+                aria-expanded={settingsOpen}
+                aria-label={t("settings")}
+                title={t("settings")}
+                onclick={() => (settingsOpen = true)}
+                ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
+                    ><circle cx="12" cy="12" r="3" /><path
+                        d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
+                    /></svg
+                ></button
             >
-            <div class="lang" role="group" aria-label={t("language")}>
-                {#each LANGS as l}<button
-                        lang={l}
-                        aria-pressed={locale.lang === l}
-                        title={l === "id" ? "Bahasa Indonesia" : "English"}
-                        onclick={() => locale.set(l)}>{l.toUpperCase()}</button
-                    >{/each}
-            </div>
         </header>{/snippet}
     {#if ready && !wide}{@render masthead()}{/if}
 
@@ -1230,9 +1236,7 @@
                     label={t("miniMap")}
                 />
             </div>
-            {#if touchScreen}<div class="roam-pad"><RoamPad input={roamPad} label={t("roamPad")} /></div>
-                <p class="roam-hint">{t("roamHintTouch")}</p>
-            {:else}<p class="roam-hint">{t("roamHintKeys")}</p>{/if}
+            {#if touchScreen}<div class="roam-pad"><RoamPad input={roamPad} label={t("roamPad")} /></div>{/if}
         </div>{/if}
     <div class="my-turn-slot">
         <MyTurnBanner
@@ -1243,6 +1247,14 @@
         />
     </div>
     {#if error || notice}<p class="viewer-error" role="alert">{error || (notice && t(notice))}</p>{/if}
+    {#if settingsOpen}<SettingsDrawer
+            {largeText}
+            {roaming}
+            {touchScreen}
+            {wide}
+            ontext={setText}
+            onclose={closeSettings}
+        />{/if}
     {#if toast}<div class="toast" role="status"><span>✓</span>{toast}</div>{/if}
     {#if scanning}<QrScanner {slug} onfound={atSign} onclose={() => (scanning = false)} />{/if}
 </div>
@@ -1584,7 +1596,7 @@
     .game-start {
         position: absolute;
         left: 50%;
-        bottom: 64px;
+        bottom: 24px;
         translate: -50% 0;
         display: flex;
         align-items: center;
@@ -1602,7 +1614,7 @@
         left: auto;
         right: 12px;
         translate: none;
-        bottom: calc(var(--bottom, 16px) + 92px);
+        bottom: calc(var(--bottom, 16px) + 16px);
     }
     .roam-done {
         position: absolute;
@@ -1641,29 +1653,6 @@
         left: 22px;
         bottom: calc(var(--bottom, 16px) + 8px);
     }
-    .roam-hint {
-        position: absolute;
-        left: 50%;
-        bottom: 20px;
-        translate: -50% 0;
-        margin: 0;
-        padding: 7px 12px;
-        border-radius: 10px;
-        background: #1b2a21b3;
-        color: white;
-        font-size: 12px;
-        white-space: nowrap;
-        pointer-events: none;
-    }
-    .mobile .roam-hint {
-        left: auto;
-        right: 12px;
-        translate: none;
-        bottom: calc(var(--bottom, 16px) + 16px);
-        max-width: 46%;
-        white-space: normal;
-        text-align: right;
-    }
     .igd {
         display: flex;
         align-items: center;
@@ -1685,7 +1674,7 @@
         stroke-width: 3.2;
         stroke-linecap: round;
     }
-    .text-size {
+    .settings {
         display: grid;
         place-items: center;
         flex-shrink: 0;
@@ -1693,14 +1682,15 @@
         height: 30px;
         border-radius: 10px;
         background: var(--paper-2);
-        color: var(--muted);
-        font-size: 11px;
-        font-weight: 700;
+        color: var(--ink);
     }
-    .text-size b {
-        font-size: 15px;
+    .settings svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linejoin: round;
     }
-    .text-size[aria-pressed="true"] {
+    .settings[aria-expanded="true"] {
         background: var(--ink);
         color: var(--card);
     }
@@ -1711,31 +1701,6 @@
     .large-text .my-turn-slot > *,
     .large-text .launcher > * {
         zoom: 1.2;
-    }
-    .lang {
-        display: flex;
-        flex-shrink: 0;
-        padding: 3px;
-        border-radius: 11px;
-        background: var(--paper-2);
-    }
-    .lang button {
-        padding: 5px 8px;
-        border-radius: 8px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-        transition:
-            background 180ms,
-            color 180ms,
-            box-shadow 180ms;
-    }
-    .lang button[aria-pressed="true"],
-    .concierge .lang button[aria-pressed="true"]:hover {
-        background: var(--card);
-        color: var(--ink);
-        box-shadow: 0 1px 3px #1b2a211f;
     }
     /* Panels opening from a button (the map's layers). */
     @keyframes menu-in {
@@ -2315,7 +2280,6 @@
     }
 
     @media (hover: hover) and (pointer: fine) {
-        .concierge .lang button:hover,
         .concierge .switcher button:hover {
             background: none;
             color: var(--ink);
