@@ -1,16 +1,20 @@
-/* Onboarding: getting-started list and the quick guide dialog. */
+/* Onboarding: getting-started list and the quick guide dialog — Botanical Calm. */
 .getting-started b {
     display: block;
-    color: #33473a;
-    font-size: 13px;
-    margin-bottom: 6px;
+    color: var(--ink);
+    font-size: 13.5px;
+    font-weight: 650;
+    margin-bottom: 8px;
 }
+
 .getting-started ol {
     padding-left: 18px;
     margin: 0 0 14px;
 }
+
 .getting-started li {
-    margin: 4px 0;
+    margin: 5px 0;
+    font-size: 12.5px;
 }
 
 /* Quick guide */
@@ -21,57 +25,69 @@
     display: grid;
     place-items: center;
     padding: 16px;
-    background: #1d2b2166;
-    backdrop-filter: blur(3px);
+    background: rgba(26, 46, 35, 0.42);
+    backdrop-filter: blur(4px);
     animation: guide-fade 0.18s ease-out;
 }
+
 .guide {
     position: relative;
     width: min(560px, 100%);
     max-height: calc(100dvh - 32px);
     overflow: auto;
     padding: 28px;
-    border-radius: 18px;
-    background: #fbfcf8;
-    box-shadow: 0 30px 80px #1d2b2140;
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
     animation: guide-rise 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
 .guide small {
-    font-size: 9px;
-    letter-spacing: 1.4px;
-    color: #7b8c70;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
 }
+
 .guide h2 {
-    font:
-        26px Georgia,
-        serif;
+    font-family: var(--font-serif);
+    font-size: 26px;
+    font-weight: 550;
     margin: 6px 0 18px;
-    color: #1f3a2b;
+    color: var(--ink);
 }
+
 .guide-close {
     position: absolute;
     right: 14px;
-    top: 12px;
+    top: 14px;
     width: 32px;
     height: 32px;
     border-radius: 50%;
     font-size: 20px;
-    color: #62745a;
+    color: var(--muted);
+    display: grid;
+    place-items: center;
 }
+
 .guide-steps {
     counter-reset: step;
     list-style: none;
     padding: 0;
     margin: 0 0 18px;
 }
+
 .guide-steps li {
     counter-increment: step;
     position: relative;
     padding: 0 0 14px 42px;
-    font-size: 12.5px;
+    font-size: 13px;
     line-height: 1.5;
-    color: #52664a;
+    color: var(--ink-2);
 }
+
 .guide-steps li::before {
     content: counter(step);
     position: absolute;
@@ -82,51 +98,60 @@
     display: grid;
     place-items: center;
     border-radius: 50%;
-    background: #e3eddb;
-    color: #2f5a3b;
-    font-weight: 600;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 650;
 }
+
 .guide-steps b {
     display: block;
-    color: #243d2c;
-    font-size: 13px;
+    color: var(--ink);
+    font-size: 13.5px;
 }
+
 .guide-keys {
     display: flex;
     flex-wrap: wrap;
     gap: 8px 16px;
     padding: 14px 0;
-    border-top: 1px solid #e3e9dc;
-    border-bottom: 1px solid #e3e9dc;
-    font-size: 11px;
-    color: #62745a;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
 }
+
 .guide-keys kbd {
     padding: 2px 6px;
     margin-right: 4px;
-    border: 1px solid #d3ddca;
+    border: 1px solid var(--border-strong);
     border-bottom-width: 2px;
     border-radius: 4px;
-    background: white;
+    background: var(--surface-subtle);
     font-family: inherit;
-    font-size: 10px;
-}
-.guide-note {
     font-size: 11px;
-    color: #7b8c70;
+    color: var(--ink);
+}
+
+.guide-note {
+    font-size: 12px;
+    color: var(--muted);
     margin: 14px 0 18px;
 }
+
 @keyframes guide-fade {
     from {
         opacity: 0;
     }
 }
+
 @keyframes guide-rise {
     from {
         opacity: 0;
         transform: translateY(12px) scale(0.98);
     }
 }
+
 @media (prefers-reduced-motion: reduce) {
     .guide,
     .guide-backdrop {

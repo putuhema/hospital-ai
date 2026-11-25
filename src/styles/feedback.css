@@ -1,41 +1,46 @@
-/* Feedback: toast and empty states. */
+/* Feedback: toast, empty states, and loading overlay — Botanical Calm. */
 .toast {
     position: fixed;
-    bottom: 30px;
+    bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
-    padding: 13px 20px;
-    background: #344e37;
-    color: white;
-    border-radius: 7px;
-    box-shadow: 0 5px 25px #263b2530;
-    z-index: 30;
-    font-size: 12px;
+    padding: 10px 18px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-radius: 999px;
+    box-shadow: var(--shadow-lg);
+    z-index: 40;
+    font-size: 12.5px;
+    font-weight: 500;
     display: flex;
-    gap: 12px;
-}
-.empty {
-    padding: 30px 5px;
-    color: #8b967e;
-    font-size: 12px;
-    line-height: 1.7;
+    align-items: center;
+    gap: 8px;
 }
 
-/* The editor waits for the hospital from the database before anything can be changed. */
+.empty {
+    padding: 24px 6px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
 .loading-hospital {
     position: fixed;
     inset: 0;
     z-index: 50;
     display: grid;
     place-items: center;
-    background: #f3f5efcc;
-    backdrop-filter: blur(3px);
+    background: rgba(246, 247, 243, 0.85);
+    backdrop-filter: blur(4px);
 }
+
 .loading-hospital p {
-    padding: 12px 18px;
-    border-radius: 10px;
-    background: white;
-    box-shadow: 0 8px 25px #253a2215;
-    color: #52664a;
-    font-size: 13px;
+    padding: 12px 20px;
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
+    color: var(--ink-2);
+    font-size: 13.5px;
+    font-weight: 500;
 }

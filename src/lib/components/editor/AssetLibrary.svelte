@@ -43,11 +43,11 @@
     </div>
     <p class="muted">The building blocks of your hospital.</p>
     <div class="search">
-        <Icon name="search" size={16} /><input
+        <Icon name="search" size={15} /><input
             placeholder="Search assets…"
             bind:value={search}
             aria-label="Search assets"
-        /><kbd>⌕</kbd>
+        />
     </div>
     <div class="tabs">
         {#each categories as c}<button

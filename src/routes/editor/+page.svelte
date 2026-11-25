@@ -279,7 +279,11 @@
 >
 <svelte:window onkeydown={key} />
 <div class="app-shell">
-    <EditorRail onimport={() => document.getElementById("import")?.click()} onnotify={notify} />
+    <EditorRail
+        onimport={() => document.getElementById("import")?.click()}
+        onguide={() => (guideOpen = true)}
+        onnotify={notify}
+    />
     <div class="workspace">
         <ProjectBar
             bind:title
@@ -288,7 +292,6 @@
             problem={store.problem}
             slug={store.slug}
             onnotify={notify}
-            onguide={() => (guideOpen = true)}
             oncanvassize={() => (canvasSettings = !canvasSettings)}
             onopenmap={async () => {
                 await store.save();

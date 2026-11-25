@@ -1,15 +1,17 @@
 /* Template badge and descriptions in the asset library. */
 .template-badge {
     position: absolute;
-    left: 7px;
-    top: 7px;
+    left: 6px;
+    top: 6px;
     z-index: 1;
     padding: 2px 7px;
-    border-radius: 10px;
-    background: #344e37;
-    color: white;
-    font-size: 9px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-size: 10px;
+    font-weight: 600;
 }
+
 .asset small {
     display: -webkit-box;
     -webkit-line-clamp: 2;

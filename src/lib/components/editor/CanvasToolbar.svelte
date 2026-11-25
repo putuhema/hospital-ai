@@ -4,6 +4,7 @@
 
 <script lang="ts">
     import Icon from "./Icon.svelte";
+
     let {
         active = $bindable(),
         pan = $bindable(),
@@ -25,12 +26,13 @@
         onundo: () => void;
         onredo: () => void;
     } = $props();
+
     const views: [EditorView, string][] = [
         ["2D", "Plan"],
-        ["3D", "3D"],
+        ["3D", "3D View"],
         ["Paths", "Wayfinding"],
     ];
-    // On narrow screens only one side panel fits at a time.
+
     const narrow = () => window.matchMedia("(max-width: 900px)").matches;
     function toggleAssets() {
         assetsOpen = !assetsOpen;
@@ -42,7 +44,6 @@
     }
     function show(v: EditorView) {
         view = v;
-        // Wayfinding takes the whole canvas and ignores the editing tools.
         if (v === "Paths") {
             active = null;
             pan = false;
@@ -60,32 +61,44 @@
         aria-controls="asset-panel"
         onclick={toggleAssets}>Assets</button
     >
+
     <div class="tool-group">
         <button
             class:tool-active={active === null && !pan}
             title="Select (Esc)"
+            aria-label="Select tool"
             onclick={() => {
                 active = null;
                 pan = false;
-            }}><Icon name="arrow" size={17} /></button
-        ><span class="divider"></span><button title="Undo" disabled={!canUndo} onclick={onundo}
-            >↶</button
-        ><button title="Redo" disabled={!canRedo} onclick={onredo}>↷</button>
+            }}><Icon name="arrow" size={16} /></button
+        >
+        <button
+            class:tool-active={pan}
+            aria-pressed={pan}
+            title="Pan canvas"
+            aria-label="Pan canvas"
+            onclick={() => {
+                pan = !pan;
+                active = null;
+            }}><Icon name="hand" size={16} /></button
+        >
+        <span class="divider"></span>
+        <button title="Undo (⌘Z)" aria-label="Undo" disabled={!canUndo} onclick={onundo}>
+            <Icon name="undo" size={15} />
+        </button>
+        <button title="Redo (⇧⌘Z)" aria-label="Redo" disabled={!canRedo} onclick={onredo}>
+            <Icon name="redo" size={15} />
+        </button>
     </div>
-    <button
-        class="btn"
-        class:tool-active={pan}
-        aria-pressed={pan}
-        onclick={() => {
-            pan = !pan;
-            active = null;
-        }}>✋ Pan</button
-    >
-    <div class="view-toggle">
-        {#each views as [v, label]}<button class:active={view === v} onclick={() => show(v)}
-                >{label}</button
-            >{/each}
+
+    <div class="view-toggle" role="tablist" aria-label="Canvas view">
+        {#each views as [v, label]}
+            <button role="tab" aria-selected={view === v} class:active={view === v} onclick={() => show(v)}>
+                {label}
+            </button>
+        {/each}
     </div>
+
     <button
         class="panel-toggle"
         class:active={propertiesOpen}

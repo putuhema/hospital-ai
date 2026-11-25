@@ -1,5 +1,7 @@
 <script lang="ts">
     import { publicUrl } from "$lib/publish";
+    import Icon from "./Icon.svelte";
+
     let {
         slug,
         open = $bindable(false),
@@ -10,6 +12,7 @@
         open?: boolean;
         onnotify: (message: string) => void;
     } = $props();
+
     let link = $derived(slug ? publicUrl(slug) : "");
 
     async function copy() {
@@ -23,51 +26,62 @@
 </script>
 
 <div class="export-wrap">
-    <button class="btn primary" aria-expanded={open} onclick={() => (open = !open)}
-        >Share <span>⌄</span></button
-    >{#if open}<div class="publish-panel" role="dialog" aria-label="Share the hospital">
-            {#if link}<b>Public link</b>
+    <button class="btn primary" aria-expanded={open} onclick={() => (open = !open)}>
+        Share <Icon name="chevron-down" size={14} />
+    </button>
+    {#if open}
+        <div class="publish-panel" role="dialog" aria-label="Share the hospital">
+            {#if link}
+                <b>Public visitor link</b>
                 <p>
                     Visitors open the hospital here on their own phones. Every change you make is saved
-                    to the database and is live straight away.
+                    automatically and live straight away.
                 </p>
                 <div class="link-row">
                     <input readonly value={link} aria-label="Public link" onfocus={(e) => e.currentTarget.select()} />
                     <button class="btn" onclick={copy}>Copy</button>
                 </div>
                 <div class="actions">
-                    <a class="btn" href={link} target="_blank" rel="noopener">Open ↗</a>
+                    <a class="btn" href={link} target="_blank" rel="noopener">
+                        Open map <Icon name="external" size={13} />
+                    </a>
                 </div>
-                <a class="signs" href="/editor/signs">Print “You are here” QR signs →</a>
-            {:else}<p>Saving the hospital for the first time…</p>{/if}
-        </div>{/if}
+                <a class="signs" href="/editor/signs">
+                    <Icon name="qr" size={15} />
+                    <span>Print “You are here” QR signs →</span>
+                </a>
+            {:else}
+                <p>Saving the hospital for the first time…</p>
+            {/if}
+        </div>
+    {/if}
 </div>
 
 <style>
     .publish-panel {
         position: absolute;
         right: 0;
-        top: 43px;
+        top: calc(100% + 6px);
         width: 320px;
-        z-index: 10;
+        z-index: 30;
         display: flex;
         flex-direction: column;
         gap: 10px;
         padding: 16px;
-        background: white;
-        border: 1px solid #dfe4d9;
-        border-radius: 7px;
-        box-shadow: 0 8px 25px #253a2215;
-        font-size: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
+        font-size: 12.5px;
     }
     b {
-        font-size: 13px;
-        color: #2f4336;
+        font-size: 13.5px;
+        color: var(--ink);
     }
     p {
         margin: 0;
-        color: #6f7c69;
-        line-height: 1.45;
+        color: var(--muted);
+        line-height: 1.5;
     }
     .link-row {
         display: flex;
@@ -76,29 +90,31 @@
     .link-row input {
         flex: 1;
         min-width: 0;
-        padding: 9px 10px;
-        border: 1px solid #dfe4d9;
-        border-radius: 6px;
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface-subtle);
         font-size: 12px;
-        color: #2f4336;
+        color: var(--ink);
     }
     .actions {
         display: flex;
         justify-content: flex-end;
         gap: 6px;
     }
-    .actions a {
-        text-decoration: none;
-        color: inherit;
-    }
     .signs {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         padding: 10px 12px;
-        border-radius: 6px;
-        background: #eef3e8;
-        color: #2f4336;
+        border-radius: var(--radius-md);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 500;
         text-decoration: none;
     }
     .signs:hover {
-        background: #e3ebdb;
+        background: #dce8e0;
     }
 </style>

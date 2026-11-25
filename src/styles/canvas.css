@@ -1,88 +1,115 @@
-/* Canvas: toolbar, drawing area, 2D map pieces, compass, zoom and status bar. */
+/* Canvas: toolbar, drawing area, 2D map pieces, compass, zoom and status pill. */
 .canvas-section {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: #f0f2eb;
+    background: var(--canvas-bg);
 }
+
 .canvas-toolbar {
-    height: 53px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
-    border-bottom: 1px solid #dfe4d9;
-    background: #fafbf7;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
 }
+
 .tool-group {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
+
 .tool-group button {
-    width: 29px;
-    height: 29px;
+    width: 30px;
+    height: 30px;
     display: grid;
     place-items: center;
-    border-radius: 4px;
-    font-size: 20px;
+    border-radius: var(--radius-sm);
+    color: var(--ink-2);
 }
+
 .tool-group .tool-active {
-    background: #e6ebdf;
-    color: #506441;
+    background: var(--accent-soft);
+    color: var(--accent);
 }
+
 .divider {
     width: 1px;
     height: 16px;
-    background: #dce2d4;
+    background: var(--border);
     margin: 0 4px;
 }
+
 .view-toggle {
     padding: 3px;
-    background: #edf0e7;
-    border: 1px solid #e3e7db;
-    border-radius: 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     display: flex;
+    gap: 2px;
 }
+
 .view-toggle button {
-    font-size: 10px;
-    min-width: 31px;
-    padding: 4px 8px;
-    border-radius: 3px;
-    color: #909b86;
+    font-size: 11.5px;
+    font-weight: 500;
+    min-width: 44px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    color: var(--muted);
 }
+
+.view-toggle button:hover {
+    color: var(--ink);
+    background: transparent;
+}
+
 .view-toggle .active {
-    background: white;
-    box-shadow: 0 1px 3px #2c3f271a;
-    color: #485d3d;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    color: var(--ink);
+    font-weight: 600;
 }
+
 .canvas {
     flex: 1;
     position: relative;
     overflow: hidden;
     min-height: 550px;
-    background: radial-gradient(ellipse at center, #f2f4ec, #ecf0e6);
+    background: radial-gradient(ellipse at center, #f3f5ee, var(--canvas-bg));
 }
+
 .canvas.placing {
     cursor: crosshair;
 }
+
 .canvas-title {
     position: absolute;
     left: 20px;
     top: 20px;
     z-index: 1;
-    font-size: 10px;
-    color: #617256;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--ink-2);
     display: flex;
     align-items: center;
     gap: 7px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
 }
+
 .canvas-title small {
-    padding-left: 10px;
-    border-left: 1px solid #cfd7c5;
-    color: #97a08b;
-    font-size: 9px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border-strong);
+    color: var(--muted);
+    font-size: 11px;
 }
+
 .drawing-wrap {
     height: 100%;
     width: 100%;
@@ -92,28 +119,34 @@
     justify-content: center;
     transform-origin: center;
 }
+
 .map {
     width: 100%;
     max-height: 100%;
     overflow: visible;
 }
+
 .map-piece {
     cursor: pointer;
 }
+
 .building-label {
     font-size: 11px;
     font-weight: 600;
-    fill: #3f554b;
+    fill: var(--ink);
 }
+
 .building-size {
-    font-size: 9px;
-    fill: #627267;
+    font-size: 9.5px;
+    fill: var(--muted);
 }
+
 .plot-label {
-    font-size: 8px;
-    letter-spacing: 2px;
-    fill: #95a08b;
+    font-size: 9px;
+    letter-spacing: 1.8px;
+    fill: var(--muted-2);
 }
+
 .compass {
     position: absolute;
     right: 24px;
@@ -122,87 +155,109 @@
     flex-direction: column;
     align-items: center;
     gap: 4px;
-    font-size: 9px;
-    color: #7c8b70;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--muted);
 }
+
 .canvas-bottom {
     position: absolute;
-    bottom: 19px;
+    bottom: 18px;
     left: 18px;
     right: 18px;
     display: flex;
     justify-content: space-between;
 }
+
 .grid-button,
 .zoom {
-    background: #ffffffdc;
-    border: 1px solid #dfe5d6;
-    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 7px 10px;
-    box-shadow: 0 2px 4px #34453105;
-    font-size: 10px;
+    gap: 8px;
+    padding: 6px 10px;
+    box-shadow: var(--shadow-sm);
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--ink-2);
 }
+
 .grid-button span {
-    font-size: 8px;
-    padding: 2px 4px;
-    border-radius: 3px;
-    background: #eaf0e1;
-    color: #648052;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
 }
+
 .zoom {
-    padding: 4px;
+    padding: 4px 6px;
     gap: 4px;
 }
+
 .zoom button {
-    width: 23px;
-    height: 25px;
-    font-size: 16px;
-    border-radius: 3px;
+    width: 26px;
+    height: 26px;
+    font-size: 15px;
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
 }
+
 .zoom > span:not(.divider) {
-    font-size: 10px;
-    min-width: 37px;
+    font-size: 11.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 40px;
     text-align: center;
+    color: var(--ink);
 }
+
 .canvas-status {
-    height: 38px;
-    border-top: 1px solid #dfe4d9;
-    background: #fafbf7;
+    height: 36px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
     display: flex;
     align-items: center;
-    padding: 0 16px;
-    gap: 20px;
-    color: #98a08e;
-    font-size: 8px;
+    padding: 0 14px;
+    gap: 16px;
+    color: var(--muted);
+    font-size: 11px;
 }
+
 .canvas-status > span {
     display: flex;
     align-items: center;
     gap: 6px;
 }
+
 .canvas-status i {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
-    background: #77966a;
+    background: var(--success);
 }
+
 .canvas-status b {
-    font-size: 7px;
-    font-weight: 500;
-    color: #708460;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--accent);
 }
+
 .right-status {
     margin-left: auto;
 }
+
 /* Car parks on the plan: a "P" badge and a light name on the asphalt. */
 .parking-badge rect {
     fill: #3a5ba8;
     stroke: white;
     stroke-width: 2;
 }
+
 .parking-badge text {
     fill: white;
     font-size: 15px;
@@ -210,28 +265,33 @@
     text-anchor: middle;
     pointer-events: none;
 }
+
 .building-label.parking-label {
     fill: white;
     paint-order: stroke;
     stroke: #4c5357;
     stroke-width: 3px;
 }
+
 /* Gateways on the plan: the entrance's pillars and beam, the parking gate's booth and arm. */
 .gateway-beam {
     stroke: #2f7d44;
     stroke-width: 5;
 }
+
 .gateway-pillar {
     fill: #d8d2c4;
     stroke: #6f6a5e;
     stroke-width: 1.5;
 }
+
 .gateway-arm {
     stroke: #d24b3b;
     stroke-width: 4;
     stroke-dasharray: 8 6;
     stroke-linecap: round;
 }
+
 .gateway-booth {
     fill: #f1efe8;
     stroke: #5c6266;

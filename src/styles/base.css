@@ -1,48 +1,116 @@
-/* Base: typography, box sizing and resets for buttons, links and inputs. */
+/* Botanical Calm Design System — tokens, typography, and accessible base resets. */
 :root {
-    font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
-    color: #29372d;
-    background: #f8f9f6;
+    /* Surfaces */
+    --bg: #f6f7f3;
+    --surface: #ffffff;
+    --surface-2: #eef2eb;
+    --surface-subtle: #f9faf7;
+    --canvas-bg: #ecefe6;
+
+    /* Ink */
+    --ink: #1a2e23;
+    --ink-2: #3d5144;
+    --muted: #66786b;
+    --muted-2: #8a998e;
+
+    /* Borders */
+    --border: #e1e7dd;
+    --border-strong: #cdd7c8;
+
+    /* Brand & Semantic */
+    --accent: #1e4031;
+    --accent-hover: #295642;
+    --accent-fg: #ffffff;
+    --accent-soft: #e6efe9;
+    --accent-ring: rgba(30, 64, 49, 0.16);
+
+    --success: #2a7d4f;
+    --success-soft: #e6f4ec;
+    --warn-bg: #fef5e6;
+    --warn-ink: #9a5b13;
+    --warn-dot: #c9822b;
+    --danger: #b44332;
+    --danger-bg: #fdf1ee;
+
+    /* Typography */
+    --font-sans: "Figtree", "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-serif: "Fraunces", Georgia, "Times New Roman", serif;
+
+    /* Radii */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+
+    /* Elevation */
+    --shadow-sm: 0 1px 2px rgba(26, 46, 35, 0.05);
+    --shadow-md: 0 8px 24px rgba(26, 46, 35, 0.08);
+    --shadow-lg: 0 18px 48px rgba(26, 46, 35, 0.14);
+
+    font-family: var(--font-sans);
+    color: var(--ink);
+    background: var(--bg);
     font-synthesis: none;
-    font-size: 13px;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
 }
+
 * {
     box-sizing: border-box;
 }
+
 body {
     margin: 0;
+    background: var(--bg);
+    color: var(--ink);
 }
+
 button,
-input {
+input,
+select,
+textarea {
     font: inherit;
+    color: inherit;
 }
-button {
-    cursor: pointer;
-    transition:
-        background 0.15s,
-        color 0.15s;
-}
-button:disabled {
-    opacity: 0.3;
-    cursor: default;
-}
-button:focus-visible,
-a:focus-visible {
-    outline: 2px solid #567b46;
-    outline-offset: 3px;
-}
+
 button {
     border: 0;
     background: none;
-    color: inherit;
+    cursor: pointer;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease,
+        box-shadow 0.15s ease;
 }
+
+button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+button:hover:not(:disabled) {
+    background: var(--surface-2);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 input {
     min-width: 0;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
     outline: none;
-}
-input:focus {
-    border-color: #6a8663 !important;
-}
-button:hover {
-    background: #edf0e8;
 }

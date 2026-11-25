@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { authClient } from "$lib/auth-client";
+    import EditorRail from "$lib/components/editor/EditorRail.svelte";
 
     type Account = { id: string; name: string; email: string; role?: string | null; createdAt: Date };
 
@@ -9,7 +10,6 @@
     let accounts = $state<Account[]>([]),
         loading = $state(true),
         problem = $state(""),
-        /** The account whose new password is being typed. */
         resetting = $state<string | null>(null),
         newPassword = $state(""),
         name = $state(""),
@@ -23,7 +23,6 @@
         setTimeout(() => (toast = ""), 2800);
     }
 
-    /** Runs an admin request; false (and the reason shown) when it failed. */
     async function run(request: Promise<{ error: { message?: string } | null }>) {
         busy = true;
         problem = "";
@@ -46,7 +45,11 @@
     async function add(e: SubmitEvent) {
         e.preventDefault();
         const added = email.trim();
-        if (!(await run(authClient.admin.createUser({ name: name.trim() || added, email: added, password, role: "admin" }))))
+        if (
+            !(await run(
+                authClient.admin.createUser({ name: name.trim() || added, email: added, password, role: "admin" }),
+            ))
+        )
             return;
         name = email = password = "";
         await load();
@@ -69,190 +72,326 @@
     }
 
     const isAdmin = (a: Account) => (a.role ?? "").split(",").some((r) => r.trim() === "admin");
+    const initials = (a: Account) =>
+        (a.name || a.email)
+            .split(/\s+/)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase() ?? "")
+            .join("") || "A";
 </script>
 
 <svelte:head><title>Accounts · AIRMA Editor</title></svelte:head>
 
-<div class="accounts-page">
-    <a class="back" href="/editor">← Back to the editor</a>
-    <h1>Accounts</h1>
-    <p class="lead">
-        Admins edit the map and the hospital information, and add or remove accounts here. Changes are live for
-        visitors straight away, so add only people you trust with that.
-    </p>
+<div class="admin-layout">
+    <EditorRail onnotify={notify} />
 
-    {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
+    <div class="accounts-wrap">
+        <div class="accounts-page">
+            <span class="eyebrow">TEAM ACCESS</span>
+            <h1>Accounts</h1>
+            <p class="lead">
+                Admins edit the 3D campus map and hospital information, and manage accounts here. Changes are live for
+                visitors straight away, so add only people you trust.
+            </p>
 
-    <section>
-        <h2>Who can edit</h2>
-        {#if loading}<p class="note">Loading…</p>
-        {:else}
-            <ul>
-                {#each accounts as a (a.id)}
-                    <li>
-                        <div class="who">
-                            <b>{a.name}</b>{#if a.id === data.me.id}<span class="tag">You</span>{/if}
-                            {#if !isAdmin(a)}<span class="tag muted">No access</span>{/if}
-                            <small>{a.email}</small>
-                        </div>
-                        {#if resetting === a.id}
-                            <form class="inline" onsubmit={(e) => reset(a, e)}>
-                                <input
-                                    type="password"
-                                    aria-label="New password for {a.email}"
-                                    placeholder="New password"
-                                    autocomplete="new-password"
-                                    minlength="8"
-                                    required
-                                    bind:value={newPassword}
-                                />
-                                <button class="btn primary" disabled={busy}>Set</button>
-                                <button type="button" class="btn" onclick={() => (resetting = null)}>Cancel</button>
-                            </form>
-                        {:else}
-                            <div class="actions">
-                                <button class="btn" onclick={() => ((resetting = a.id), (newPassword = ""))}
-                                    >Reset password</button
-                                >{#if a.id !== data.me.id}<button
-                                        class="btn danger"
-                                        disabled={busy}
-                                        onclick={() => remove(a)}>Remove</button
-                                    >{/if}
-                            </div>
-                        {/if}
-                    </li>
-                {/each}
-            </ul>
-        {/if}
-    </section>
+            {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 
-    <section>
-        <h2>Add an admin</h2>
-        <p class="note">Choose a first password and give it to them; they can sign in at <b>/login</b> straight away.</p>
-        <form class="add" onsubmit={add}>
-            <label>Name<input bind:value={name} autocomplete="off" required /></label>
-            <label>Email<input type="email" bind:value={email} autocomplete="off" required /></label>
-            <label
-                >Password<input
-                    type="password"
-                    bind:value={password}
-                    autocomplete="new-password"
-                    minlength="8"
-                    required
-                /></label
-            >
-            <button class="btn primary" disabled={busy}>Add admin</button>
-        </form>
-    </section>
+            <section class="card">
+                <div class="card-head">
+                    <h2>Who can edit</h2>
+                    {#if !loading}<span class="count">{accounts.length}</span>{/if}
+                </div>
+                {#if loading}
+                    <p class="note">Loading…</p>
+                {:else}
+                    <ul>
+                        {#each accounts as a (a.id)}
+                            <li>
+                                <div class="person">
+                                    <div class="avatar">{initials(a)}</div>
+                                    <div class="who">
+                                        <b>{a.name}</b>
+                                        {#if a.id === data.me.id}<span class="tag">You</span>{/if}
+                                        {#if !isAdmin(a)}<span class="tag muted">No access</span>{/if}
+                                        <small>{a.email}</small>
+                                    </div>
+                                </div>
+                                {#if resetting === a.id}
+                                    <form class="inline" onsubmit={(e) => reset(a, e)}>
+                                        <input
+                                            type="password"
+                                            aria-label="New password for {a.email}"
+                                            placeholder="New password"
+                                            autocomplete="new-password"
+                                            minlength="8"
+                                            required
+                                            bind:value={newPassword}
+                                        />
+                                        <button class="btn primary" disabled={busy}>Set</button>
+                                        <button type="button" class="btn" onclick={() => (resetting = null)}>
+                                            Cancel
+                                        </button>
+                                    </form>
+                                {:else}
+                                    <div class="actions">
+                                        <button
+                                            class="btn"
+                                            onclick={() => ((resetting = a.id), (newPassword = ""))}
+                                        >
+                                            Reset password
+                                        </button>
+                                        {#if a.id !== data.me.id}
+                                            <button class="btn danger" disabled={busy} onclick={() => remove(a)}>
+                                                Remove
+                                            </button>
+                                        {/if}
+                                    </div>
+                                {/if}
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
+            </section>
 
-    {#if toast}<div class="toast" role="status">{toast}</div>{/if}
+            <section class="card">
+                <h2>Add an admin</h2>
+                <p class="note">
+                    Choose a first password and share it with them; they can sign in at <b>/login</b> straight away.
+                </p>
+                <form class="add" onsubmit={add}>
+                    <label>Name<input bind:value={name} placeholder="Full name" autocomplete="off" required /></label>
+                    <label
+                        >Email<input
+                            type="email"
+                            placeholder="name@hospital.org"
+                            bind:value={email}
+                            autocomplete="off"
+                            required
+                        /></label
+                    >
+                    <label class="full"
+                        >Temporary password<input
+                            type="password"
+                            placeholder="At least 8 characters"
+                            bind:value={password}
+                            autocomplete="new-password"
+                            minlength="8"
+                            required
+                        /></label
+                    >
+                    <button class="btn primary" disabled={busy}>Add admin</button>
+                </form>
+            </section>
+        </div>
+    </div>
+
+    {#if toast}<div class="toast" role="status"><span>✓</span>{toast}</div>{/if}
 </div>
 
 <style>
+    .admin-layout {
+        display: flex;
+        min-height: 100dvh;
+        background: var(--bg);
+        color: var(--ink);
+    }
+
+    .accounts-wrap {
+        flex: 1;
+        min-width: 0;
+        padding: 36px 28px 80px;
+    }
+
     .accounts-page {
-        max-width: 720px;
+        max-width: 740px;
         margin: 0 auto;
-        padding: 32px 24px 80px;
-        color: #1f3a2b;
     }
-    .back {
-        color: #52664a;
-        text-decoration: none;
-        font-size: 12px;
+
+    .eyebrow {
+        display: inline-block;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.09em;
+        color: var(--accent);
+        background: var(--accent-soft);
+        padding: 3px 9px;
+        border-radius: 999px;
+        margin-bottom: 10px;
     }
+
     h1 {
-        margin: 14px 0 8px;
-        font:
-            28px Georgia,
-            serif;
+        margin: 0 0 8px;
+        font-family: var(--font-serif);
+        font-size: 30px;
+        font-weight: 550;
+        letter-spacing: -0.02em;
+        color: var(--ink);
     }
+
     .lead,
     .note {
         margin: 0;
-        font-size: 12px;
-        line-height: 1.5;
-        color: #6f7c69;
+        font-size: 13.5px;
+        line-height: 1.55;
+        color: var(--muted);
     }
-    section {
-        margin-top: 28px;
-        padding: 20px;
-        border: 1px solid #dfe4d9;
-        border-radius: 12px;
-        background: white;
+
+    .card {
+        margin-top: 24px;
+        padding: 22px 24px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
     }
+
+    .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+
+    .card-head h2 {
+        margin: 0;
+    }
+
     h2 {
-        margin: 0 0 12px;
-        font-size: 14px;
+        margin: 0 0 8px;
+        font-size: 15.5px;
+        font-weight: 650;
+        color: var(--ink);
     }
+
     ul {
         margin: 0;
         padding: 0;
         list-style: none;
     }
+
     li {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 12px;
-        padding: 12px 0;
-        border-top: 1px solid #eef1ea;
+        padding: 14px 0;
+        border-top: 1px solid var(--border);
     }
+
     li:first-child {
         border-top: 0;
+        padding-top: 4px;
     }
+
+    .person {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: var(--accent);
+        display: grid;
+        place-items: center;
+        font-size: 12.5px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
     .who {
         display: flex;
         flex-wrap: wrap;
-        align-items: baseline;
+        align-items: center;
         gap: 4px 8px;
         min-width: 0;
     }
+
+    .who b {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink);
+    }
+
     .who small {
         flex-basis: 100%;
-        color: #6f7c69;
+        font-size: 12.5px;
+        color: var(--muted);
     }
-    .tag {
-        background: #eaf0e1;
-        color: #456a39;
-    }
+
     .tag.muted {
-        background: #f6ece6;
-        color: #9a4b2f;
+        background: var(--danger-bg);
+        color: var(--danger);
     }
+
     .actions,
     .inline {
         display: flex;
+        align-items: center;
         gap: 8px;
+        flex-wrap: wrap;
     }
-    .danger {
-        color: #9a4b2f;
-    }
+
     .add {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        margin-top: 14px;
+        gap: 14px;
+        margin-top: 16px;
     }
+
+    .add .full,
     .add .btn {
         grid-column: 1 / -1;
-        justify-self: start;
     }
+
+    .add .btn {
+        justify-self: start;
+        height: 38px;
+        padding: 0 18px;
+    }
+
     label {
         display: grid;
         gap: 6px;
-        font-size: 11px;
-        color: #5d6a58;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ink);
     }
+
     input {
-        padding: 10px 12px;
-        border: 1px solid #dfe4d9;
-        border-radius: 6px;
-        background: #fff;
-        font-size: 13px;
+        height: 38px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface-subtle);
+        font-size: 13.5px;
+        color: var(--ink);
     }
+
+    input:focus {
+        background: var(--surface);
+    }
+
     .problem {
         margin: 18px 0 0;
-        color: #9a4b2f;
-        font-size: 12px;
+        padding: 10px 14px;
+        border-radius: var(--radius-md);
+        background: var(--danger-bg);
+        color: var(--danger);
+        font-size: 13px;
+    }
+
+    @media (max-width: 640px) {
+        .accounts-wrap {
+            padding: 20px 16px 60px;
+        }
+        .add {
+            grid-template-columns: 1fr;
+        }
     }
 </style>

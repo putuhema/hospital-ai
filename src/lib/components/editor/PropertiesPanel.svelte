@@ -72,7 +72,7 @@
 <aside class="inspector" id="properties-panel" aria-label="Properties" {hidden}>
     <div class="section-heading">
         <h2>Properties</h2>
-        <span>⚙</span>
+        <span><Icon name="sliders" size={15} /></span>
     </div>
     {#if piece}<div class="selected-heading">
             <div class="selected-icon" style={`background:${piece.color}`}>
@@ -252,17 +252,17 @@
         flex-direction: column;
         gap: 3px;
         padding: 12px 0;
-        border-top: 1px solid #e9ece3;
+        border-top: 1px solid var(--border);
         text-decoration: none;
-        font-size: 12px;
-        color: #33473a;
+        font-size: 12.5px;
+        color: var(--ink);
     }
     .info-link span {
-        font-size: 11px;
-        color: #738466;
+        font-size: 11.5px;
+        color: var(--muted);
     }
     .info-link b::after {
         content: " →";
-        color: #9ba58e;
+        color: var(--accent);
     }
 </style>

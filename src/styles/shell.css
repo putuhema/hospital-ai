@@ -1,215 +1,276 @@
-/* App shell: side rail, header, project bar, shared buttons, export menu and the main grid. */
+/* App shell: unified Botanical Calm rail, top bar, buttons, menus, and workspace frame. */
 .app-shell {
     display: flex;
-    min-height: 100vh;
+    min-height: 100dvh;
+    background: var(--bg);
+    color: var(--ink);
 }
+
+/* Persistent left navigation rail across all admin pages */
 .rail {
-    width: 66px;
+    width: 60px;
     flex-shrink: 0;
-    border-right: 1px solid #e3e6de;
+    border-right: 1px solid var(--border);
     display: flex;
     align-items: center;
     flex-direction: column;
-    padding: 24px 0;
-    gap: 18px;
-    background: #fff;
+    padding: 14px 0 16px;
+    gap: 6px;
+    background: var(--surface);
+    z-index: 20;
 }
+
 .brand {
     display: grid;
     place-items: center;
-    margin-bottom: 30px;
-    border-radius: 10px;
-    transition: transform 0.2s ease;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 12px;
+    border-radius: var(--radius-md);
+    transition: transform 0.2s ease, background-color 0.15s ease;
 }
+
 .brand:hover {
     transform: translateY(-1px);
+    background: var(--surface-2);
 }
-.rail button {
+
+.rail a.rail-item,
+.rail button.rail-item {
     height: 38px;
     width: 38px;
     display: grid;
     place-items: center;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
+    color: var(--muted);
+    text-decoration: none;
+    position: relative;
 }
-.rail-active {
-    background: #eaf0e1;
-    color: #456a39;
+
+.rail a.rail-item:hover,
+.rail button.rail-item:hover {
+    background: var(--surface-2);
+    color: var(--ink);
 }
+
+.rail a.rail-active,
+.rail button.rail-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
 .rail-spacer {
     flex: 1;
 }
+
 .rail-line {
     height: 1px;
     width: 24px;
-    background: #e3e6de;
+    background: var(--border);
+    margin: 6px 0;
 }
-.rail .avatar {
-    border: 1px solid #daddd2;
-    border-radius: 50%;
-    font-size: 11px;
-    background: #eeeae0;
-    font-weight: 600;
-}
+
 .workspace {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
 }
-.workspace > header {
-    height: 65px;
-    border-bottom: 1px solid #e3e6de;
+
+/* Single unified 56px editor header */
+.editor-topbar {
+    height: 56px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 30px;
-    background: #fff;
-}
-.breadcrumb {
-    display: flex;
     gap: 16px;
-    align-items: center;
-    color: #879082;
-    font-size: 12px;
+    padding: 0 20px;
+    background: var(--surface);
 }
-.breadcrumb b {
-    font-weight: 500;
-    color: #4c584a;
-}
-.breadcrumb .product {
-    font-weight: 650;
-    color: #2d4a38;
-    letter-spacing: 0.2px;
-}
-.tag {
-    font-size: 9px;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    background: #f0f2eb;
-    padding: 5px 7px;
-    border-radius: 4px;
-}
-.help {
-    display: flex;
-    gap: 9px;
-    align-items: center;
-    color: #7b8576;
-    font-size: 12px;
-}
-.header-actions {
-    display: flex;
-    gap: 6px;
-}
-.header-actions .help {
-    padding: 6px 8px;
-    border-radius: 6px;
-}
-.project-bar {
-    padding: 25px 30px;
+
+.topbar-left {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 20px;
+    gap: 12px;
+    min-width: 0;
 }
-.title-row {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-}
+
 .project-title {
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 29px;
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 550;
     background: transparent;
-    border: none;
-    width: 285px;
-    letter-spacing: -0.9px;
-    color: #283b2d;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    margin-left: -8px;
+    width: clamp(160px, 24vw, 280px);
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
 }
+
+.project-title:hover {
+    border-color: var(--border);
+    background: var(--surface-subtle);
+}
+
+.project-title:focus {
+    border-color: var(--accent);
+    background: var(--surface);
+}
+
 .saved {
-    font-size: 10px;
-    color: #83907d;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
-}
-.saved i,
-.live-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: #73916a;
-    display: inline-block;
-}
-.saved i.dirty {
-    background: #c59a50;
-}
-.saved.failed {
-    color: #9a4b2f;
-}
-.saved.failed i {
-    background: #c4623f;
-}
-.project-bar p {
-    margin: 7px 0 0;
-    color: #8a9384;
-    font-size: 12px;
-}
-.project-actions {
-    display: flex;
-    gap: 9px;
-}
-.btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 9px;
-    padding: 10px 14px;
-    border: 1px solid #dfe4d9;
-    border-radius: 6px;
-    background: #fff;
-    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11.5px;
+    font-weight: 500;
     white-space: nowrap;
 }
-.primary {
-    background: #344e37;
-    color: white;
-    border-color: #344e37;
+
+.saved i,
+.live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    display: inline-block;
+    flex-shrink: 0;
 }
-.primary:hover {
-    background: #45674a;
+
+.saved i.dirty {
+    background: var(--warn-dot);
 }
-.primary span {
-    margin-left: 14px;
+
+.saved.failed {
+    background: var(--danger-bg);
+    color: var(--danger);
 }
+
+.saved.failed i {
+    background: var(--danger);
+}
+
+.project-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* Shared button system */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 12.5px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn:hover:not(:disabled) {
+    background: var(--surface-subtle);
+    border-color: var(--border-strong);
+}
+
+.btn.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+}
+
+.btn.primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+.btn.danger {
+    color: var(--danger);
+    border-color: var(--border);
+}
+
+.btn.danger:hover:not(:disabled) {
+    background: var(--danger-bg);
+    border-color: rgba(180, 67, 50, 0.25);
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+/* Dropdown menus */
 .export-wrap {
     position: relative;
 }
+
 .export-menu {
     position: absolute;
     right: 0;
-    top: 43px;
-    width: 195px;
-    background: white;
+    top: calc(100% + 6px);
+    width: 215px;
+    background: var(--surface);
     padding: 6px;
-    border: 1px solid #dfe4d9;
-    box-shadow: 0 8px 25px #253a2215;
-    z-index: 10;
-    border-radius: 7px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
+    z-index: 30;
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
-.export-menu button {
+
+.export-menu button,
+.export-menu a.source-download {
     display: block;
     width: 100%;
     text-align: left;
-    padding: 11px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    color: var(--ink);
+    text-decoration: none;
 }
-main {
-    display: grid;
-    grid-template-columns: 254px minmax(300px, 1fr) 264px;
+
+.export-menu button:hover,
+.export-menu a.source-download:hover {
+    background: var(--surface-2);
+}
+
+/* Scoped strictly to the editor's canvas stage — never leaks to other routes */
+.app-shell > .workspace > main {
+    position: relative;
+    display: block;
     flex: 1;
-    min-height: 680px;
-    border: 1px solid #dfe4d9;
-    border-radius: 9px;
-    margin: 0 24px;
+    min-height: 0;
+    margin: 12px;
+    isolation: isolate;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--canvas-bg);
     overflow: hidden;
-    background: #fff;
 }
