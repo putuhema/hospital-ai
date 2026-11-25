@@ -41,6 +41,12 @@ function valid(messages: unknown): messages is ChatMessage[] {
   );
 }
 
+// Reuse SDK & Convex HTTP clients across requests for TCP/TLS keep-alive and lower TTFW.
+let cachedZai: { key: string; baseURL: string; client: OpenAI } | null = null;
+let cachedAnthropic: { key: string; client: Anthropic } | null = null;
+let cachedConvex: ConvexHttpClient | null = null;
+const getConvex = () => (cachedConvex ??= new ConvexHttpClient(PUBLIC_CONVEX_URL));
+
 /**
  * The model that answers, from the environment: GLM on Z.ai with
  * `ZAI_API_KEY`, else Claude with `ANTHROPIC_API_KEY`. `ASSISTANT_MODEL`
@@ -48,12 +54,19 @@ function valid(messages: unknown): messages is ChatMessage[] {
  */
 function assistant(): { model: string; run: (input: ReplyInput) => AsyncGenerator<ReplyEvent> } | null {
   if (env.ZAI_API_KEY) {
-    const client = new OpenAI({ apiKey: env.ZAI_API_KEY, baseURL: env.ZAI_BASE_URL || ZAI_BASE_URL }),
+    const baseURL = env.ZAI_BASE_URL || ZAI_BASE_URL;
+    if (!cachedZai || cachedZai.key !== env.ZAI_API_KEY || cachedZai.baseURL !== baseURL) {
+      cachedZai = { key: env.ZAI_API_KEY, baseURL, client: new OpenAI({ apiKey: env.ZAI_API_KEY, baseURL }) };
+    }
+    const client = cachedZai.client,
       model = env.ASSISTANT_MODEL || ZAI_MODEL;
     return { model, run: (input) => replyZai(client, model, input) };
   }
   if (env.ANTHROPIC_API_KEY) {
-    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }),
+    if (!cachedAnthropic || cachedAnthropic.key !== env.ANTHROPIC_API_KEY) {
+      cachedAnthropic = { key: env.ANTHROPIC_API_KEY, client: new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) };
+    }
+    const client = cachedAnthropic.client,
       model = env.ASSISTANT_MODEL || "claude-opus-5-5";
     return { model, run: (input) => reply(client, input, model) };
   }
@@ -91,7 +104,7 @@ export async function POST({ request, getClientAddress }) {
       }),
   };
   const slug = typeof body.slug === "string" ? body.slug : undefined;
-  const convex = new ConvexHttpClient(PUBLIC_CONVEX_URL),
+  const convex = getConvex(),
     secret = env.CHAT_LIMIT_SECRET;
   if (!secret && !dev) {
     // Never answer without limits in production.
@@ -123,6 +136,16 @@ export async function POST({ request, getClientAddress }) {
     .mutation(api.analytics.record, { slug: hospital.slug, kind: "chat", label: latestText })
     .catch(() => {});
 
+  // Instant (<50ms) fast-path for exact matches to saved hospital FAQ questions (Indonesian).
+  // Skips the LLM completely when the hospital already wrote the verbatim official answer.
+  if (messages.length === 1 && !context.walking && context.lang === "id") {
+    const normQ = normalize(latestText);
+    const exactFaq = hospital.faq.find((e) => e.answer.trim() && normalize(e.question) === normQ);
+    if (exactFaq) {
+      return new Response(JSON.stringify({ type: "text", text: exactFaq.answer.trim() }) + "\n", { headers: NDJSON });
+    }
+  }
+
   // Asked on the way, an answer depends on where along it they are: never cached.
   const cacheKey =
     secret && !context.walking && (messages.length === 1 || isCacheableFollowUp)
@@ -151,20 +174,22 @@ export async function POST({ request, getClientAddress }) {
     }
   }
 
-  // Each question counts against the visitor's limits and the hospital's daily one (lib/assistant/limits.ts).
-  if (secret) {
-    // Anonymous: only a keyed hash of the address is stored.
-    const visitor = createHash("sha256").update(`${secret}:${getClientAddress()}`).digest("hex").slice(0, 32);
-    const limit = await convex.mutation(api.limits.take, { secret, visitor });
-    if (!limit.ok)
-      return json(
-        { error: limit.everyone ? "The assistant is busy today." : "Too many questions.", retryAfter: Math.ceil(limit.retryAfterMs / 1000) },
-        { status: 429, headers: { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) } },
-      );
-  }
+  // Run rate-limit check and live SIMRS fetch in parallel to shave a full network round-trip before the LLM starts.
+  const visitorHash = secret
+    ? createHash("sha256").update(`${secret}:${getClientAddress()}`).digest("hex").slice(0, 32)
+    : null;
+  const [limit, liveRaw] = await Promise.all([
+    secret && visitorHash ? convex.mutation(api.limits.take, { secret, visitor: visitorHash }) : Promise.resolve(null),
+    convex.query(api.live.get, { slug: hospital.slug }).catch(() => null),
+  ]);
+  if (limit && !limit.ok)
+    return json(
+      { error: limit.everyone ? "The assistant is busy today." : "Too many questions.", retryAfter: Math.ceil(limit.retryAfterMs / 1000) },
+      { status: 429, headers: { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) } },
+    );
 
   // Today's queue and the beds from SIMRS, when the bridge at the hospital has reported lately.
-  const live = fresh(await convex.query(api.live.get, { slug: hospital.slug }).catch(() => null), Date.now());
+  const live = fresh(liveRaw, Date.now());
   const ctx: AssistantContext = { ...hospital.map, now: hospitalNow(env.HOSPITAL_TIME_ZONE), live };
   const abort = new AbortController();
   request.signal.addEventListener("abort", () => abort.abort());

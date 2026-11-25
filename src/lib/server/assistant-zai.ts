@@ -55,14 +55,33 @@ export async function* replyZai(
       { signal },
     );
     let text = "",
+      streamed = "",
       finish: string | null = null;
     const calls: { id: string; name: string; args: string }[] = [];
+    // On post-lookup rounds (round > 0), stream safe text immediately as tokens arrive
+    // for faster time-to-first-word, holding back only lines that look like tool notes
+    // or "I noted this for the hospital" mentions.
+    const canStreamLive = round > 0;
+    const UNSAFE_PREFIX = /\[|catat|noted|made a note|passed (this|it) on/i;
+
     for await (const chunk of stream) {
       const choice = chunk.choices[0];
       if (!choice) continue;
-      // A round's text is held until the round ends (Z.ai sends GLM-5's in one burst anyway):
-      // text before a lookup only announces it ("Saya cari … untuk Anda") and is dropped.
-      if (choice.delta?.content) text += choice.delta.content;
+      if (choice.delta?.content) {
+        text += choice.delta.content;
+        if (canStreamLive && !calls.length && !UNSAFE_PREFIX.test(text)) {
+          const pending = text.slice(streamed.length);
+          // Hold a tiny tail if the chunk ends mid-bracket or mid-word near "catat"/"noted".
+          const safeEnd = pending.lastIndexOf(" ");
+          if (safeEnd > 0) {
+            const out = pending.slice(0, safeEnd + 1);
+            if (!streamed && wrote) yield { type: "text", text: "\n\n" };
+            wrote = true;
+            streamed += out;
+            yield { type: "text", text: out };
+          }
+        }
+      }
       // Tool calls arrive in pieces, by index.
       for (const piece of choice.delta?.tool_calls ?? []) {
         const call = (calls[piece.index] ??= { id: "", name: "", args: "" });
@@ -84,10 +103,15 @@ export async function* replyZai(
     if (calls.some((c) => c.name === "note_missing_info")) text = withoutNoteMention(text);
     const announcing = calls.some((c) => !QUIET.has(c.name));
     if (text.trim() && !announcing) {
-      // Text from a later round starts a new paragraph.
-      if (wrote) yield { type: "text", text: "\n\n" };
-      wrote = true;
-      yield { type: "text", text };
+      if (streamed) {
+        // Flush any remaining tail not yet yielded during live streaming.
+        const rest = text.startsWith(streamed) ? text.slice(streamed.length) : "";
+        if (rest) yield { type: "text", text: rest };
+      } else {
+        if (wrote) yield { type: "text", text: "\n\n" };
+        wrote = true;
+        yield { type: "text", text };
+      }
     }
     // Done, or a tool call cut off at the token limit, which must not run.
     if (!calls.length || finish === "length") return;
