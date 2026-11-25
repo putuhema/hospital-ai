@@ -1078,9 +1078,7 @@
                 onclick={() => open("chat")}
                 aria-label={chat.messages.length ? t("continueChat") : t("askQuestion")}
             >
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
-                    ><path d="M5 18.5V7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8.5z" /></svg
-                >{t("askOnTheWay")}{#if chat.messages.length}<b class="unread" aria-hidden="true"></b>{/if}
+                <span class="face" aria-hidden="true"><Logo size={26} title="" /></span>{t("askOnTheWay")}{#if chat.messages.length}<b class="unread" aria-hidden="true"></b>{/if}
             </button>
         </div>{/if}
 
@@ -2408,11 +2406,21 @@
         position: relative;
         flex-shrink: 0;
         gap: 7px;
-        padding: 0 20px 0 18px;
+        padding: 0 18px 0 8px;
         background: var(--forest);
         color: var(--paper);
         font-size: 15px;
         font-weight: 600;
+    }
+    /* AIRMA's face, on the button that asks her. */
+    .launcher .face {
+        display: grid;
+        place-items: end center;
+        width: 36px;
+        height: 36px;
+        overflow: hidden;
+        border-radius: 50%;
+        background: var(--paper);
     }
     /* An earlier conversation to go back to. */
     .launcher .unread {

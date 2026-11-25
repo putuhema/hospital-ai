@@ -104,6 +104,15 @@
 <section class="chat" aria-label={t("askAbout")}>
     <div class="log" role="log" aria-busy={chat.busy} bind:this={log} onscroll={scrolled}>
         {#if !chat.messages.length}<div class="welcome">
+                <img
+                    class="mascot"
+                    src="/mascot/airma-wave.webp"
+                    width="400"
+                    height="403"
+                    alt=""
+                    draggable="false"
+                    in:rise={{ y: 14, duration: 560 }}
+                />
                 <h2 in:rise={{ y: 10, duration: 520 }}>{t("greetingAsk")}</h2>
                 <p class="lead" in:rise={{ delay: 120, duration: 480 }}>{t("greetingLead")}</p>
                 {#if suggestions.length}<p class="label" in:rise={{ delay: 180 }}>{t("tryAsking")}</p>
@@ -118,7 +127,9 @@
         {#each chat.messages as m, i (i)}
             {#if m.role === "user"}<p class="user" in:rise={{ y: 8, duration: 280 }}>{(m.parts[0] as { text: string }).text}</p>
             {:else}<div class="reply" in:rise={{ y: 6, duration: 300 }}>
-                    <span class="who" aria-hidden="true"><Logo size={15} title="" />{t("guide")}</span>
+                    <span class="who" aria-hidden="true"
+                        ><Logo size={24} title="" talking={chat.busy && i === chat.messages.length - 1} />{t("guide")}</span
+                    >
                     {#if (m.status || !m.parts.length) && chat.busy && i === chat.messages.length - 1}<span
                             class="typing"
                             role="status"
@@ -228,6 +239,25 @@
         display: flex;
         flex-direction: column;
         padding: 12px 0 4px;
+    }
+    /* AIRMA waves hello; smaller on short screens, so the starting questions still fit. */
+    .mascot {
+        display: block;
+        width: auto;
+        height: clamp(84px, 15vh, 132px);
+        margin: 0 0 10px -6px;
+        user-select: none;
+        -webkit-user-drag: none;
+        transform-origin: 50% 100%;
+        animation: sway 3.2s ease-in-out 700ms infinite alternate;
+    }
+    @keyframes sway {
+        from {
+            transform: rotate(-2deg);
+        }
+        to {
+            transform: rotate(2deg);
+        }
     }
     h2 {
         margin: 0;
@@ -571,6 +601,9 @@
         }
     }
     @media (prefers-reduced-motion: reduce) {
+        .mascot {
+            animation: none;
+        }
         .typing i {
             animation: none;
             opacity: 0.6;

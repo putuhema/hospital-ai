@@ -1,7 +1,6 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
     import { authClient } from "$lib/auth-client";
-    import Logo from "$lib/components/shared/Logo.svelte";
 
     let {
         account,
@@ -49,7 +48,7 @@
 
 <main class="sign-in-page">
     <div class="guide sign-in">
-        <Logo size={36} title="" />
+        <img class="mascot" src="/mascot/airma-front.webp" width="216" height="300" alt="" draggable="false" />
         <small>AIRMA EDITOR</small>
         {#if account}
             <h2>This account can't edit</h2>
@@ -97,6 +96,13 @@
     }
     .sign-in {
         width: min(400px, 100%);
+    }
+    .mascot {
+        display: block;
+        width: auto;
+        height: 96px;
+        user-select: none;
+        -webkit-user-drag: none;
     }
     .sign-in small {
         display: block;
