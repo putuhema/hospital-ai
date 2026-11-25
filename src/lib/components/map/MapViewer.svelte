@@ -371,8 +371,19 @@
 
     // The assistant. Canned replies from the map and the hospital information
     // until the chat server route is built.
+    let starterSeed = $state(0);
     let assistant = $derived({ places: placeList, grid, now: new Date() });
-    let starters = $derived(suggestions(assistant, questions, locale.lang));
+    let starters = $derived(suggestions(assistant, questions, locale.lang, starterSeed));
+    // Give fresh starter questions each time a conversation is cleared.
+    let hadMessages = false;
+    $effect(() => {
+        const count = chat.messages.length;
+        if (count > 0) hadMessages = true;
+        else if (hadMessages) {
+            hadMessages = false;
+            starterSeed += 1;
+        }
+    });
     // Claude on the server when it is set up; the built-in replies otherwise.
     const chat = new Chat(
         serverReplier(
@@ -661,6 +672,7 @@
     onMount(() => {
         locale.restore();
         chat.restore();
+        starterSeed = Math.floor(Math.random() * 10_000) + 1;
         const desktop = window.matchMedia("(min-width: 761px)");
         wide = desktop.matches;
         desktop.onchange = () => (wide = desktop.matches);
@@ -678,8 +690,10 @@
         // A conversation from earlier in the session doesn't replace the link's destination.
         if (to) carried = chatFocus?.id ?? null;
         if (params.get("view") === "plan") view = "Plan";
-        // Someone who scanned a sign or opened a shared route wants the way.
-        if (to) tab = "route";
+        // Preserve Tanya (chat) / Rute (route) tab from the URL; shared destination links default to Rute.
+        const urlTab = params.get("tab");
+        if (urlTab === "chat" || urlTab === "route") tab = urlTab;
+        else if (to) tab = "route";
         ready = true;
     });
     // When the layout changes (the editor saved a change), keep the
@@ -697,6 +711,7 @@
         if (from) params.set("from", encode(from));
         if (to) params.set("to", to.id);
         if (view === "Plan") params.set("view", "plan");
+        params.set("tab", tab);
         const query = params.toString();
         try {
             replaceState(query ? `?${query}` : location.pathname, {});
@@ -1011,6 +1026,7 @@
                     context={chatContext}
                     shown={highlight?.id ?? null}
                     {here}
+                    fromId={typeof from === "string" ? from : null}
                     onshow={() => (sheetOpen = false)}
                     onhere={() => open("route")}
                     onclearhere={() => {

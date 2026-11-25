@@ -109,10 +109,11 @@ export const messageText = (m: ChatMessage) =>
  * its own questions in the visitor's language) and the nearest something.
  * They change from day to day (by `ctx.now`), so regular visitors see more.
  */
-export function suggestions(ctx: AssistantContext, faq: FaqEntry[], lang: Lang = DEFAULT_LANG): string[] {
+export function suggestions(ctx: AssistantContext, faq: FaqEntry[], lang: Lang = DEFAULT_LANG, seed = 0): string[] {
   const types = placeTypes(ctx),
     day = Math.floor((ctx.now.getTime() - ctx.now.getTimezoneOffset() * 60_000) / 86_400_000),
-    pick = <T>(list: T[], shift = 0): T | undefined => list[(day + shift) % list.length];
+    offset = day + Math.abs(Math.floor(seed)),
+    pick = <T>(list: T[], shift = 0): T | undefined => (list.length ? list[(offset + shift) % list.length] : undefined);
   const where = (type: string) => (lang === "id" ? `Di mana ${typeInline(type, lang)}?` : `Where is the ${typeInline(type, lang)}?`);
   const places = ["Pharmacy", "Emergency", "Laboratory", "Radiology", "Reception desk"].filter((t) => types.includes(t));
   const place = pick(places.length ? places : types.slice(0, 1));
@@ -121,12 +122,13 @@ export function suggestions(ctx: AssistantContext, faq: FaqEntry[], lang: Lang =
   // Only offered when it gets the visiting hours, not any question that mentions visitors.
   const visiting = lang === "id" ? "Jam besuk?" : "Visiting hours?";
   if (faqFor(faq, visiting)) about.push(visiting);
-  const clinic = pick(ctx.places.filter((p) => p.info?.doctors?.length));
+  const clinic = pick(ctx.places.filter((p) => p.info?.doctors?.length), 1);
   if (clinic) about.push(lang === "id" ? `Jadwal dokter ${clinic.name}` : `Doctors at ${clinic.name}`);
   for (const e of answered(faq))
     if (replyLang(e.question, lang) === lang && !about.includes(e.question) && e !== faqFor(faq, visiting)) about.push(e.question);
 
-  const near = ["Parking", "Toilets", "Café"].find((t) => types.includes(t));
+  const nears = ["Parking", "Toilets", "Café"].filter((t) => types.includes(t));
+  const near = pick(nears, 2);
   const out = [
     place && where(place),
     pick(about),

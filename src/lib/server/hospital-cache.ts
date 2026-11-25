@@ -34,9 +34,10 @@ export async function hospitalFor(convex: ConvexHttpClient, lang: Lang, slug?: s
   const kept = hospitals.get(key);
   if (kept?.revision === version.revision && kept.schedules === version.schedules && kept.leaflets === version.leaflets) return kept;
   // As visitors see it: SIMRS's doctors and hours for the clinics linked to it.
+  // Leaflets are optional; if the deployment hasn't pushed `leaflets:list` yet, fall back to none instead of 500ing chat.
   const [saved, leaflets] = await Promise.all([
     convex.query(api.hospital.get, { slug: version.slug, simrs: true }),
-    convex.query(api.leaflets.list, { slug: version.slug }),
+    convex.query(api.leaflets.list, { slug: version.slug }).catch(() => []),
   ]);
   if (!saved) return null;
   const layout = parseLayout(saved.layout);

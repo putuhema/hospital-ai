@@ -99,6 +99,19 @@ export class Chat {
     this.#keep();
   }
 
+  /** Retry the last question if the latest reply failed. */
+  async retry(context: ReplyContext = {}) {
+    if (this.busy || this.messages.length < 2) return;
+    const last = this.messages[this.messages.length - 1];
+    const prev = this.messages[this.messages.length - 2];
+    if (last.role !== "assistant" || !last.error || prev.role !== "user") return;
+    const text = (prev.parts[0] as { text?: string } | undefined)?.text?.trim();
+    if (!text) return;
+    this.messages.splice(this.messages.length - 2, 2);
+    this.#keep();
+    await this.send(text, context);
+  }
+
   /** Stop the reply being written; what has arrived stays. */
   stop() {
     this.#abort?.abort();

@@ -5,12 +5,14 @@
     import type { Place } from "$lib/wayfinding/routing";
     import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     import { useLocale } from "$lib/i18n/locale.svelte";
+
     let {
         selection,
         places,
         onshow,
         shown = false,
         doctor,
+        fromId = null,
     }: {
         /** What the assistant's show_on_map returned. */
         selection: MapSelection;
@@ -22,8 +24,10 @@
         shown?: boolean;
         /** The card is about this doctor, who practises there: it shows their schedule. */
         doctor?: string;
+        /** The visitor's current starting place id, to offer a direct route shortcut. */
+        fromId?: string | null;
     } = $props();
-    // The visitor's own clock, as on the place details; the badge waits for the browser.
+
     let now = $state<Date | null>(null);
     onMount(() => {
         now = new Date();
@@ -32,61 +36,89 @@
     });
     const locale = useLocale();
     let card = $derived(mapCard(selection, places, now ?? new Date(), locale.lang, doctor));
+    let canRoute = $derived(
+        !!card && selection.kind === "place" && !!fromId && fromId !== selection.to,
+    );
 </script>
 
-{#if card}<a
-        class="map-card"
-        class:shown
-        href={card.href}
-        data-sveltekit-replacestate
-        data-sveltekit-noscroll
-        onclick={() => onshow?.()}
-    >
-        <span class="plate"><PlaceIcon of={card.place} size={34} /></span>
-        <span class="text">
-            <b>{card.place.name}</b>
-            <small>{card.detail}</small>
-            {#if card.schedule}<small>{card.schedule}</small>{/if}
-            {#if now && card.status}<small class="status" class:open={card.status.open}><i></i>{card.status.text}</small>{/if}
-        </span>
-        <span class="action"
-            >{#if shown}<span class="live"></span>{locale.t("onMap")}{:else}{card.action}<svg
-                    viewBox="0 0 24 24"
-                    width="14"
-                    height="14"
-                    aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg
-                >{/if}</span
+{#if card}
+    <div class="map-card-wrap" class:shown>
+        <a
+            class="map-card"
+            href={card.href}
+            data-sveltekit-replacestate
+            data-sveltekit-noscroll
+            onclick={() => onshow?.()}
         >
-    </a>{:else}<p class="map-card gone">{locale.t("placeGone")}</p>{/if}
+            <span class="plate"><PlaceIcon of={card.place} size={34} /></span>
+            <span class="text">
+                <b>{card.place.name}</b>
+                <small>{card.detail}</small>
+                {#if card.schedule}<small>{card.schedule}</small>{/if}
+                {#if now && card.status}
+                    <small class="status" class:open={card.status.open}><i></i>{card.status.text}</small>
+                {/if}
+            </span>
+            <span class="action">
+                {#if shown}
+                    <span class="live"></span>{locale.t("onMap")}
+                {:else}
+                    {card.action}<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                        <path d="M5 12h14m-6-6 6 6-6 6" />
+                    </svg>
+                {/if}
+            </span>
+        </a>
+        {#if canRoute}
+            <div class="card-footer">
+                <a
+                    class="route-shortcut"
+                    href={`?from=${fromId}&to=${selection.to}`}
+                    data-sveltekit-replacestate
+                    data-sveltekit-noscroll
+                    onclick={() => onshow?.()}
+                >
+                    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                        <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+                    </svg>
+                    <span>{locale.t("startWalk")}</span>
+                </a>
+            </div>
+        {/if}
+    </div>
+{:else}
+    <p class="map-card-wrap gone">{locale.t("placeGone")}</p>
+{/if}
 
 <style>
-    /* A card reads like a hospital direction sign: a plate with the place's
-       mark, its name, and where the arrow leads. */
+    .map-card-wrap {
+        border-radius: 16px;
+        background: var(--card, #ffffff);
+        overflow: hidden;
+        box-shadow:
+            0 0 0 1px var(--line, #e1e7dd),
+            0 1px 2px rgba(26, 46, 35, 0.05),
+            0 8px 24px -12px rgba(26, 46, 35, 0.18);
+        transition:
+            transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+            box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .map-card-wrap.shown {
+        box-shadow:
+            0 0 0 1.5px var(--forest, #1e4031),
+            0 10px 28px -12px rgba(30, 64, 49, 0.32);
+    }
     .map-card {
         position: relative;
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 10px 10px 10px 10px;
-        border-radius: 16px;
-        background: var(--card, #fffdf8);
+        padding: 10px;
         color: inherit;
         text-decoration: none;
-        box-shadow:
-            0 0 0 1px var(--line, #1d2b2214),
-            0 1px 2px #1d2b220a,
-            0 8px 24px -12px #1d2b2233;
-        transition:
-            transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
-            box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     .map-card:active {
-        transform: scale(0.985);
-    }
-    .map-card.shown {
-        box-shadow:
-            0 0 0 1.5px var(--forest, #24473a),
-            0 10px 28px -12px #24473a55;
+        transform: scale(0.99);
     }
     .plate {
         display: grid;
@@ -95,7 +127,7 @@
         width: 46px;
         height: 46px;
         border-radius: 12px;
-        background: var(--paper-2, #efeadc);
+        background: var(--paper-2, #eef2eb);
     }
     .text {
         flex: 1;
@@ -105,19 +137,19 @@
         min-width: 0;
     }
     b {
-        font-family: var(--display, Georgia, serif);
-        font-size: 16.5px;
+        font-family: var(--display, var(--font-serif, Georgia, serif));
+        font-size: 16px;
         font-weight: 560;
         font-variation-settings: "opsz" 24;
-        letter-spacing: -0.005em;
-        color: var(--ink, #1d2b22);
+        letter-spacing: -0.01em;
+        color: var(--ink, #1a2e23);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
     small {
         font-size: 12.5px;
-        color: var(--muted, #7d8a7c);
+        color: var(--muted, #66786b);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -127,7 +159,7 @@
         align-items: center;
         gap: 5px;
         font-weight: 600;
-        color: #b4472c;
+        color: #b44332;
     }
     .status i {
         width: 6px;
@@ -136,7 +168,7 @@
         background: currentColor;
     }
     .status.open {
-        color: #2e7a47;
+        color: #2a7d4f;
     }
     .action {
         display: inline-flex;
@@ -146,7 +178,7 @@
         height: 34px;
         padding: 0 12px 0 14px;
         border-radius: 10px;
-        background: var(--forest, #24473a);
+        background: var(--forest, #1e4031);
         color: #f6f3ea;
         font-size: 12.5px;
         font-weight: 600;
@@ -163,7 +195,7 @@
     .shown .action {
         padding: 0 12px;
         background: transparent;
-        color: var(--forest, #24473a);
+        color: var(--forest, #1e4031);
     }
     .live {
         width: 8px;
@@ -181,24 +213,52 @@
             box-shadow: 0 0 0 0 #e0663d00;
         }
     }
+    .card-footer {
+        display: flex;
+        border-top: 1px solid var(--line, #e1e7dd);
+        background: var(--surface-subtle, #f9faf7);
+    }
+    .route-shortcut {
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 12px;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--forest, #1e4031);
+        text-decoration: none;
+        transition: background-color 150ms ease;
+    }
+    .route-shortcut:hover {
+        background: var(--accent-soft, #e6efe9);
+    }
+    .route-shortcut svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
     .gone {
         margin: 0;
         padding: 12px 14px;
         font-size: 13px;
-        color: var(--muted, #7d8a7c);
+        color: var(--muted, #66786b);
     }
     @media (hover: hover) and (pointer: fine) {
-        .map-card:hover {
+        .map-card-wrap:hover {
             box-shadow:
-                0 0 0 1px #1d2b2226,
-                0 14px 30px -14px #1d2b2244;
+                0 0 0 1px rgba(26, 46, 35, 0.16),
+                0 14px 30px -14px rgba(26, 46, 35, 0.25);
         }
         .map-card:hover .action svg {
             transform: translateX(3px);
         }
     }
     @media (prefers-reduced-motion: reduce) {
-        .map-card,
+        .map-card-wrap,
         .action svg {
             transition: none;
         }

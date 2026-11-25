@@ -10,8 +10,9 @@
 <img
     class="logo"
     src={talking ? "/mascot/airma-head-talk.webp" : "/mascot/airma-head.webp"}
-    width={size}
+    width={Math.round((size * 142) / 160)}
     height={size}
+    style:height={`${size}px`}
     alt={title}
     aria-hidden={title ? undefined : "true"}
     draggable="false"
@@ -21,6 +22,8 @@
     .logo {
         display: inline-block;
         flex-shrink: 0;
+        width: auto;
+        aspect-ratio: 142 / 160;
         object-fit: contain;
         user-select: none;
         -webkit-user-drag: none;
