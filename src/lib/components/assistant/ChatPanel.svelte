@@ -22,6 +22,7 @@
         onshow,
         onhere,
         onclearhere,
+        onfeedback,
     }: {
         chat: Chat;
         places: Place[];
@@ -41,6 +42,8 @@
         onhere?: () => void;
         /** Forget where the visitor is. */
         onclearhere?: () => void;
+        /** Visitor rated an assistant reply as helpful or unhelpful. */
+        onfeedback?: (vote: "helpful" | "unhelpful", question: string) => void;
     } = $props();
 
     const locale = useLocale();
@@ -66,9 +69,49 @@
         input = $state<HTMLTextAreaElement>(),
         stick = $state(true),
         copiedAt = $state<number | null>(null),
-        confirmClear = $state(false),
+        votes = $state<Record<number, "helpful" | "unhelpful">>({});
+    let confirmClear = $state(false),
         voiceSupported = $state(false),
         listening = $state(false);
+
+    // 0ms Emergency red-flag detection so urgent patients never wait for an LLM round-trip.
+    const EMERGENCY_RE =
+        /\b(nyeri dada|sakit dada|sesak napas|sesak nafas|susah napas|pingsan|tidak sadar|pendarahan|perdarahan|kejang|stroke|serangan jantung|kecelakaan|gawat darurat|chest pain|shortness of breath|can'?t breathe|fainted|unconscious|bleeding|seizure|heart attack)\b/i;
+
+    let emergencyPlace = $derived(
+        places.find((p) => /\bigd\b|\bugd\b|emergency|gawat darurat/i.test(`${p.name} ${p.detail}`)) ?? null,
+    );
+    let emergencyPhone = $derived(emergencyPlace?.info?.phone?.trim() || "118");
+    const isEmergencyQuestion = (text: string) => EMERGENCY_RE.test(text);
+
+    function editUserMessage(index: number) {
+        const text = chat.rewindTo(index);
+        if (!text) return;
+        draft = text;
+        votes = {};
+        tick().then(() => input?.focus());
+    }
+
+    function rateReply(index: number, vote: "helpful" | "unhelpful") {
+        if (votes[index] === vote) return;
+        votes = { ...votes, [index]: vote };
+        const prev = chat.messages[index - 1];
+        const q = prev?.role === "user" ? plainText(prev) : "chat";
+        onfeedback?.(vote, q);
+    }
+
+    /** Perplexity-style source provenance badges for a completed assistant reply. */
+    function sourcesOf(m: ChatMessage): Key[] {
+        const out: Key[] = [];
+        const text = plainText(m);
+        if (m.parts.some((p) => p.type === "card")) out.push("sourceMap");
+        if (m.parts.some((p) => p.type === "image")) out.push("sourceLeaflet");
+        if (m.parts.some((p) => p.type === "card" && p.doctor) || /\bdr\.?\s|sp\.[a-z]|jadwal dokter|praktik/i.test(text))
+            out.push("sourceDoctors");
+        if (/antre|menunggu|dilayani|tempat tidur|bed tersedia|queue|waiting/i.test(text)) out.push("sourceLive");
+        if (!out.length && text) out.push("sourceInfo");
+        return out.slice(0, 3);
+    }
 
     // SpeechRecognition typing (browser-prefixed on Safari/Chrome).
     type SpeechRec = {
@@ -372,36 +415,107 @@
 
             {#each chat.messages as m, i (i)}
                 {#if m.role === "user"}
-                    <p class="user" in:rise={{ y: 8, duration: 280 }}>{(m.parts[0] as { text: string }).text}</p>
+                    {@const qText = (m.parts[0] as { text: string }).text}
+                    {@const isLastUser = !chat.busy && (i === chat.messages.length - 1 || i === chat.messages.length - 2)}
+                    <div class="user-row" in:rise={{ y: 8, duration: 280 }}>
+                        {#if isLastUser}
+                            <button
+                                type="button"
+                                class="edit-q"
+                                aria-label={t("editQuestion")}
+                                title={t("editQuestion")}
+                                onclick={() => editUserMessage(i)}
+                            >
+                                <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                                    <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                                </svg>
+                            </button>
+                        {/if}
+                        <p class="user">{qText}</p>
+                    </div>
+                    {#if isEmergencyQuestion(qText)}
+                        <div class="emergency-card" role="alert" in:rise={{ y: 6, duration: 200 }}>
+                            <div class="em-head">
+                                <span class="em-badge">IGD</span>
+                                <b>{t("emergencyTitle")}</b>
+                            </div>
+                            <p>{t("emergencyBody")}</p>
+                            <div class="em-actions">
+                                <a class="em-btn primary" href={`tel:${emergencyPhone.replace(/[^\d+]/g, "")}`}>
+                                    {t("callEmergency", { phone: emergencyPhone })}
+                                </a>
+                                {#if emergencyPlace}
+                                    <a
+                                        class="em-btn"
+                                        href={fromId && fromId !== emergencyPlace.id
+                                            ? `?from=${fromId}&to=${emergencyPlace.id}`
+                                            : `?to=${emergencyPlace.id}`}
+                                        data-sveltekit-replacestate
+                                        data-sveltekit-noscroll
+                                        onclick={() => onshow?.()}
+                                    >
+                                        {t("goToEmergency")} →
+                                    </a>
+                                {/if}
+                            </div>
+                        </div>
+                    {/if}
                 {:else}
                     {@const isLatest = i === chat.messages.length - 1}
                     {@const isDone = !chat.busy || !isLatest}
                     {@const qPlace = isDone ? queuePlaceId(m) : null}
+                    {@const srcs = isDone && !m.error ? sourcesOf(m) : []}
                     <div class="reply" in:rise={{ y: 6, duration: 300 }}>
                         <div class="reply-head">
                             <span class="who" aria-hidden="true">
                                 <Logo size={24} title="" talking={chat.busy && isLatest} />{t("guide")}
                             </span>
                             {#if isDone && plainText(m)}
-                                <button
-                                    type="button"
-                                    class="copy-btn"
-                                    aria-label={t("copyReply")}
-                                    onclick={() => copyMessage(i, m)}
-                                >
-                                    {#if copiedAt === i}
+                                <div class="reply-tools">
+                                    <button
+                                        type="button"
+                                        class="copy-btn"
+                                        class:voted={votes[i] === "helpful"}
+                                        aria-label={t("helpful")}
+                                        title={t("helpful")}
+                                        onclick={() => rateReply(i, "helpful")}
+                                    >
                                         <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
-                                            <path d="M5 13l4 4L19 7" />
+                                            <path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
                                         </svg>
-                                        <span>{t("copied")}</span>
-                                    {:else}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="copy-btn"
+                                        class:voted-down={votes[i] === "unhelpful"}
+                                        aria-label={t("notHelpful")}
+                                        title={t("notHelpful")}
+                                        onclick={() => rateReply(i, "unhelpful")}
+                                    >
                                         <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
-                                            <rect x="9" y="9" width="11" height="11" rx="2" />
-                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                            <path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" />
                                         </svg>
-                                        <span>{t("copyReply")}</span>
-                                    {/if}
-                                </button>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="copy-btn"
+                                        aria-label={t("copyReply")}
+                                        onclick={() => copyMessage(i, m)}
+                                    >
+                                        {#if copiedAt === i}
+                                            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                                                <path d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            <span>{t("copied")}</span>
+                                        {:else}
+                                            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                                                <rect x="9" y="9" width="11" height="11" rx="2" />
+                                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                            </svg>
+                                            <span>{t("copyReply")}</span>
+                                        {/if}
+                                    </button>
+                                </div>
                             {/if}
                         </div>
 
@@ -479,6 +593,16 @@
                                 </svg>
                                 <span>{t("trackMyNumber")}</span>
                             </a>
+                        {/if}
+
+                        {#if srcs.length}
+                            <div class="sources" aria-label="Sources">
+                                {#each srcs as src}
+                                    <span class="source-pill" class:live={src === "sourceLive"}>
+                                        {#if src === "sourceLive"}<i></i>{/if}{t(src)}
+                                    </span>
+                                {/each}
+                            </div>
                         {/if}
 
                         {#if m.error}
@@ -763,10 +887,40 @@
     }
 
     /* Messages */
-    .user {
+    .user-row {
         align-self: flex-end;
-        max-width: 84%;
-        margin: 6px 0 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        max-width: 90%;
+        margin-top: 6px;
+    }
+    .edit-q {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        color: var(--muted);
+        opacity: 0.72;
+        transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+    }
+    .edit-q:hover {
+        opacity: 1;
+        background: var(--paper-2, #eef2eb);
+        color: var(--ink);
+    }
+    .edit-q svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+    .user {
+        margin: 0;
         padding: 11px 16px;
         border-radius: 20px 20px 6px 20px;
         background: var(--forest, #1e4031);
@@ -775,6 +929,103 @@
         line-height: 1.45;
         overflow-wrap: anywhere;
         box-shadow: 0 8px 20px -12px rgba(30, 64, 49, 0.55);
+    }
+
+    /* 0ms Emergency red-flag card */
+    .emergency-card {
+        padding: 13px 15px;
+        border-radius: 14px;
+        background: #fdf1ee;
+        border: 1.5px solid rgba(196, 69, 54, 0.35);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .em-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #962c20;
+        font-size: 14px;
+    }
+    .em-badge {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #c44536;
+        color: #ffffff;
+    }
+    .emergency-card p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.45;
+        color: #7a261c;
+    }
+    .em-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 2px;
+    }
+    .em-btn {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 13px;
+        border-radius: 999px;
+        font-size: 12.5px;
+        font-weight: 600;
+        text-decoration: none;
+        background: #ffffff;
+        color: #962c20;
+        border: 1px solid rgba(196, 69, 54, 0.32);
+    }
+    .em-btn.primary {
+        background: #c44536;
+        color: #ffffff;
+        border-color: #c44536;
+    }
+
+    .reply-tools {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+    }
+    .copy-btn.voted {
+        color: #2a7d4f;
+        background: #e6f4ec;
+    }
+    .copy-btn.voted-down {
+        color: #b44332;
+        background: #fdf1ee;
+    }
+    .sources {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    .source-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: var(--paper-2, #eef2eb);
+        color: var(--muted, #66786b);
+        font-size: 11px;
+        font-weight: 500;
+    }
+    .source-pill.live {
+        background: #e6f4ec;
+        color: #1e613c;
+        font-weight: 600;
+    }
+    .source-pill.live i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #2a7d4f;
     }
     .reply {
         display: flex;

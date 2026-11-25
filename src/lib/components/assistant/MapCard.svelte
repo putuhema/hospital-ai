@@ -5,6 +5,8 @@
     import type { Place } from "$lib/wayfinding/routing";
     import PlaceIcon from "$lib/components/shared/PlaceIcon.svelte";
     import { useLocale } from "$lib/i18n/locale.svelte";
+    import { useLive } from "$lib/live.svelte";
+    import { fresh } from "$lib/model/live";
 
     let {
         selection,
@@ -35,10 +37,40 @@
         return () => clearInterval(timer);
     });
     const locale = useLocale();
+    const liveData = useLive();
     let card = $derived(mapCard(selection, places, now ?? new Date(), locale.lang, doctor));
     let canRoute = $derived(
         !!card && selection.kind === "place" && !!fromId && fromId !== selection.to,
     );
+    // Live SIMRS queue or bed summary directly on the card when linked.
+    let liveSummary = $derived.by(() => {
+        if (!card?.place.info?.simrs?.length) return null;
+        const snap = fresh(liveData(), (now ?? new Date()).getTime());
+        if (!snap) return null;
+        const codes = card.place.info.simrs;
+        const poliCodes = codes.filter((c) => c.startsWith("poli:")).map((c) => c.slice(5));
+        if (poliCodes.length) {
+            const matched = snap.clinics.filter((c) => poliCodes.includes(c.code));
+            if (matched.length) {
+                const waiting = matched.reduce((n, c) => n + c.waiting, 0);
+                const serving = matched.flatMap((c) => c.doctors).find((d) => d.serving)?.serving;
+                const parts = [
+                    ...(serving ? [locale.t("cardLiveServing", { no: serving })] : []),
+                    locale.t("cardLiveWaiting", { n: waiting }),
+                ];
+                return parts.join(" · ");
+            }
+        }
+        const wardCodes = codes.filter((c) => c.startsWith("ward:")).map((c) => c.slice(5));
+        if (wardCodes.length) {
+            const matched = snap.wards.filter((w) => wardCodes.includes(w.code));
+            if (matched.length) {
+                const empty = matched.reduce((n, w) => n + w.empty, 0);
+                return locale.t("cardLiveBeds", { n: empty });
+            }
+        }
+        return null;
+    });
 </script>
 
 {#if card}
@@ -57,6 +89,9 @@
                 {#if card.schedule}<small>{card.schedule}</small>{/if}
                 {#if now && card.status}
                     <small class="status" class:open={card.status.open}><i></i>{card.status.text}</small>
+                {/if}
+                {#if liveSummary}
+                    <small class="live-chip"><i></i>{liveSummary}</small>
                 {/if}
             </span>
             <span class="action">
@@ -169,6 +204,21 @@
     }
     .status.open {
         color: #2a7d4f;
+    }
+    .live-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 2px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--forest, #1e4031);
+    }
+    .live-chip i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #2a7d4f;
     }
     .action {
         display: inline-flex;

@@ -10,6 +10,7 @@
 
 import type * as alerts from "../alerts.js";
 import type * as alertsSend from "../alertsSend.js";
+import type * as analytics from "../analytics.js";
 import type * as answers from "../answers.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
@@ -30,6 +31,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   alerts: typeof alerts;
   alertsSend: typeof alertsSend;
+  analytics: typeof analytics;
   answers: typeof answers;
   auth: typeof auth;
   crons: typeof crons;

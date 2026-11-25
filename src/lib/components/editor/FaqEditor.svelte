@@ -1,5 +1,14 @@
 <script lang="ts">
-    import { MAX_ANSWER, MAX_FAQ, MAX_QUESTION, topicOf, topics, type FaqEntry, type TopicId } from "$lib/model/faq";
+    import {
+        MAX_ANSWER,
+        MAX_FAQ,
+        MAX_QUESTION,
+        starterAnswers,
+        topicOf,
+        topics,
+        type FaqEntry,
+        type TopicId,
+    } from "$lib/model/faq";
     let {
         faq,
         topic,
@@ -17,8 +26,18 @@
     let starters = $derived(info.starters.filter((q) => !faq.some((e) => e.question === q)));
     const setEntry = (i: number, patch: Partial<FaqEntry>) =>
         onchange(faq.map((e, j) => (j === i ? { ...e, ...patch } : e)));
-    function add(question = "") {
-        if (faq.length < MAX_FAQ) onchange([...faq, { question, answer: "", topic }]);
+    function add(question = "", answer = "") {
+        if (faq.length < MAX_FAQ) onchange([...faq, { question, answer, topic }]);
+    }
+    function fillStarters() {
+        const room = MAX_FAQ - faq.length;
+        if (room <= 0 || !starters.length) return;
+        const added = starters.slice(0, room).map((q) => ({
+            question: q,
+            answer: starterAnswers[q] ?? "",
+            topic,
+        }));
+        onchange([...faq, ...added]);
     }
     /** Swap with the previous or next question of the same topic. */
     function move(n: number, by: number) {
@@ -68,8 +87,11 @@
                 </p>{/if}
         </div>{:else}<p class="empty">No questions about {info.name.en.toLowerCase()} yet.</p>{/each}
     {#if starters.length && faq.length < MAX_FAQ}<div class="starters">
-            <small>Common questions</small>
-            {#each starters as q}<button class="chip" onclick={() => add(q)}>+ {q}</button>{/each}
+            <div class="starters-head">
+                <small>Common questions</small>
+                <button type="button" class="fill-all" onclick={fillStarters}>Fill all with draft answers</button>
+            </div>
+            {#each starters as q}<button class="chip" onclick={() => add(q, starterAnswers[q] ?? "")}>+ {q}</button>{/each}
         </div>{/if}
     <button class="btn add" disabled={faq.length >= MAX_FAQ} onclick={() => add()}>+ Add question</button>
     {#if faq.length >= MAX_FAQ}<p class="draft">That's the most questions a map can hold ({MAX_FAQ}).</p>{/if}
@@ -150,19 +172,34 @@
         gap: 6px;
         margin: 4px 0 10px;
     }
-    .starters small {
+    .starters-head {
         width: 100%;
-        font-size: 10px;
-        letter-spacing: 1px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .starters small {
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: #7b8c70;
+        color: var(--muted, #66786b);
+    }
+    .fill-all {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--accent, #1e4031);
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: var(--accent-soft, #e6efe9);
     }
     .chip {
-        padding: 6px 10px;
-        border: 1px dashed #c9d4c0;
-        border-radius: 14px;
+        padding: 6px 11px;
+        border: 1px dashed var(--border-strong, #cdd7c8);
+        border-radius: 999px;
         font-size: 12px;
-        color: #3f5a45;
+        color: var(--ink-2, #3d5144);
         text-align: left;
     }
     .add {

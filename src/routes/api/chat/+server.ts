@@ -103,15 +103,42 @@ export async function POST({ request, getClientAddress }) {
   const hospital = await hospitalFor(convex, context.lang, slug);
   if (!hospital) return json({ error: "No such hospital." }, { status: 404 });
 
-  // A conversation's first question, asked recently by someone else in the same spot, is answered
+  // A conversation's first question — or a short follow-up anchored on the previous card — is answered
   // from the cache: instantly, and without counting against the limits or the model bill.
   const messages = body.messages as ChatMessage[];
+  const latestText = messageText(messages.at(-1)!);
+  const prevAssistant = messages.length >= 3 ? messages[messages.length - 2] : null;
+  const prevCard =
+    prevAssistant?.role === "assistant"
+      ? prevAssistant.parts.findLast((p) => p.type === "card")
+      : undefined;
+  const isCacheableFollowUp =
+    messages.length >= 3 &&
+    messages.length <= 7 &&
+    !!prevCard &&
+    latestText.trim().length <= 64;
+
+  // Record anonymous top-asked question for Hospital Hub analytics (never blocks chat).
+  void convex
+    .mutation(api.analytics.record, { slug: hospital.slug, kind: "chat", label: latestText })
+    .catch(() => {});
+
   // Asked on the way, an answer depends on where along it they are: never cached.
   const cacheKey =
-    secret && messages.length === 1 && !context.walking
+    secret && !context.walking && (messages.length === 1 || isCacheableFollowUp)
       ? createHash("sha256")
           .update(
-            JSON.stringify([hospital.slug, hospital.revision, hospital.schedules, hospital.leaflets, answer.model, context.lang, context.from ?? "", normalize(messageText(messages[0]))]),
+            JSON.stringify([
+              hospital.slug,
+              hospital.revision,
+              hospital.schedules,
+              hospital.leaflets,
+              answer.model,
+              context.lang,
+              context.from ?? "",
+              isCacheableFollowUp && prevCard ? `follow:${prevCard.show.kind}:${prevCard.show.to}` : "first",
+              normalize(latestText),
+            ]),
           )
           .digest("hex")
       : null;

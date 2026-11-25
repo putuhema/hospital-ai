@@ -302,6 +302,21 @@ const en = {
   followQueue: "How is the queue now?",
   followNearestToilet: "Where is the nearest toilet?",
   followVisiting: "What are the visiting hours?",
+  emergencyTitle: "Medical emergency?",
+  emergencyBody: "Go straight to the Emergency Department (IGD) or call for immediate help.",
+  callEmergency: "Call {phone}",
+  goToEmergency: "Go to Emergency",
+  editQuestion: "Edit question",
+  helpful: "Helpful",
+  notHelpful: "Not helpful",
+  sourceLive: "Live SIMRS",
+  sourceMap: "Hospital map",
+  sourceDoctors: "Doctor schedule",
+  sourceLeaflet: "Hospital brochure",
+  sourceInfo: "Hospital info",
+  cardLiveWaiting: "{n} waiting",
+  cardLiveServing: "Serving {no}",
+  cardLiveBeds: "{n} beds free",
 } as const;
 
 export type Key = keyof typeof en;
@@ -597,6 +612,21 @@ const id: Record<Key, string> = {
   followQueue: "Berapa antreannya sekarang?",
   followNearestToilet: "Toilet terdekat di mana?",
   followVisiting: "Jam besuk kapan?",
+  emergencyTitle: "Keadaan darurat medis?",
+  emergencyBody: "Segera menuju IGD atau hubungi petugas darurat untuk penanganan cepat.",
+  callEmergency: "Hubungi {phone}",
+  goToEmergency: "Menuju IGD",
+  editQuestion: "Ubah pertanyaan",
+  helpful: "Membantu",
+  notHelpful: "Kurang membantu",
+  sourceLive: "Live SIMRS",
+  sourceMap: "Peta RS",
+  sourceDoctors: "Jadwal Dokter",
+  sourceLeaflet: "Brosur RS",
+  sourceInfo: "Info Resmi RS",
+  cardLiveWaiting: "{n} menunggu",
+  cardLiveServing: "Dilayani {no}",
+  cardLiveBeds: "{n} bed tersedia",
 };
 
 export const messages: Record<Lang, Record<Key, string>> = { en, id };

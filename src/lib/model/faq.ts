@@ -58,6 +58,43 @@ export const topics: { id: TopicId; name: Record<Lang, string>; starters: string
   },
   { id: "lainnya", name: { id: "Lainnya", en: "Other" }, starters: [] },
 ];
+
+/** Ready-to-customize Indonesian draft answers for each starter question so admins never start from scratch. */
+export const starterAnswers: Record<string, string> = {
+  "Bagaimana cara mendaftar sebagai pasien?":
+    "Ambil nomor antrean pendaftaran di lobi utama, lalu menuju loket pendaftaran dengan membawa KTP dan kartu BPJS/asuransi (jika ada).",
+  "Dokumen apa saja yang perlu dibawa?":
+    "Bawa KTP/KK asli, kartu BPJS Kesehatan atau asuransi lain, serta surat rujukan dari faskes tingkat pertama (untuk pasien BPJS rawat jalan).",
+  "Bisakah mendaftar secara online?":
+    "Ya, pasien lama dan pasien BPJS dapat mendaftar secara online melalui aplikasi Mobile JKN sebelum datang ke rumah sakit.",
+  "Apakah menerima BPJS, dan bagaimana cara membayar?":
+    "Ya, rumah sakit menerima BPJS Kesehatan serta pembayaran umum (tunai, QRIS, dan transfer/kartu debit) di bagian kasir.",
+  "Bagaimana alur rujukan BPJS?":
+    "Bawa surat rujukan aktif dari Puskesmas atau klinik faskes 1, KTP, dan kartu BPJS ke loket pendaftaran untuk pencetakan SEP sebelum menuju poliklinik.",
+  "Asuransi swasta apa saja yang diterima?":
+    "Silakan konfirmasi kartu asuransi swasta Anda di loket pendaftaran atau bagian informasi untuk pengecekan penjaminan.",
+  "Kapan jam besuk dan apa aturannya?":
+    "Jam besuk umumnya pagi (10.00–12.00) dan sore (16.00–19.00). Mohon menjaga ketenangan, mencuci tangan, dan membatasi maksimal 2 pengunjung per pasien.",
+  "Bolehkah anak-anak ikut menjenguk?":
+    "Demi kesehatan anak, anak di bawah usia 12 tahun tidak disarankan masuk ke ruang rawat inap, terutama ruang ICU dan isolasi.",
+  "Apakah ada Wi-Fi untuk pengunjung?":
+    "Wi-Fi tersedia di area lobi dan ruang tunggu utama. Silakan tanyakan nama jaringan kepada petugas informasi.",
+  "Apakah tersedia kursi roda?":
+    "Ya, kursi roda tersedia gratis bagi pasien yang membutuhkan. Silakan minta bantuan petugas keamanan atau bagian pendaftaran di pintu masuk.",
+  "Berapa tarif parkir?":
+    "Area parkir motor dan mobil tersedia di halaman rumah sakit. Tarif parkir mengikuti ketentuan retribusi setempat.",
+  "Layanan apa saja yang buka 24 jam?":
+    "IGD (Instalasi Gawat Darurat), Farmasi IGD, Laboratorium, dan Radiologi darurat melayani pasien selama 24 jam setiap hari.",
+  "Apakah ada layanan ambulans?":
+    "Ya, layanan ambulans tersedia 24 jam untuk keadaan darurat dan rujukan. Hubungi petugas IGD atau nomor darurat rumah sakit.",
+  "Apakah ada medical check-up?":
+    "Ya, layanan Medical Check-Up (MCU) tersedia pada hari kerja. Silakan mendaftar di loket pendaftaran pada pagi hari.",
+  "Berapa nomor darurat rumah sakit?":
+    "Untuk keadaan darurat, segera menuju IGD atau hubungi nomor darurat 118 / nomor IGD rumah sakit.",
+  "Berapa nomor telepon informasi?":
+    "Silakan hubungi bagian informasi rumah sakit atau datang langsung ke meja informasi di lobi utama.",
+};
+
 const TOPIC_IDS = new Set<string>(topics.map((t) => t.id));
 
 /** A question's topic; ones saved before there were topics go by their starter question. */

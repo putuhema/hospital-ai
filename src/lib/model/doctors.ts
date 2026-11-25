@@ -20,18 +20,24 @@ export type Doctor = {
 
 export const MAX_DOCTORS = 60;
 
-/** Specialist titles (Sp.A, Sp.OG, SpB…) and what visitors call the specialty. */
+/** Specialist titles (Sp.A, Sp.OG, Sp.THT-KL, drg…) and what visitors call the specialty. */
 const TITLES: Record<string, string> = {
   a: "Anak",
   og: "Kandungan & Kebidanan",
   pd: "Penyakit Dalam",
   p: "Paru",
   b: "Bedah",
+  bs: "Bedah Saraf",
+  btkv: "Bedah Toraks",
+  ba: "Bedah Anak",
+  bp: "Bedah Plastik",
   gk: "Gizi Klinik",
   rad: "Radiologi",
-  jp: "Jantung",
+  jp: "Jantung & Pembuluh Darah",
   m: "Mata",
   tht: "THT",
+  thtkl: "THT",
+  thtbkl: "THT",
   kk: "Kulit & Kelamin",
   dv: "Kulit & Kelamin",
   dve: "Kulit & Kelamin",
@@ -42,13 +48,33 @@ const TITLES: Record<string, string> = {
   u: "Urologi",
   an: "Anestesi",
   pk: "Patologi Klinik",
+  pa: "Patologi Anatomi",
+  mk: "Mikrobiologi Klinik",
   kfr: "Rehabilitasi Medik",
+  em: "Emergensi",
+  f: "Forensik",
+  ok: "Kedokteran Okupasi",
+  ko: "Kedokteran Olahraga",
+  and: "Andrologi",
+  ger: "Geriatri",
+  kg: "Konservasi Gigi",
+  bm: "Bedah Mulut",
+  ort: "Ortodonti",
+  perio: "Periodonsia",
+  pros: "Prostodonsia",
+  kga: "Gigi Anak",
 };
 
 /** The specialty as written, or else read from the title in the name ("dr. Sari, Sp.A" → "Anak", "drg." → "Gigi"). */
 export function specialtyOf(doctor: Doctor): string | undefined {
   if (doctor.specialty) return doctor.specialty;
   const name = ` ${doctor.name.toLowerCase().replace(/[^a-z]+/g, " ")} `;
+  // Match compound titles first (e.g. "Sp.THT-KL" → "sp tht kl" → "thtkl"), then single-word ("Sp.PD" → "pd").
+  const compound = name.match(/ sp ?([a-z]+) ([a-z]+) /);
+  if (compound) {
+    const joined = `${compound[1]}${compound[2]}`;
+    if (TITLES[joined]) return TITLES[joined];
+  }
   const title = name.match(/ sp ?([a-z]+) /)?.[1];
   if (title && TITLES[title]) return TITLES[title];
   if (name.includes(" drg ")) return "Gigi";

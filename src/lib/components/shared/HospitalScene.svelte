@@ -196,10 +196,10 @@
             onerror(t("webglUnavailable"));
             return;
         }
-        // The map is drawn at up to 1.5× on sharp screens: crisp enough, and
-        // far fewer pixels for a budget phone to fill.
-        renderer.setPixelRatio(Math.min(devicePixelRatio, presentation ? 1.5 : 2));
-        renderer.shadowMap.enabled = true;
+        const lowEnd = presentation && prefs.lite;
+        // Budget phones get 1x pixel ratio & shadow-free lighting for smooth 3D panning.
+        renderer.setPixelRatio(lowEnd ? 1 : Math.min(devicePixelRatio, presentation ? 1.5 : 2));
+        renderer.shadowMap.enabled = !lowEnd;
         // On the map nothing moves in the sun, so shadows are drawn once per
         // rebuild instead of every frame (see `sync`), with plain filtering.
         renderer.shadowMap.type = presentation ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
@@ -216,6 +216,7 @@
         // The landscape is for the wayfinding map; the editor stays plain.
         const scenery = presentation ? createScenery(scene) : null;
         const stage = createStage(scene, presentation);
+        if (lowEnd) stage.sun.castShadow = false;
         const buildings = new THREE.Group(),
             labelGroup = new THREE.Group(),
             overlay = createRouteOverlay(),
@@ -225,7 +226,7 @@
         // People strolling about while the map rests (not with reduced motion; fewer on a modest phone).
         const crowd =
             presentation && !matchMedia("(prefers-reduced-motion: reduce)").matches
-                ? createCrowd(scene, (navigator.hardwareConcurrency ?? 8) <= 4 ? 20 : 40)
+                ? createCrowd(scene, lowEnd ? 12 : (navigator.hardwareConcurrency ?? 8) <= 4 ? 20 : 40)
                 : null;
         let crowdFed: Point[][] | null = null,
             crowdAt = 0,

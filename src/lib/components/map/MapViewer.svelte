@@ -1,5 +1,7 @@
 <script lang="ts">
     import { flushSync, onMount, untrack } from "svelte";
+    import { useConvexClient } from "convex-svelte";
+    import { api } from "../../../convex/_generated/api";
     import { afterNavigate, replaceState } from "$app/navigation";
     import { rise, unblur } from "$lib/motion";
     import HospitalScene from "$lib/components/shared/HospitalScene.svelte";
@@ -679,6 +681,7 @@
         // Deep links, e.g. a QR code at an entrance: /?from=b:9&to=r:2:25
         const params = new URLSearchParams(location.search);
         from = decode(params.get("from"));
+        if (from && "name" in from) recordInsight("qr", from.name);
         let target = decode(params.get("to"));
         // A sign's link has only a start: on the way somewhere in the last two hours, carry on there.
         if (from && !target)
@@ -705,6 +708,19 @@
             if (to) to = list.find((p) => p.id === to!.id) ?? null;
         });
     });
+    const convex = useConvexClient();
+    const recordInsight = (kind: "route" | "qr", label: string) => {
+        if (!label.trim()) return;
+        void convex.mutation(api.analytics.record, { slug, kind, label }).catch(() => {});
+    };
+    let lastRecordedTo = "";
+    $effect(() => {
+        if (ready && to && to.id !== lastRecordedTo) {
+            lastRecordedTo = to.id;
+            recordInsight("route", to.name);
+        }
+    });
+
     // The address bar follows the map, so it can be copied and shared.
     function syncUrl() {
         const params = new URLSearchParams();
@@ -1032,6 +1048,9 @@
                     onclearhere={() => {
                         from = null;
                         picking = false;
+                    }}
+                    onfeedback={(vote, q) => {
+                        void convex.mutation(api.analytics.record, { slug, kind: vote, label: q }).catch(() => {});
                     }}
                 />{:else}<div class="scroll" in:unblur>
                     <h2>{t("whereTo")}</h2>

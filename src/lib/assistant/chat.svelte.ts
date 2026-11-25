@@ -112,6 +112,17 @@ export class Chat {
     await this.send(text, context);
   }
 
+  /** Rewind to a user message so the visitor can edit and resend it; returns its text. */
+  rewindTo(index: number): string {
+    if (this.busy || index < 0 || index >= this.messages.length) return "";
+    const msg = this.messages[index];
+    if (msg.role !== "user") return "";
+    const text = (msg.parts[0] as { text?: string } | undefined)?.text ?? "";
+    this.messages.splice(index);
+    this.#keep();
+    return text;
+  }
+
   /** Stop the reply being written; what has arrived stays. */
   stop() {
     this.#abort?.abort();

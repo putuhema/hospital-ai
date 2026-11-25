@@ -19,7 +19,7 @@
     import { api } from "../../../convex/_generated/api";
     import { places, type Place } from "$lib/wayfinding/routing";
 
-    type Section = TopicId | "doctors" | "unanswered" | "leaflets";
+    type Section = TopicId | "doctors" | "unanswered" | "leaflets" | "analytics";
 
     let title = $state("Greenfield Hospital"),
         greenery = $state(1),
@@ -57,7 +57,13 @@
     };
     onMount(() => {
         const hash = location.hash.slice(1);
-        if (hash === "doctors" || hash === "unanswered" || hash === "leaflets" || topics.some((t) => t.id === hash))
+        if (
+            hash === "doctors" ||
+            hash === "unanswered" ||
+            hash === "leaflets" ||
+            hash === "analytics" ||
+            topics.some((t) => t.id === hash)
+        )
             section = hash as Section;
     });
     function go(to: Section) {
@@ -78,6 +84,7 @@
     const convex = useConvexClient();
     const gaps = useQuery(api.gaps.list, () => ({ slug: store.slug ?? undefined }));
     const leaflets = useQuery(api.leaflets.list, () => ({ slug: store.slug ?? undefined }));
+    const insights = useQuery(api.analytics.summary, () => ({ slug: store.slug ?? undefined }));
     let open = $derived(gaps.data ?? []);
 
     function answer(gap: (typeof open)[number]) {
@@ -150,6 +157,13 @@
                 <button class:active={section === "unanswered"} onclick={() => go("unanswered")}>
                     Belum terjawab<span class="en">Unanswered</span><span class="n" class:alert={open.length}
                         >{open.length || ""}</span
+                    >
+                </button>
+                <button class:active={section === "analytics"} onclick={() => go("analytics")}>
+                    Wawasan<span class="en">Insights</span><span class="n"
+                        >{(insights.data?.totals.routes ?? 0) +
+                            (insights.data?.totals.qr ?? 0) +
+                            (insights.data?.totals.chat ?? 0) || ""}</span
                     >
                 </button>
 
@@ -228,6 +242,119 @@
                         <p class="empty">Loading…</p>
                     {:else}
                         <GapsList gaps={open} onanswer={answer} ondone={(g) => markDone(g)} />
+                    {/if}
+                {:else if section === "analytics"}
+                    <header class="section-head">
+                        <h2>Wawasan pengunjung</h2>
+                        <p>
+                            Anonymous aggregate counts of the most searched destinations, QR sign scans, and asked
+                            questions. No personal data or patient numbers are ever stored.
+                        </p>
+                    </header>
+                    {#if insights.error}
+                        <p class="note">
+                            Analytics aren't live on Convex yet. Run <code>npx convex dev --once</code> or
+                            <code>npx convex deploy</code> to enable them.
+                        </p>
+                    {:else if insights.isLoading}
+                        <p class="empty">Loading…</p>
+                    {:else if insights.data}
+                        {@const a = insights.data}
+                        {@const totalVotes = (a.feedback?.helpful ?? 0) + (a.feedback?.unhelpful ?? 0)}
+                        {@const satPct = totalVotes ? Math.round(((a.feedback?.helpful ?? 0) / totalVotes) * 100) : null}
+                        <div class="insights-grid">
+                            <section class="clinic">
+                                <header>
+                                    <h3>Answer helpfulness</h3>
+                                    <small>{totalVotes} rating{totalVotes === 1 ? "" : "s"}</small>
+                                </header>
+                                {#if satPct !== null}
+                                    <div class="bar-row">
+                                        <span>👍 {a.feedback.helpful} helpful · 👎 {a.feedback.unhelpful} not helpful</span>
+                                        <b>{satPct}%</b>
+                                    </div>
+                                    <div class="bar-track" style="margin-bottom:8px">
+                                        <span style:width={`${satPct}%`}></span>
+                                    </div>
+                                {:else}
+                                    <p class="empty">No answer ratings yet.</p>
+                                {/if}
+                            </section>
+                            <section class="clinic">
+                                <header>
+                                    <h3>Top destinations</h3>
+                                    <small>{a.totals.routes} total</small>
+                                </header>
+                                {#if a.routes.length}
+                                    {@const max = Math.max(1, a.routes[0].count)}
+                                    <ul class="bar-list">
+                                        {#each a.routes as item}
+                                            <li>
+                                                <div class="bar-row">
+                                                    <span>{item.label}</span>
+                                                    <b>{item.count}</b>
+                                                </div>
+                                                <div class="bar-track">
+                                                    <span style:width={`${(item.count / max) * 100}%`}></span>
+                                                </div>
+                                            </li>
+                                        {/each}
+                                    </ul>
+                                {:else}
+                                    <p class="empty">No destination searches recorded yet.</p>
+                                {/if}
+                            </section>
+
+                            <section class="clinic">
+                                <header>
+                                    <h3>QR sign scans</h3>
+                                    <small>{a.totals.qr} total</small>
+                                </header>
+                                {#if a.qr.length}
+                                    {@const max = Math.max(1, a.qr[0].count)}
+                                    <ul class="bar-list">
+                                        {#each a.qr as item}
+                                            <li>
+                                                <div class="bar-row">
+                                                    <span>{item.label}</span>
+                                                    <b>{item.count}</b>
+                                                </div>
+                                                <div class="bar-track">
+                                                    <span style:width={`${(item.count / max) * 100}%`}></span>
+                                                </div>
+                                            </li>
+                                        {/each}
+                                    </ul>
+                                {:else}
+                                    <p class="empty">No QR sign scans recorded yet.</p>
+                                {/if}
+                            </section>
+
+                            <section class="clinic">
+                                <header>
+                                    <h3>Most asked questions</h3>
+                                    <small>{a.totals.chat} total</small>
+                                </header>
+                                {#if a.chat.length}
+                                    {@const max = Math.max(1, a.chat[0].count)}
+                                    <ul class="bar-list">
+                                        {#each a.chat as item}
+                                            <li>
+                                                <div class="bar-row">
+                                                    <span>{item.label}</span>
+                                                    <b>{item.count}</b>
+                                                </div>
+                                                <div class="bar-track">
+                                                    <span style:width={`${(item.count / max) * 100}%`}></span>
+                                                </div>
+                                            </li>
+                                        {/each}
+                                    </ul>
+                                {:else}
+                                    <p class="empty">No chat questions recorded yet.</p>
+                                {/if}
+                            </section>
+                        </div>
                     {/if}
                 {:else if section === "leaflets"}
                     <header class="section-head">
@@ -644,6 +771,49 @@
         font-weight: 500;
         color: var(--muted);
         margin-top: 16px;
+    }
+
+    .insights-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .bar-list {
+        list-style: none;
+        margin: 4px 0 8px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .bar-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 13px;
+        color: var(--ink);
+        margin-bottom: 4px;
+    }
+
+    .bar-row b {
+        font-variant-numeric: tabular-nums;
+        color: var(--accent);
+    }
+
+    .bar-track {
+        height: 6px;
+        border-radius: 999px;
+        background: var(--surface-2);
+        overflow: hidden;
+    }
+
+    .bar-track span {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        background: var(--accent);
     }
 
     @media (max-width: 1020px) {

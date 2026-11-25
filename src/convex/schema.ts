@@ -143,7 +143,7 @@ export default defineSchema({
     .index("by_endpoint", ["endpoint"])
     .index("by_created", ["createdAt"]),
 
-  /** Recent answers to a conversation's first question, replayed instead of asking the model again. */
+  /** Recent answers to a conversation's first question (or common follow-up), replayed instead of asking the model again. */
   chatAnswers: defineTable({
     /** A hash of the hospital version, the question, the language, where the visitor is and the model. */
     key: v.string(),
@@ -155,4 +155,15 @@ export default defineSchema({
   })
     .index("by_key", ["key"])
     .index("by_expires", ["expires"]),
+
+  /** Anonymous aggregate visitor insights: top routes, QR sign scans, asked questions, and answer feedback (zero PII). */
+  analytics: defineTable({
+    hospitalId: v.id("hospitals"),
+    kind: v.union(v.literal("route"), v.literal("qr"), v.literal("chat"), v.literal("helpful"), v.literal("unhelpful")),
+    label: v.string(),
+    count: v.number(),
+    lastAt: v.number(),
+  })
+    .index("by_hospital_kind_label", ["hospitalId", "kind", "label"])
+    .index("by_hospital", ["hospitalId"]),
 });
