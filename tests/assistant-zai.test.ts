@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { replyZai, withoutNoteMention } from '../src/lib/server/assistant-zai.ts';
+import { resolveLlmConfig } from '../src/lib/server/llm-config.ts';
 import { assistantContext } from '../src/lib/assistant/tools.ts';
 import { parseLayout, starterPieces } from '../src/lib/model/layout.ts';
 import type { ChatMessage, ReplyEvent } from '../src/lib/assistant/chat.ts';
@@ -136,4 +137,54 @@ test('saying the question was noted for the hospital is taken out of the reply',
   );
   assert.equal(withoutNoteMention("Sorry, that isn't listed. I've noted it for the hospital. Ask at the desk."), "Sorry, that isn't listed. Ask at the desk.");
   assert.equal(withoutNoteMention('Pendaftaran pasien baru buka pukul 08.00.'), 'Pendaftaran pasien baru buka pukul 08.00.');
+});
+
+test('LLM_* env vars configure any OpenAI-compatible provider, Anthropic, or legacy Z.ai cleanly', async () => {
+  const openrouter = resolveLlmConfig({
+    LLM_PROVIDER: 'openrouter',
+    LLM_MODEL: 'google/gemini-2.5-flash',
+    LLM_BASE_URL: 'https://openrouter.ai/api/v1',
+    LLM_API_KEY: 'sk-or-test',
+  });
+  assert.deepEqual(openrouter, {
+    kind: 'openai',
+    provider: 'openrouter',
+    apiKey: 'sk-or-test',
+    baseURL: 'https://openrouter.ai/api/v1',
+    model: 'google/gemini-2.5-flash',
+    disableThinking: false,
+  });
+
+  // Non-GLM OpenAI-compatible models must NOT receive Z.ai's `thinking` field.
+  const { client, requests } = fakeZai([{ text: 'Halo!' }]);
+  const out: ReplyEvent[] = [];
+  for await (const e of replyZai(
+    client,
+    'gpt-4o-mini',
+    { title: 'RS Uji', faq: [], ctx, messages: [user('halo')], context: { lang: 'id' }, signal: new AbortController().signal },
+    { disableThinking: false },
+  ))
+    out.push(e);
+  assert.equal(text(out), 'Halo!');
+  assert.equal('thinking' in requests[0], false);
+
+  const claude = resolveLlmConfig({
+    LLM_PROVIDER: 'anthropic',
+    LLM_MODEL: 'claude-sonnet-4-5',
+    LLM_API_KEY: 'sk-ant-test',
+  });
+  assert.equal(claude?.kind, 'anthropic');
+  assert.equal(claude?.model, 'claude-sonnet-4-5');
+
+  const ollama = resolveLlmConfig({
+    LLM_PROVIDER: 'ollama',
+    LLM_MODEL: 'qwen2.5:14b',
+    LLM_BASE_URL: 'http://localhost:11434/v1',
+  });
+  assert.equal(ollama?.kind, 'openai');
+  assert.equal(ollama?.apiKey, 'local');
+
+  const legacyZai = resolveLlmConfig({ ZAI_API_KEY: 'zai-key' });
+  assert.equal(legacyZai?.kind, 'openai');
+  assert.equal(legacyZai?.kind === 'openai' && legacyZai.disableThinking, true);
 });

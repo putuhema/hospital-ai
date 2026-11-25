@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { json, type RequestHandler } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { signedIn } from "$lib/server/editor";
-import { ZAI_BASE_URL } from "$lib/server/assistant-zai";
+import { resolveLlmConfig } from "$lib/server/llm-config";
 import { isLeafletUrl, MAX_LEAFLET_TEXT, MAX_LEAFLET_TITLE } from "$lib/model/leaflets";
 
 /**
@@ -35,10 +35,10 @@ function parsed(reply: string): { title: string; text: string } | null {
   }
 }
 
-async function readWithClaude(url: string) {
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+async function readWithAnthropic(url: string, apiKey: string, model: string, baseURL?: string) {
+  const client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
   const message = await client.messages.create({
-    model: "claude-opus-5-5",
+    model,
     max_tokens: 4000,
     messages: [
       {
@@ -53,10 +53,16 @@ async function readWithClaude(url: string) {
   return message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
 }
 
-async function readWithGlm(url: string) {
-  const client = new OpenAI({ apiKey: env.ZAI_API_KEY, baseURL: env.ZAI_BASE_URL || ZAI_BASE_URL });
+async function readWithOpenAI(
+  url: string,
+  apiKey: string,
+  model: string,
+  baseURL?: string,
+  disableThinking = false,
+) {
+  const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
   const completion = await client.chat.completions.create({
-    model: env.ZAI_VISION_MODEL || "glm-4.6v",
+    model,
     messages: [
       {
         role: "user",
@@ -66,7 +72,7 @@ async function readWithGlm(url: string) {
         ],
       },
     ],
-    ...({ thinking: { type: "disabled" } } as object),
+    ...(disableThinking ? ({ thinking: { type: "disabled" } } as object) : {}),
   });
   return completion.choices[0]?.message.content ?? "";
 }
@@ -75,10 +81,27 @@ export const POST: RequestHandler = async (event) => {
   if (!(await signedIn(event))?.editor) return json({ error: "Only admins can read leaflets." }, { status: 403 });
   const { url } = ((await event.request.json().catch(() => null)) ?? {}) as { url?: unknown };
   if (typeof url !== "string" || !isLeafletUrl(url)) return json({ error: "Not a leaflet image." }, { status: 400 });
-  const read = env.ANTHROPIC_API_KEY ? readWithClaude : env.ZAI_API_KEY ? readWithGlm : null;
-  if (!read) return json({ error: "Reading leaflets needs ANTHROPIC_API_KEY or ZAI_API_KEY." }, { status: 503 });
+  const cfg = resolveLlmConfig(env);
+  if (!cfg) {
+    return json(
+      { error: "Reading leaflets needs LLM_API_KEY (or ANTHROPIC_API_KEY / ZAI_API_KEY)." },
+      { status: 503 },
+    );
+  }
+  const visionModel = env.LLM_VISION_MODEL?.trim() || env.ZAI_VISION_MODEL?.trim();
+  const read =
+    cfg.kind === "anthropic"
+      ? () => readWithAnthropic(url, cfg.apiKey, visionModel || cfg.model, cfg.baseURL)
+      : () =>
+          readWithOpenAI(
+            url,
+            cfg.apiKey,
+            visionModel || (cfg.disableThinking ? "glm-4.6v" : cfg.model),
+            cfg.baseURL,
+            cfg.disableThinking,
+          );
   try {
-    const result = parsed(await read(url));
+    const result = parsed(await read());
     if (!result) return json({ error: "The leaflet couldn't be read. Write its text by hand." }, { status: 422 });
     return json(result);
   } catch (err) {

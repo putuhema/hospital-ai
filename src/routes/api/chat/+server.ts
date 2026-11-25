@@ -11,7 +11,8 @@ import { normalize } from "$lib/wayfinding/search";
 import { hospitalFor } from "$lib/server/hospital-cache";
 import { messageText, type ChatMessage, type ReplyContext, type ReplyEvent } from "$lib/assistant/chat";
 import { hospitalNow, reply, type ReplyInput } from "$lib/server/assistant";
-import { replyZai, ZAI_BASE_URL, ZAI_MODEL } from "$lib/server/assistant-zai";
+import { replyZai } from "$lib/server/assistant-zai";
+import { resolveLlmConfig } from "$lib/server/llm-config";
 import type { Lang } from "$lib/i18n/lang";
 import { fresh } from "$lib/model/live";
 import type { AssistantContext } from "$lib/assistant/tools";
@@ -42,35 +43,42 @@ function valid(messages: unknown): messages is ChatMessage[] {
 }
 
 // Reuse SDK & Convex HTTP clients across requests for TCP/TLS keep-alive and lower TTFW.
-let cachedZai: { key: string; baseURL: string; client: OpenAI } | null = null;
-let cachedAnthropic: { key: string; client: Anthropic } | null = null;
+let cachedOpenAI: { key: string; baseURL?: string; client: OpenAI } | null = null;
+let cachedAnthropic: { key: string; baseURL?: string; client: Anthropic } | null = null;
 let cachedConvex: ConvexHttpClient | null = null;
 const getConvex = () => (cachedConvex ??= new ConvexHttpClient(PUBLIC_CONVEX_URL));
 
 /**
- * The model that answers, from the environment: GLM on Z.ai with
- * `ZAI_API_KEY`, else Claude with `ANTHROPIC_API_KEY`. `ASSISTANT_MODEL`
- * picks another model of that provider. Null when neither key is set.
+ * The model that answers, resolved from unified `LLM_*` env vars (any
+ * OpenAI-compatible provider or Anthropic) with legacy `ZAI_API_KEY` /
+ * `ANTHROPIC_API_KEY` fallback. Null when no provider is configured.
  */
 function assistant(): { model: string; run: (input: ReplyInput) => AsyncGenerator<ReplyEvent> } | null {
-  if (env.ZAI_API_KEY) {
-    const baseURL = env.ZAI_BASE_URL || ZAI_BASE_URL;
-    if (!cachedZai || cachedZai.key !== env.ZAI_API_KEY || cachedZai.baseURL !== baseURL) {
-      cachedZai = { key: env.ZAI_API_KEY, baseURL, client: new OpenAI({ apiKey: env.ZAI_API_KEY, baseURL }) };
+  const cfg = resolveLlmConfig(env);
+  if (!cfg) return null;
+  if (cfg.kind === "openai") {
+    if (!cachedOpenAI || cachedOpenAI.key !== cfg.apiKey || cachedOpenAI.baseURL !== cfg.baseURL) {
+      cachedOpenAI = {
+        key: cfg.apiKey,
+        baseURL: cfg.baseURL,
+        client: new OpenAI({ apiKey: cfg.apiKey, ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}) }),
+      };
     }
-    const client = cachedZai.client,
-      model = env.ASSISTANT_MODEL || ZAI_MODEL;
-    return { model, run: (input) => replyZai(client, model, input) };
+    const client = cachedOpenAI.client;
+    return {
+      model: `${cfg.provider}:${cfg.model}`,
+      run: (input) => replyZai(client, cfg.model, input, { disableThinking: cfg.disableThinking }),
+    };
   }
-  if (env.ANTHROPIC_API_KEY) {
-    if (!cachedAnthropic || cachedAnthropic.key !== env.ANTHROPIC_API_KEY) {
-      cachedAnthropic = { key: env.ANTHROPIC_API_KEY, client: new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) };
-    }
-    const client = cachedAnthropic.client,
-      model = env.ASSISTANT_MODEL || "claude-opus-5-5";
-    return { model, run: (input) => reply(client, input, model) };
+  if (!cachedAnthropic || cachedAnthropic.key !== cfg.apiKey || cachedAnthropic.baseURL !== cfg.baseURL) {
+    cachedAnthropic = {
+      key: cfg.apiKey,
+      baseURL: cfg.baseURL,
+      client: new Anthropic({ apiKey: cfg.apiKey, ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}) }),
+    };
   }
-  return null;
+  const client = cachedAnthropic.client;
+  return { model: `anthropic:${cfg.model}`, run: (input) => reply(client, input, cfg.model) };
 }
 
 const encoder = new TextEncoder();

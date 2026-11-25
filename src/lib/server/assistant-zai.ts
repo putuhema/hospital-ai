@@ -27,16 +27,18 @@ export function withoutNoteMention(text: string): string {
     .trim();
 }
 
-/** One reply: GLM calls the tools until it can answer, and the text and cards stream out as they come. */
+/** One reply: an OpenAI-compatible model (Z.ai GLM, OpenAI, OpenRouter, Groq, etc.) calls tools until it can answer. */
 export async function* replyZai(
   client: OpenAI,
   model: string,
   { title, faq, ctx, messages, context, signal }: ReplyInput,
+  options?: { disableThinking?: boolean },
 ): AsyncGenerator<ReplyEvent> {
+  const disableThinking = options?.disableThinking ?? /^glm/i.test(model);
   const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt(title, faq, ctx) },
     ...history(messages, ctx).map((m) => ({ role: m.role as "user" | "assistant", content: m.content as string })),
-    // After the question, so everything before it stays the same between questions and Z.ai reuses it from its cache.
+    // After the question, so everything before it stays the same between questions and providers reuse prompt caches.
     { role: "system", content: situation(ctx, context) },
   ];
   const shown = new Set<string>();
@@ -49,8 +51,8 @@ export async function* replyZai(
         tools,
         tool_choice: "auto",
         stream: true,
-        // Z.ai's own option: answer straight away rather than reasoning first, as a chat should.
-        ...({ thinking: { type: "disabled" } } as object),
+        // Z.ai's own option: answer straight away rather than reasoning first; omitted for other OpenAI-compatible APIs.
+        ...(disableThinking ? ({ thinking: { type: "disabled" } } as object) : {}),
       },
       { signal },
     );
