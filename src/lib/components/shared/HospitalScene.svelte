@@ -12,6 +12,7 @@
     import { createHighlight, highlightShape, type HighlightTarget } from "$lib/scene/highlight";
     import { createLabel, createDeclutter } from "$lib/scene/labels";
     import { loadTemplates, MODEL_KINDS, pieceModel } from "$lib/scene/models";
+    import { isServerRoom } from "$lib/scene/interior-geometry";
     import { attachPointer, type Hover } from "$lib/scene/pointer";
     import { clearGroup } from "$lib/scene/dispose";
     import { batchMeshes } from "$lib/scene/batch";
@@ -124,8 +125,8 @@
     } = $props();
     const locale = useLocale(),
         t = locale.t;
-    /** What someone walking by is saying: who, the line, and until when. */
-    let speech = $state<{ who: number; text: string; until: number } | null>(null),
+    /** What someone walking by (or the creator in the server room) is saying: who/where, the line, and until when. */
+    let speech = $state<{ who?: number; at?: THREE.Vector3; text: string; until: number } | null>(null),
         bubble = $state<HTMLDivElement>();
     let cutaway = $state(false),
         overhead = $state(false),
@@ -866,7 +867,26 @@
             ghost: stage.ghost,
             selectedBox: stage.selectedBox,
             state: () => ({ pan, active, pieces, inside }),
-            onselect,
+            onselect: (pieceId, roomId, point) => {
+                if (pieceId !== null && roomId !== undefined) {
+                    const piece = pieces.find((p) => p.id === pieceId);
+                    const rm = piece?.roomAssets?.find((r) => r.id === roomId);
+                    if (piece && rm && isServerRoom(rm.name)) {
+                        const wx = (piece.x + rm.x + rm.w / 2) * 2;
+                        const wz = (piece.y + rm.y + rm.h / 2) * 2;
+                        speech = {
+                            at: new THREE.Vector3(wx, 2.0, wz),
+                            text:
+                                locale.lang === "id"
+                                    ? "Halo! Saya Putu Mahendra, pembuat AIRMA — lagi kerja di ruang server biar AIRMA makin keren!"
+                                    : "Hi! I'm Putu Mahendra, the creator of AIRMA — working on AIRMA right here in the server room!",
+                            until: performance.now() + 6500,
+                        };
+                        dirty = true;
+                    }
+                }
+                onselect(pieceId, roomId, point);
+            },
             onplace,
             onmove,
             onhover: (h) => (hover = h),
@@ -973,11 +993,15 @@
                 const who = someoneInSight();
                 if (who >= 0) say(who);
             }
-            // The bubble stays over the speaker's head, wherever the view goes.
+            // The bubble stays over the speaker's head (or the creator's server room desk), wherever the view goes.
             if (speech) {
-                if (performance.now() > speech.until || !prefs.people) speech = null;
-                else if (bubble && crowd) {
-                    crowd.headOf(speech.who, onScreen).project(camera);
+                if (performance.now() > speech.until || (!speech.at && !prefs.people)) speech = null;
+                else if (bubble) {
+                    if (speech.at) {
+                        onScreen.copy(speech.at).project(camera);
+                    } else if (crowd && speech.who !== undefined) {
+                        crowd.headOf(speech.who, onScreen).project(camera);
+                    }
                     const x = ((onScreen.x + 1) / 2) * dom.clientWidth,
                         y = ((1 - onScreen.y) / 2) * dom.clientHeight;
                     bubble.style.transform = `translate(${x}px, ${y}px)`;

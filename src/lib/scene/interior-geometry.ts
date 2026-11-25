@@ -326,10 +326,70 @@ function room(r: RoomAsset, cutaway: boolean, materials: Map<string, THREE.MeshS
   return g;
 }
 
+/** Detect a hospital IT / Server / SIMRS room for the creator Easter egg. */
+export const isServerRoom = (name: string) => /\b(server|ruang it|simrs|data ?center|pusdatin|jaringan|noc)\b/i.test(name);
+
 /** Furniture in the room's local frame: back wall at -D/2, door at +D/2. */
 function furnish(box: Box, type: RoomAsset["type"], W: number, D: number, name: string) {
   const back = -D / 2,
     floor = 0.35;
+
+  // Easter egg: Putu Mahendra (creator of AIRMA) coding at dual monitors in the Server Room!
+  if (isServerRoom(name)) {
+    // Glowing server racks along the back wall.
+    const racks = Math.max(1, Math.min(3, Math.floor((W - 0.3) / 0.72)));
+    for (let i = 0; i < racks; i++) {
+      const rx = -((racks - 1) * 0.68) / 2 + i * 0.68;
+      box(name + " server rack", rx, floor + 0.95, back + 0.32, 0.56, 1.9, 0.52, "#1f292b", {
+        roughness: 0.4,
+        metalness: 0.45,
+      });
+      // Blinking green & cyan server LED status strips (zero runtime light cost).
+      for (let row = 0; row < 4; row++) {
+        const ly = floor + 0.45 + row * 0.36;
+        box(name + " server led", rx - 0.12, ly, back + 0.59, 0.22, 0.04, 0.02, "#4ade80", {
+          emissive: "#4ade80",
+          emissiveIntensity: 0.85,
+          cast: false,
+        });
+        box(name + " server led", rx + 0.14, ly, back + 0.59, 0.08, 0.04, 0.02, "#38bdf8", {
+          emissive: "#38bdf8",
+          emissiveIntensity: 0.8,
+          cast: false,
+        });
+      }
+    }
+
+    // Developer desk + dual glowing AIRMA monitors + coffee mug.
+    const deskZ = Math.min(0.15, D / 2 - 0.85);
+    const deskW = Math.min(1.45, W - 0.35);
+    box(name + " dev desk", 0, floor + 0.37, deskZ, deskW, 0.74, 0.62, WOOD_DARK, { roughness: 0.6 });
+    for (const mx of [-0.26, 0.26]) {
+      box(name + " monitor stand", mx, floor + 0.78, deskZ - 0.14, 0.08, 0.1, 0.08, SCREEN);
+      box(name + " monitor screen", mx, floor + 0.98, deskZ - 0.14, 0.42, 0.28, 0.04, "#162420", {
+        roughness: 0.2,
+        emissive: "#5ee68a",
+        emissiveIntensity: 0.45,
+      });
+    }
+    // Keyboard + coffee mug.
+    box(name + " keyboard", 0, floor + 0.76, deskZ + 0.08, 0.36, 0.03, 0.12, "#2d3739");
+    box(name + " coffee mug", deskW / 2 - 0.16, floor + 0.8, deskZ + 0.1, 0.08, 0.11, 0.08, WHITE);
+
+    // Putu Mahendra seated at the desk working on AIRMA!
+    const devZ = deskZ + 0.48;
+    // Office chair.
+    box(name + " dev chair base", 0, floor + 0.2, devZ, 0.38, 0.4, 0.38, "#2b3336", { metalness: 0.4 });
+    box(name + " dev chair back", 0, floor + 0.68, devZ + 0.2, 0.42, 0.56, 0.07, "#2b3336");
+    // Seated creator figure (forest-pine hoodie, dark trousers, head, hair, arms reaching keyboard).
+    box(name + " creator legs", 0, floor + 0.42, devZ - 0.1, 0.34, 0.18, 0.42, "#2f3942");
+    box(name + " creator torso", 0, floor + 0.76, devZ + 0.02, 0.36, 0.48, 0.22, "#1e4031");
+    box(name + " creator arms", -0.2, floor + 0.78, devZ - 0.16, 0.1, 0.11, 0.34, "#1e4031");
+    box(name + " creator arms", 0.2, floor + 0.78, devZ - 0.16, 0.1, 0.11, 0.34, "#1e4031");
+    box(name + " creator head", 0, floor + 1.14, devZ + 0.01, 0.22, 0.24, 0.22, "#a8714a");
+    box(name + " creator hair", 0, floor + 1.24, devZ + 0.03, 0.23, 0.09, 0.23, "#1f1c1a");
+    return;
+  }
 
   const bed = (x: number, len = Math.min(1.92, D - 0.5), iv = false) => {
     const z = back + 0.12 + len / 2;
