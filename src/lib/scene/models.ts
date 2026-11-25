@@ -72,50 +72,132 @@ const turning = (poly: Vec[]) =>
   }, 0);
 
 const FLOOR_TOP = 0.24,
-  ROOF_BOTTOM = 2.76,
-  ROOF_TOP = 2.94,
-  POST = 0.1,
+  ROOF_BOTTOM = 2.78,
+  ROOF_TOP = 2.98,
+  POST = 0.11,
   /** Target distance between support posts along a side, in metres. */
   POST_SPACING = 3;
 
 /**
  * A covered walkway built straight from the corridor's footprint, so it turns
- * with the piece and keeps real-size posts however long it is stretched.
- * Materials come from the Blender template.
+ * with the piece and keeps real-size posts, footings, handrails, and soffit
+ * lights however long it is stretched. All repeated parts share materials so
+ * `batchMeshes` merges them into a handful of draw calls.
  */
 function corridorModel(p: Piece, template: THREE.Object3D, pieces: Piece[]) {
   const group = new THREE.Group();
   const poly = footprint(p).map((v) => ({ x: v.x * 2, z: v.y * 2 }));
   group.add(slab("Continuous corridor floor", poly, 0, FLOOR_TOP, materialOf(template, /floor/i)));
   group.add(slab("Continuous corridor roof", poly, ROOF_BOTTOM, ROOF_TOP, materialOf(template, /roof/i)));
+
   const postMaterial = materialOf(template, /post/i),
-    postGeometry = new THREE.BoxGeometry(POST, ROOF_BOTTOM - FLOOR_TOP, POST),
+    trimMaterial = new THREE.MeshStandardMaterial({ color: "#cfd6cc", roughness: 0.72, metalness: 0.1 }),
+    railMaterial = new THREE.MeshStandardMaterial({ color: "#5f7067", roughness: 0.42, metalness: 0.45 }),
+    fasciaMaterial = new THREE.MeshStandardMaterial({ color: "#3d5347", roughness: 0.58, metalness: 0.15 }),
+    lightMaterial = new THREE.MeshStandardMaterial({
+      color: "#fffcf2",
+      emissive: "#fff4d6",
+      emissiveIntensity: 0.45,
+      roughness: 0.3,
+    }),
+    postH = ROOF_BOTTOM - FLOOR_TOP,
+    postGeometry = new THREE.BoxGeometry(POST, postH, POST),
+    plinthGeometry = new THREE.BoxGeometry(POST + 0.08, 0.14, POST + 0.08),
+    capitalGeometry = new THREE.BoxGeometry(POST + 0.06, 0.09, POST + 0.06),
     inward = turning(poly) > 0 ? 1 : -1,
     ends = corridorEnds(p);
+
   poly.forEach((a, i) => {
     if (ends.includes(i)) return;
     const b = poly[(i + 1) % poly.length],
       open = exposedRuns(p, i, pieces),
-      length = Math.hypot(b.x - a.x, b.z - a.z),
-      dx = (b.x - a.x) / length,
+      length = Math.hypot(b.x - a.x, b.z - a.z);
+    if (length < 0.01) return;
+    const dx = (b.x - a.x) / length,
       dz = (b.z - a.z) / length,
+      nx = -dz * inward,
+      nz = dx * inward,
+      alongX = Math.abs(b.x - a.x) > Math.abs(b.z - a.z),
       count = Math.max(1, Math.round(length / POST_SPACING));
-    // Evenly spaced along the side, set just inside the canopy edge.
+
+    // Evenly spaced posts with plinth footings and top capitals along exposed sides.
     for (let k = 0; k < count; k++) {
       const f = (k + 0.5) / count;
-      // No post where another walkway joins this side.
       if (!open.some(([from, to]) => f >= from && f <= to)) continue;
       const t = f * length,
-        post = new THREE.Mesh(postGeometry, postMaterial);
+        px = a.x + dx * t + nx * 0.09,
+        pz = a.z + dz * t + nz * 0.09;
+
+      const post = new THREE.Mesh(postGeometry, postMaterial);
       post.name = "Side support post";
-      post.position.set(
-        a.x + dx * t - dz * inward * 0.08,
-        (FLOOR_TOP + ROOF_BOTTOM) / 2,
-        a.z + dz * t + dx * inward * 0.08,
-      );
+      post.position.set(px, FLOOR_TOP + postH / 2, pz);
       group.add(post);
+
+      const plinth = new THREE.Mesh(plinthGeometry, trimMaterial);
+      plinth.name = "Post footing";
+      plinth.position.set(px, FLOOR_TOP + 0.07, pz);
+      group.add(plinth);
+
+      const cap = new THREE.Mesh(capitalGeometry, fasciaMaterial);
+      cap.name = "Post capital";
+      cap.position.set(px, ROOF_BOTTOM - 0.045, pz);
+      group.add(cap);
+    }
+
+    // Exposed walkway edges get a floor kerb, sleek double handrail, and roof fascia beam.
+    for (const [from, to] of open) {
+      const run = (to - from) * length;
+      if (run < 0.15) continue;
+      const mid = ((from + to) / 2) * length,
+        mx = a.x + dx * mid,
+        mz = a.z + dz * mid;
+
+      const kerb = new THREE.Mesh(
+        new THREE.BoxGeometry(alongX ? run : 0.1, 0.08, alongX ? 0.1 : run),
+        trimMaterial,
+      );
+      kerb.name = "Corridor kerb";
+      kerb.position.set(mx + nx * 0.05, FLOOR_TOP + 0.04, mz + nz * 0.05);
+      group.add(kerb);
+
+      // Top & mid handrails at comfortable hospital height (0.95m & 0.56m above floor).
+      for (const ry of [0.95, 0.56]) {
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(alongX ? run : 0.045, 0.04, alongX ? 0.045 : run),
+          railMaterial,
+        );
+        rail.name = "Corridor handrail";
+        rail.position.set(mx + nx * 0.09, FLOOR_TOP + ry, mz + nz * 0.09);
+        group.add(rail);
+      }
+
+      // Crisp architectural fascia trim along the canopy edge.
+      const fascia = new THREE.Mesh(
+        new THREE.BoxGeometry(alongX ? run : 0.07, 0.16, alongX ? 0.07 : run),
+        fasciaMaterial,
+      );
+      fascia.name = "Corridor roof fascia";
+      fascia.position.set(mx + nx * 0.02, ROOF_BOTTOM + 0.08, mz + nz * 0.02);
+      group.add(fascia);
     }
   });
+
+  // Subtle recessed ceiling light bar under the canopy centerline (zero runtime light cost).
+  const wM = p.w * 2,
+    hM = p.h * 2,
+    cx = (p.x + p.w / 2) * 2,
+    cz = (p.y + p.h / 2) * 2,
+    alongX = wM >= hM,
+    span = Math.max(0.6, (alongX ? wM : hM) - 0.8);
+  const strip = new THREE.Mesh(
+    new THREE.BoxGeometry(alongX ? span : 0.16, 0.03, alongX ? 0.16 : span),
+    lightMaterial,
+  );
+  strip.name = "Corridor roof light";
+  strip.position.set(cx, ROOF_BOTTOM - 0.015, cz);
+  strip.castShadow = false;
+  group.add(strip);
+
   return group;
 }
 
@@ -558,8 +640,8 @@ export function pieceModel(
     o.material = Array.isArray(o.material) ? copies : copies[0];
   });
 
-  // Looking inside, corridors lose their canopy and the posts that hold it up.
-  if (inside && isCorridor(p)) removeMeshes(model, (o) => /roof|post/i.test(o.name));
+  // Looking inside, corridors lose their canopy, posts, handrails, and overhead fixtures.
+  if (inside && isCorridor(p)) removeMeshes(model, (o) => /roof|post|rail|fascia|light/i.test(o.name));
   let interior: THREE.Group | null = null;
   if (isBuilding(p)) {
     // The generated interior replaces the template's shell and doors.

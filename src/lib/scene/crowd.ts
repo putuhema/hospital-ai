@@ -2,26 +2,24 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 /**
- * People (and the hospital's cats) strolling between the buildings while
- * nobody is using the map, so the campus feels alive. Four instanced meshes,
- * so everyone is drawn in four calls: bodies, heads (skin or a hijab),
- * umbrellas against the midday sun, and cats. Each walker follows a stroll (a
- * walking route in metres) from door to door, appearing at the first and
- * fading out at the last, then sets off on another.
- *
- * Who is about: grown-ups, children skipping beside a parent, older people
- * taking their time, and a few cats that wander slowly and sit down a while.
- * Someone tapped gives a little hop before they speak.
+ * People (patients, visitors, hospital staff, and the hospital's cats) strolling
+ * between the buildings so the campus feels alive while staying fast.
+ * Six instanced meshes draw everyone in 6 calls total: torso/arms, legs, heads,
+ * hair/hijab caps, midday umbrellas, and cats.
  *
  * Cheap to run: the scene only moves them as often as they visibly move (see
  * `stepEvery`), and asks for a frame only when someone is on screen.
  */
 
-/** Clothes: hospital whites and scrubs, batik browns, everyday colours. */
-const CLOTHES = ["#f4f2ec", "#7fb3c9", "#5f9a7a", "#c98a4b", "#8c5a3c", "#d9c27a", "#6a7fb0", "#b5585b", "#4f5d6a", "#e9e4d8"];
-/** Children wear brighter things. */
+/** Clothes: hospital whites & scrubs, warm batik, everyday visitor tones. */
+const CLOTHES = ["#f5f4ef", "#6ea8be", "#4f8f72", "#c98a4b", "#8c5a3c", "#d9c27a", "#5f76a8", "#b5585b", "#485966", "#eae5d9"];
+/** Trousers & skirts: calm grounded neutrals. */
+const TROUSERS = ["#2f3942", "#434d56", "#585046", "#394652", "#2c3e35", "#65635d", "#333940"];
+/** Children wear brighter tops. */
 const KIDS = ["#f2b134", "#e2574c", "#4fa3d9", "#7cc47f", "#e98bb4", "#f7d44c"];
 const SKIN = ["#8d5a3b", "#a8714a", "#6e4529", "#c08a5f", "#9b6744"];
+const HAIR = ["#1f1c1a", "#2b241f", "#3a2e25", "#1c1a18"];
+const ELDER_HAIR = ["#c9c7c1", "#9f9e98", "#d8d6d0"];
 const HIJAB = ["#2f3e5c", "#b5585b", "#e2c9a6", "#5f7d64", "#7a4b6b", "#d9d2c2", "#3d6f86", "#c9a03f"];
 const UMBRELLAS = ["#e2574c", "#f2b134", "#4fa3d9", "#e98bb4", "#7cc47f", "#ffffff", "#7b5ea7"];
 /** Ginger, white, black, grey tabby, cream. */
@@ -64,16 +62,50 @@ function merged(parts: THREE.BufferGeometry[]) {
   for (const g of parts) g.dispose();
   return out;
 }
-/** A body about 1.25 m tall, standing on the origin; the head sits on it (1.4 m). */
-const bodyShape = () => new THREE.CylinderGeometry(0.17, 0.23, 1.15, 7).translate(0, 0.6, 0);
-const headShape = () => new THREE.SphereGeometry(0.16, 8, 6).translate(0, 1.4, 0);
-/** An umbrella held up over the head: a pole and an open canopy. */
+
+/**
+ * Sculpted low-poly torso with rounded shoulders and two relaxed arms at the
+ * sides (sits above the legs, from y = 0.62 to 1.24).
+ */
+const bodyShape = () =>
+  merged([
+    // Main torso / shirt / hospital coat.
+    new THREE.CylinderGeometry(0.16, 0.19, 0.62, 8).translate(0, 0.93, 0),
+    // Soft shoulder cap.
+    new THREE.SphereGeometry(0.165, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.18, 0.55, 0.85).translate(0, 1.21, 0),
+    // Left and right arms slightly angled away from the body.
+    new THREE.CylinderGeometry(0.05, 0.042, 0.52, 6).rotateZ(0.14).translate(-0.21, 0.95, 0),
+    new THREE.CylinderGeometry(0.05, 0.042, 0.52, 6).rotateZ(-0.14).translate(0.21, 0.95, 0),
+  ]);
+
+/** Two distinct legs standing from y = 0 to 0.65 so people read cleanly up close. */
+const legsShape = () =>
+  merged([
+    new THREE.CylinderGeometry(0.072, 0.056, 0.64, 6).translate(-0.085, 0.32, 0),
+    new THREE.CylinderGeometry(0.072, 0.056, 0.64, 6).translate(0.085, 0.32, 0),
+  ]);
+
+/** Head and subtle neck sitting cleanly on the shoulders (y = 1.44). */
+const headShape = () =>
+  merged([
+    new THREE.CylinderGeometry(0.055, 0.065, 0.1, 6).translate(0, 1.28, 0),
+    new THREE.SphereGeometry(0.155, 10, 7).translate(0, 1.44, 0),
+  ]);
+
+/** Hair / hijab crown cap sitting over the upper back of the head. */
+const hairShape = () =>
+  new THREE.SphereGeometry(0.164, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.62)
+    .rotateX(-0.28)
+    .translate(0, 1.46, -0.015);
+
+/** An umbrella held up over the head: a pole and a 10-sided dome canopy. */
 const umbrellaShape = () =>
   merged([
-    new THREE.CylinderGeometry(0.015, 0.015, 0.75, 4).translate(0.12, 1.7, 0),
-    new THREE.ConeGeometry(0.6, 0.26, 8, 1, true).translate(0.12, 2.12, 0),
+    new THREE.CylinderGeometry(0.014, 0.014, 0.78, 5).translate(0.12, 1.72, 0),
+    new THREE.ConeGeometry(0.62, 0.25, 10, 1, true).translate(0.12, 2.15, 0),
   ]);
-/** A cat about 0.45 m long, facing +z: body, head, ears and a tail up. */
+
+/** A cat about 0.45 m long, facing +z: body, head, ears and a raised tail. */
 const catShape = () =>
   merged([
     new THREE.BoxGeometry(0.16, 0.15, 0.36).translate(0, 0.2, 0),
@@ -81,7 +113,6 @@ const catShape = () =>
     new THREE.ConeGeometry(0.035, 0.07, 4).translate(-0.045, 0.4, 0.21),
     new THREE.ConeGeometry(0.035, 0.07, 4).translate(0.045, 0.4, 0.21),
     new THREE.CylinderGeometry(0.018, 0.022, 0.26, 4).rotateX(-0.5).translate(0, 0.33, -0.22),
-    // Four short legs.
     ...[-1, 1].flatMap((x) => [-1, 1].map((z) => new THREE.BoxGeometry(0.04, 0.13, 0.04).translate(x * 0.05, 0.065, z * 0.13))),
   ]);
 
@@ -119,7 +150,9 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   const look = (side: THREE.Side = THREE.FrontSide) => new THREE.MeshLambertMaterial({ color: "#ffffff", side });
   const meshes = {
     body: new THREE.InstancedMesh(bodyShape(), look(), total),
+    legs: new THREE.InstancedMesh(legsShape(), look(), total),
     head: new THREE.InstancedMesh(headShape(), look(), total),
+    hair: new THREE.InstancedMesh(hairShape(), look(), total),
     umbrella: new THREE.InstancedMesh(umbrellaShape(), look(THREE.DoubleSide), total),
     cat: new THREE.InstancedMesh(catShape(), look(), total),
   };
@@ -148,7 +181,9 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   const m = new THREE.Matrix4(),
     zero = new THREE.Matrix4().makeScale(0, 0, 0),
     q = new THREE.Quaternion(),
+    tilt = new THREE.Quaternion(),
     up = new THREE.Vector3(0, 1, 0),
+    forward = new THREE.Vector3(0, 0, 1),
     position = new THREE.Vector3(),
     size = new THREE.Vector3(),
     point = new THREE.Vector3(),
@@ -160,36 +195,46 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   function cast(i: number): Pick<Walker, "kind" | "height"> {
     if (i < cats) return { kind: "cat", height: 1 };
     const r = Math.random();
-    if (r < 0.15) return { kind: "elder", height: 0.95 };
-    if (r < 0.27) return { kind: "child", height: 0.62 };
+    if (r < 0.15) return { kind: "elder", height: 0.94 };
+    if (r < 0.27) return { kind: "child", height: 0.64 };
     return { kind: "adult", height: 0.94 + Math.random() * 0.12 };
   }
 
   /** Walker `i` sets off on a walk: from a door, or (`fresh`, when the map opens) somewhere along it. */
   const pick = (w: Walker, i: number, fresh = false) => {
-    // Fewer people wanted: they go in at the end of their walk, rather than vanishing on the way.
     w.benched = i >= active;
     if (strolls.length) w.stroll = random(strolls);
     const length = w.stroll.total;
     w.s = fresh ? Math.random() * length : 0;
     w.speed =
-      w.kind === "cat" ? 0.45 + Math.random() * 0.3 : w.kind === "elder" ? 0.6 + Math.random() * 0.25 : w.kind === "child" ? 1.2 + Math.random() * 0.5 : 0.95 + Math.random() * 0.55;
+      w.kind === "cat"
+        ? 0.45 + Math.random() * 0.3
+        : w.kind === "elder"
+          ? 0.6 + Math.random() * 0.25
+          : w.kind === "child"
+            ? 1.2 + Math.random() * 0.5
+            : 0.95 + Math.random() * 0.55;
     w.side = (Math.random() - 0.5) * (w.kind === "cat" ? 1.6 : 0.6);
     w.wait = fresh ? 0 : Math.random() * (w.kind === "cat" ? 8 : 3);
-    // One in four stops a moment on the way; cats mostly, and sit down a good while.
     const stops = Math.random() < (w.kind === "cat" ? 0.75 : 0.25) && length > 10;
     w.stopAt = stops ? 4 + Math.random() * (length - 8) : Infinity;
     w.stopFor = w.kind === "cat" ? 4 + Math.random() * 8 : 2 + Math.random() * 4;
     w.umbrella = w.kind !== "cat" && w.kind !== "child" && sunny(hour) && Math.random() < 0.3;
   };
 
-  /** Colours per walker: clothes, skin or a hijab, their umbrella, a cat's coat. */
+  /** Colours per walker: clothes, trousers, skin, hair/hijab, umbrella, cat's coat. */
   function dress() {
     walkers.forEach((w, i) => {
       meshes.cat.setColorAt(i, color.set(random(CATS)));
       meshes.body.setColorAt(i, color.set(w.kind === "child" ? random(KIDS) : random(CLOTHES)));
-      // About two in five grown-ups wear a hijab.
-      meshes.head.setColorAt(i, color.set(w.kind !== "child" && Math.random() < 0.4 ? random(HIJAB) : random(SKIN)));
+      meshes.legs.setColorAt(i, color.set(random(TROUSERS)));
+      const wearsHijab = w.kind !== "child" && Math.random() < 0.4;
+      const hijabColor = wearsHijab ? random(HIJAB) : null;
+      meshes.head.setColorAt(i, color.set(random(SKIN)));
+      meshes.hair.setColorAt(
+        i,
+        color.set(hijabColor ?? (w.kind === "elder" ? random(ELDER_HAIR) : random(HAIR))),
+      );
       meshes.umbrella.setColorAt(i, color.set(random(UMBRELLAS)));
     });
     for (const mesh of all) if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -218,11 +263,23 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   function populate() {
     if (walkers.length || !strolls.length) return;
     walkers = Array.from({ length: total }, (_, i) => {
-      const w: Walker = { ...cast(i), stroll: strolls[0], benched: false, s: 0, speed: 1, side: 0, wait: 0, stopAt: Infinity, stopFor: 0, with: -1, umbrella: false, hop: 0 };
+      const w: Walker = {
+        ...cast(i),
+        stroll: strolls[0],
+        benched: false,
+        s: 0,
+        speed: 1,
+        side: 0,
+        wait: 0,
+        stopAt: Infinity,
+        stopFor: 0,
+        with: -1,
+        umbrella: false,
+        hop: 0,
+      };
       pick(w, i, true);
       return w;
     });
-    // About a third walk with someone, beside them; most children walk with a grown-up.
     walkers.forEach((w, i) => {
       const lead = walkers[i - 1];
       if (w.kind === "cat" || !lead || lead.kind === "cat" || lead.with >= 0 || (i - cats) % 2 !== 1) return;
@@ -234,7 +291,6 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   }
 
   function counts() {
-    // Everyone is drawn; those benched have no size.
     for (const mesh of all) mesh.count = walkers.length;
   }
 
@@ -244,27 +300,35 @@ export function createCrowd(scene: THREE.Scene, count: number) {
       const s = w.stroll,
         p = along(s.points, s.lengths, w.s),
         cat = w.kind === "cat",
-        // In through one door and out at the other: they grow and shrink over the first and last metre.
         appear = Math.max(0, Math.min(1, w.s, s.total - w.s)),
         scale = w.wait > 0 || w.benched ? 0 : appear * (cat ? CAT_SIZE : SIZE * w.height),
         standing = w.s >= w.stopAt && w.stopFor > 0,
-        // A slight sway and a bob with each step; children skip, higher. A hop when tapped.
-        stride = w.kind === "child" ? 0.5 : 0.7,
-        sway = standing || cat ? 0 : Math.sin(w.s * 3.2) * 0.04,
-        bob = standing ? 0 : Math.abs(Math.sin((w.s * Math.PI) / stride)) * (w.kind === "child" ? 0.12 : cat ? 0.015 : 0.05),
+        stride = w.kind === "child" ? 0.5 : 0.72,
+        phase = (w.s * Math.PI) / stride,
+        sway = standing || cat ? 0 : Math.sin(phase) * 0.045,
+        roll = standing || cat ? 0 : Math.sin(phase) * 0.035,
+        bob = standing ? 0 : Math.abs(Math.sin(phase)) * (w.kind === "child" ? 0.11 : cat ? 0.015 : 0.045),
         hop = w.hop > 0 ? Math.sin((1 - w.hop / 0.5) * Math.PI) * 0.45 : 0;
+
       position.set(p.x - p.dz * w.side, 0.05 + bob + hop, p.z + p.dx * w.side);
       q.setFromAxisAngle(up, Math.atan2(p.dx, p.dz) + sway);
-      // A cat sitting down is a little lower and shorter.
+      if (roll !== 0) {
+        tilt.setFromAxisAngle(forward, roll);
+        q.multiply(tilt);
+      }
       size.set(scale, cat && standing ? scale * 0.82 : scale, scale);
       m.compose(position, q, size);
+
       at[i * 4] = position.x;
       at[i * 4 + 1] = position.z;
       at[i * 4 + 2] = scale / (cat ? CAT_SIZE : SIZE * w.height);
-      at[i * 4 + 3] = position.y + (cat ? 0.42 * size.y : 1.75 * scale);
+      at[i * 4 + 3] = position.y + (cat ? 0.42 * size.y : 1.78 * scale);
+
       meshes.cat.setMatrixAt(i, cat ? m : zero);
       meshes.body.setMatrixAt(i, cat ? zero : m);
+      meshes.legs.setMatrixAt(i, cat ? zero : m);
       meshes.head.setMatrixAt(i, cat ? zero : m);
+      meshes.hair.setMatrixAt(i, cat ? zero : m);
       meshes.umbrella.setMatrixAt(i, !cat && w.umbrella ? m : zero);
     });
     for (const mesh of all) mesh.instanceMatrix.needsUpdate = true;
@@ -283,12 +347,10 @@ export function createCrowd(scene: THREE.Scene, count: number) {
   function update(time: number, camera?: THREE.Camera) {
     const dt = last ? Math.min(0.2, (time - last) / 1000) : 0;
     last = time;
-    // A small campus may never have many walks: out they come after a few seconds anyway.
     if (!walkers.length && firstAt && performance.now() - firstAt > 3000) populate();
     if (!walkers.length || !group.visible) return false;
     walkers.forEach((w, i) => {
       if (w.hop > 0) w.hop = Math.max(0, w.hop - dt);
-      // A companion keeps beside the one they walk with, half a step behind.
       const lead = w.with >= 0 ? walkers[w.with] : null;
       if (lead && lead.with < 0) {
         w.stroll = lead.stroll;
@@ -301,7 +363,6 @@ export function createCrowd(scene: THREE.Scene, count: number) {
         return;
       }
       if (w.benched) {
-        // More people wanted: out of a door they come.
         if (i < active) pick(w, i);
         return;
       }
@@ -331,7 +392,6 @@ export function createCrowd(scene: THREE.Scene, count: number) {
       gap = reach;
     for (let i = 0; i < walkers.length; i++) {
       if (at[i * 4 + 2] < 0.6) continue;
-      // Their middle, about chest height (a cat's back).
       point.set(at[i * 4], at[i * 4 + 3] * 0.6, at[i * 4 + 1]).project(camera);
       if (point.z > 1) continue;
       const d = Math.hypot(((point.x + 1) / 2) * width - x, ((1 - point.y) / 2) * height - y);
@@ -367,22 +427,14 @@ export function createCrowd(scene: THREE.Scene, count: number) {
     pickAt,
     inView,
     hold,
-    /** Who walker `i` is, for what they say. */
     kindOf: (i: number): Kind => walkers[i]?.kind ?? "adult",
-    /** Someone is hopping: the scene moves them every frame for that half second, even right after a tap. */
     lively: () => walkers.some((w) => w.hop > 0),
-    /** The hour at the hospital: umbrellas come out in the midday sun, for those setting off from now on. */
     setHour(h: number) {
       hour = h;
     },
-    /**
-     * How many people are about (busy hours, long queues bring more); the others wait unseen. The cats
-     * stay. A change comes gently: the extra ones go in at the end of their walk, new ones come out of a door.
-     */
     setActive(n: number) {
       active = cats + Math.max(0, Math.min(count, Math.round(n)));
     },
-    /** Shown or not (the "people" switch); nothing moves while hidden. */
     show(on: boolean) {
       group.visible = on;
     },
