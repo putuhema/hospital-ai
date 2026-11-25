@@ -17,6 +17,8 @@ export type CachedHospital = {
   revision: number;
   /** When SIMRS's doctors' schedules last changed, as `hospital.version` says. */
   schedules: number;
+  /** When the leaflets last changed, as `hospital.version` says. */
+  leaflets: number;
   title: string;
   faq: FaqEntry[];
   /** The tools' view of the map, without the time (each question has its own). */
@@ -30,13 +32,24 @@ export async function hospitalFor(convex: ConvexHttpClient, lang: Lang, slug?: s
   if (!version) return null;
   const key = `${version.slug}:${lang}`;
   const kept = hospitals.get(key);
-  if (kept?.revision === version.revision && kept.schedules === version.schedules) return kept;
+  if (kept?.revision === version.revision && kept.schedules === version.schedules && kept.leaflets === version.leaflets) return kept;
   // As visitors see it: SIMRS's doctors and hours for the clinics linked to it.
-  const saved = await convex.query(api.hospital.get, { slug: version.slug, simrs: true });
+  const [saved, leaflets] = await Promise.all([
+    convex.query(api.hospital.get, { slug: version.slug, simrs: true }),
+    convex.query(api.leaflets.list, { slug: version.slug }),
+  ]);
   if (!saved) return null;
   const layout = parseLayout(saved.layout);
-  const { now: _, ...map } = assistantContext({ ...layout, pieces: localizeRooms(layout.pieces, lang) }, new Date());
-  const hospital = { slug: saved.slug, revision: saved.revision, schedules: version.schedules, title: layout.title, faq: layout.faq, map };
+  const { now: _, ...map } = assistantContext({ ...layout, pieces: localizeRooms(layout.pieces, lang) }, new Date(), leaflets);
+  const hospital = {
+    slug: saved.slug,
+    revision: saved.revision,
+    schedules: version.schedules,
+    leaflets: version.leaflets,
+    title: layout.title,
+    faq: layout.faq,
+    map,
+  };
   hospitals.set(key, hospital);
   return hospital;
 }

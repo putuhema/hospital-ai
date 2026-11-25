@@ -10,6 +10,7 @@
     import FaqEditor from "$lib/components/editor/FaqEditor.svelte";
     import GapsList from "$lib/components/editor/GapsList.svelte";
     import DoctorsEditor from "$lib/components/editor/DoctorsEditor.svelte";
+    import LeafletsEditor from "$lib/components/editor/LeafletsEditor.svelte";
     import ShareMenu from "$lib/components/editor/ShareMenu.svelte";
     import { HospitalStore } from "$lib/editor/saving.svelte";
     import { mergeMessage } from "$lib/editor/merge";
@@ -17,7 +18,7 @@
     import { api } from "../../../convex/_generated/api";
     import type { Place } from "$lib/wayfinding/routing";
 
-    type Section = TopicId | "doctors" | "unanswered";
+    type Section = TopicId | "doctors" | "unanswered" | "leaflets";
 
     // The hospital as saved in the database. This page changes only the
     // hospital information and the doctors, and saves it back.
@@ -50,7 +51,8 @@
     };
     onMount(() => {
         const hash = location.hash.slice(1);
-        if (hash === "doctors" || hash === "unanswered" || topics.some((t) => t.id === hash)) section = hash as Section;
+        if (hash === "doctors" || hash === "unanswered" || hash === "leaflets" || topics.some((t) => t.id === hash))
+            section = hash as Section;
     });
     function go(to: Section) {
         section = to;
@@ -69,6 +71,7 @@
     // What visitors asked that AIRMA couldn't answer (lib/assistant/gaps.ts).
     const convex = useConvexClient();
     const gaps = useQuery(api.gaps.list, () => ({ slug: store.slug ?? undefined }));
+    const leaflets = useQuery(api.leaflets.list, () => ({ slug: store.slug ?? undefined }));
     let open = $derived(gaps.data ?? []);
     /** Start the answer under its topic, with the question as the visitor asked it; done here. */
     function answer(gap: (typeof open)[number]) {
@@ -143,6 +146,10 @@
             {#each topics as t}<button class:active={section === t.id} onclick={() => go(t.id)}
                     >{t.name.id}<span class="en">{t.name.en}</span><span class="n">{count(t.id) || ""}</span></button
                 >{/each}
+            <small>Leaflets</small>
+            <button class:active={section === "leaflets"} onclick={() => go("leaflets")}
+                >Brosur & leaflet<span class="en">Images</span><span class="n">{leaflets.data?.length || ""}</span></button
+            >
             <small>Doctors</small>
             <button class:active={section === "doctors"} onclick={() => go("doctors")}
                 >Jadwal dokter<span class="en">Schedules</span><span class="n">{doctorCount || ""}</span></button
@@ -170,6 +177,17 @@
             {#if gaps.error}<p class="note">Couldn't load them: {gaps.error.message}</p>
             {:else if gaps.isLoading}<p class="empty">Loading…</p>
             {:else}<GapsList gaps={open} onanswer={answer} ondone={(g) => markDone(g)} />{/if}
+        {:else if section === "leaflets"}<header>
+                <h2>Brosur & leaflet</h2>
+                <p>
+                    Brochures, posters and notices as images: the BPJS flow, a price list, a service or a campaign.
+                    AIRMA answers from what each says and shows the image in the chat, where visitors can open it
+                    full size. After uploading, the text is read from the image; check it, as AIRMA answers from the
+                    text, not from the picture.
+                </p>
+            </header>
+            {#if store.slug}<LeafletsEditor slug={store.slug} onnotify={notify} />
+            {:else}<p class="note">Save the map once in the editor before adding leaflets.</p>{/if}
         {:else if topic}<header>
                 <h2>{topic.name.id}</h2>
                 <p>

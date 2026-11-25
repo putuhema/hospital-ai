@@ -22,6 +22,7 @@ import { dateOf, doctorStatus, shortDate, specialtyOf, type Doctor } from "../mo
 import { shortcuts } from "../wayfinding/shortcuts.ts";
 import { topicOf, topics, type FaqEntry } from "../model/faq.ts";
 import { faqMatches } from "./faq-match.ts";
+import { leafletImage, type Leaflet, type LeafletImage } from "../model/leaflets.ts";
 import { MAX_SUBJECT, subjectOf, topicNamed, type MissingInfo } from "./gaps.ts";
 import { clinicKey, COUNTER_KEY, doctorToday, liveFor, quotaLeft, started, wardKey, type ClinicLive, type CounterLive, type Live, type WardLive } from "../model/live.ts";
 
@@ -31,6 +32,8 @@ export type AssistantContext = {
   grid: NavGrid;
   /** The hospital's questions & answers, for `search_hospital_info`. */
   faq?: FaqEntry[];
+  /** Leaflets and brochures uploaded as images, for `search_leaflets` and `show_leaflet`. */
+  leaflets?: Leaflet[];
   /** The hospital's local time: its day, hours and minutes are read for open-now. */
   now: Date;
   /** Today's queue and the beds from SIMRS (model/live.ts), while the bridge at the hospital is reporting. */
@@ -45,11 +48,13 @@ export type AssistantContext = {
 export function assistantContext(
   layout: { pieces: Piece[]; network: WalkingNetwork; grid: { width: number; height: number; tileMeters?: number }; faq?: FaqEntry[] },
   now: Date,
+  leaflets?: Leaflet[],
 ): AssistantContext {
   return {
     places: places(layout.pieces, layout.network),
     grid: buildGrid(layout.pieces, layout.grid.width, layout.grid.height, layout.grid.tileMeters, layout.network.nodes),
     ...(layout.faq && { faq: layout.faq }),
+    ...(leaflets?.length && { leaflets }),
     now,
   };
 }
@@ -474,6 +479,44 @@ export function searchHospitalInfo(
   };
 }
 
+const LEAFLET_WORDS =
+  /\b(brosur|leaflet|leaflets|pamflet|pamphlet|flyer|flyers|selebaran|poster|posters|brochure|brochures|gambar|image|picture|foto|photo|info|informasi|ada|tentang|about|lihat|show|minta)\b/g;
+
+/**
+ * The hospital's leaflets and brochures about what the question is about, with
+ * what each says, best first. Matched like the questions & answers: the title
+ * as the question, the leaflet's text as the answer.
+ */
+export function searchLeaflets(
+  ctx: AssistantContext,
+  { query, limit = 3 }: { query: string; limit?: number },
+): { results: { id: string; title: string; topic: string; text: string }[] } {
+  const n = Math.min(Math.max(1, Math.round(limit)), 10),
+    list = ctx.leaflets ?? [];
+  // Words for a leaflet itself say nothing about which one ("brosur BPJS" is the BPJS one); without others, it lists them.
+  const asked = normalize(query).replace(LEAFLET_WORDS, " ").trim();
+  const entries = list.map((l) => ({ question: l.title || "-", answer: l.text || "-", leaflet: l }));
+  const found = asked ? (faqMatches(entries, asked, n) as typeof entries) : entries;
+  return {
+    results: found.slice(0, n).map(({ leaflet: l }) => ({
+      id: l.id,
+      title: l.title,
+      topic: topics.find((t) => t.id === l.topic)?.name.id ?? l.topic,
+      text: l.text || "(The hospital hasn't written out what this leaflet says; only its title is known.)",
+    })),
+  };
+}
+
+/** A leaflet for the app to show in the chat, as an image the visitor can open. */
+export function showLeaflet(
+  ctx: AssistantContext,
+  { leaflet_id }: { leaflet_id: string },
+): { shown: string; image: LeafletImage } | ToolError {
+  const l = ctx.leaflets?.find((x) => x.id === leaflet_id);
+  if (!l) return { error: `There is no leaflet with id "${leaflet_id}". Use search_leaflets to find its id.` };
+  return { shown: l.title || "Leaflet", image: leafletImage(l) };
+}
+
 /** A place, or a route when there is a start, for the app to show on the map. */
 export function showOnMap(
   ctx: AssistantContext,
@@ -653,6 +696,33 @@ export const toolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: "search_leaflets",
+    description:
+      "The hospital's leaflets, brochures and posters (brosur, pamflet), uploaded as images: e.g. the BPJS " +
+      "registration flow, a price list, services or a health campaign. Returns the best matching leaflets with " +
+      "their ids and what each says, written out. Understands English and Indonesian; an empty query lists them. " +
+      "An empty result means there is no such leaflet.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What the visitor wants to know, in their words." },
+        limit: { type: "integer", description: "At most this many leaflets (default 3, up to 10)." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "show_leaflet",
+    description:
+      "Show a leaflet's image in the chat, for the visitor to read and open full size. Use it when a leaflet " +
+      "answers what they asked, alongside your short answer from its text.",
+    input_schema: {
+      type: "object",
+      properties: { leaflet_id: { type: "string", description: "The leaflet's id, from search_leaflets." } },
+      required: ["leaflet_id"],
+    },
+  },
+  {
     name: "note_missing_info",
     description:
       "Tell the hospital that the visitor asked something your tools and the hospital information don't answer " +
@@ -691,6 +761,8 @@ const tools: Record<string, (ctx: AssistantContext, input: never) => object> = {
   find_nearest: findNearest,
   get_directions: getDirections,
   show_on_map: showOnMap,
+  search_leaflets: searchLeaflets,
+  show_leaflet: showLeaflet,
   note_missing_info: noteMissingInfo,
 };
 

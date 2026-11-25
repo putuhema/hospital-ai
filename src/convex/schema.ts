@@ -21,7 +21,24 @@ export default defineSchema({
     /** Goes up with every saved change, so editors see each other's changes. */
     revision: v.number(),
     updatedAt: v.number(),
+    /** When a leaflet was last added, changed or removed (leaflets.ts), for caches; unset before any. */
+    leafletsAt: v.optional(v.number()),
   }).index("by_slug", ["slug"]),
+
+  /**
+   * Leaflets, brochures and posters uploaded as images (lib/model/leaflets.ts):
+   * the image on Vercel Blob, and its title and text for the assistant.
+   */
+  leaflets: defineTable({
+    hospitalId: v.id("hospitals"),
+    url: v.string(),
+    title: v.string(),
+    text: v.string(),
+    topic: v.string(),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_hospital", ["hospitalId", "createdAt"]),
 
   /** Buildings, corridors and outdoor pieces with their rooms (their details are in `places`). */
   buildings: defineTable({

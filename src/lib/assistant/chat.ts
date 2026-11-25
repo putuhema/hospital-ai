@@ -12,6 +12,7 @@ import { DEFAULT_LANG, type Lang } from "../i18n/lang.ts";
 import { typeInline, typeName } from "../i18n/places.ts";
 import { normalize } from "../wayfinding/search.ts";
 import { faqFor, replyLang } from "./faq-match.ts";
+import type { LeafletImage } from "../model/leaflets.ts";
 
 export { replyLang };
 import {
@@ -29,6 +30,8 @@ export type ReplyEvent =
   | { type: "text"; text: string }
   /** `doctor`: the card is about this doctor, who practises at the place; it shows their schedule. */
   | { type: "card"; show: MapSelection; doctor?: string }
+  /** A leaflet or brochure the hospital uploaded, shown as an image the visitor can open. */
+  | { type: "image"; image: LeafletImage }
   /** What the assistant is doing while it looks something up: the tool it is using. */
   | { type: "status"; tool: string };
 export type ChatPart = Exclude<ReplyEvent, { type: "status" }>;
@@ -96,7 +99,7 @@ export function nextReveal(queue: ReplyEvent[]): ReplyEvent | undefined {
   return { type: "text", text };
 }
 
-/** A message's text, without its cards. */
+/** A message's text, without its cards and images. */
 export const messageText = (m: ChatMessage) =>
   m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
 

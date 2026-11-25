@@ -278,6 +278,10 @@ const en = {
   lookingNearest: "Finding the nearest one…",
   lookingRoute: "Working out the route…",
   lookingMap: "Marking it on the map…",
+  lookingLeaflets: "Looking through the leaflets…",
+  leafletEnlarge: "Tap to enlarge",
+  leafletOpen: "Open image",
+  leafletGone: "This leaflet couldn't be loaded.",
 } as const;
 
 export type Key = keyof typeof en;
@@ -549,6 +553,10 @@ const id: Record<Key, string> = {
   lookingNearest: "Mencari yang terdekat…",
   lookingRoute: "Menyiapkan rute…",
   lookingMap: "Menandai di peta…",
+  lookingLeaflets: "Melihat brosur…",
+  leafletEnlarge: "Ketuk untuk memperbesar",
+  leafletOpen: "Buka gambar",
+  leafletGone: "Brosur ini tidak bisa dimuat.",
 };
 
 export const messages: Record<Lang, Record<Key, string>> = { en, id };

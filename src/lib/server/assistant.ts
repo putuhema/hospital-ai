@@ -9,6 +9,7 @@ import { answered, topicOf, topics, type FaqEntry } from "../model/faq.ts";
 import { placeTypes, runTool, toolDefinitions, type AssistantContext, type MapSelection } from "../assistant/tools.ts";
 import { messageText, type ChatMessage, type ReplyContext, type ReplyEvent } from "../assistant/chat.ts";
 import { typeName } from "../i18n/places.ts";
+import type { LeafletImage } from "../model/leaflets.ts";
 
 const MODEL = "claude-opus-5-5";
 /** Tool rounds in one reply; a question needs two or three. */
@@ -21,6 +22,7 @@ const tools: Anthropic.Beta.BetaTool[] = toolDefinitions.map((t) => ({ ...t, eag
 
 /** What doesn't change between questions, so it is cached: who the assistant is and what the hospital wrote. */
 export function systemPrompt(title: string, faq: FaqEntry[], ctx: AssistantContext): string {
+  const leaflets = ctx.leaflets ?? [];
   const entries = answered(faq),
     topic = (e: FaqEntry) => topics.find((t) => t.id === topicOf(e))!.name.id;
   const whole = entries.map((e) => `[${topic(e)}] T: ${e.question}\nJ: ${e.answer}`).join("\n\n");
@@ -50,7 +52,13 @@ Health: don't diagnose, give medical advice or name medicines; point them to a d
 Lines in [square brackets] in earlier replies record what the app showed; don't write them yourself.
 
 Kinds of place on this map: ${placeTypes(ctx).join(", ") || "none yet"}.
-
+${
+  leaflets.length
+    ? `
+Leaflets and brochures (brosur) the hospital uploaded as images: ${leaflets.map((l) => `"${l.title || "untitled"}"`).join(", ")}. When one is about what the visitor asks (a flow, a price list, a service, a schedule poster), read it with search_leaflets, answer briefly from its text and show it with show_leaflet so they can read the whole thing; show it too when they ask for a brochure or picture. Don't describe the image or say that it is shown. Don't show a leaflet that isn't about their question.
+`
+    : ""
+}
 ${info}`;
 }
 
@@ -97,6 +105,9 @@ export function history(messages: ChatMessage[], ctx: AssistantContext): Anthrop
         if (part.type === "card") {
           const p = ctx.places.find((x) => x.id === part.show.to);
           if (p) text += `\n[shown on the map: ${p.name}, ${typeName(p.detail, "en")}, place id ${p.id}]`;
+        } else if (part.type === "image") {
+          const l = ctx.leaflets?.find((x) => x.id === part.image.id);
+          if (l) text += `\n[shown in the chat: the leaflet "${l.title}", leaflet id ${l.id}]`;
         }
     if (text) out.push({ role: m.role, content: text });
   }
@@ -107,7 +118,8 @@ export function history(messages: ChatMessage[], ctx: AssistantContext): Anthrop
 
 /**
  * Run the tools the model called. Each result goes back to the model as JSON
- * (problems as `{ error }`); each place shown on the map becomes a card, once per reply.
+ * (problems as `{ error }`); each place shown on the map becomes a card, and
+ * each leaflet shown an image, once per reply.
  */
 export function runCalls(
   ctx: AssistantContext,
@@ -120,7 +132,15 @@ export function runCalls(
     const result = runTool(ctx, call.name, call.input);
     const failed = "error" in result;
     results.push({ id: call.id, content: JSON.stringify(result), failed });
-    if (call.name !== "show_on_map" || failed) continue;
+    if (failed) continue;
+    if (call.name === "show_leaflet") {
+      const image = (result as { image: LeafletImage }).image;
+      if (shown.has(`leaflet:${image.id}`)) continue;
+      shown.add(`leaflet:${image.id}`);
+      cards.push({ type: "image", image });
+      continue;
+    }
+    if (call.name !== "show_on_map") continue;
     const show = (result as { show: MapSelection }).show,
       doctor = (call.input as { doctor_name?: unknown }).doctor_name;
     if (shown.has(show.link)) continue;
@@ -130,8 +150,8 @@ export function runCalls(
   return { results, cards };
 }
 
-/** Tools that look nothing up: they act alongside the reply (show a card, tell the hospital), so the reply may come with them. */
-export const QUIET = new Set(["show_on_map", "note_missing_info"]);
+/** Tools that look nothing up: they act alongside the reply (show a card or a leaflet, tell the hospital), so the reply may come with them. */
+export const QUIET = new Set(["show_on_map", "show_leaflet", "note_missing_info"]);
 
 /** While the model reads what the tools found: what it looked up, for the chat to say ("Melihat jadwal dokter…"). */
 export function* lookingUp(calls: { name: string }[]): Generator<ReplyEvent> {

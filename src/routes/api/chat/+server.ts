@@ -30,9 +30,11 @@ function valid(messages: unknown): messages is ChatMessage[] {
         (m?.role === "user" || m?.role === "assistant") &&
         Array.isArray(m.parts) &&
         m.parts.every(
-          (p: { type?: string; text?: unknown; show?: { to?: unknown } }) =>
+          (p: { type?: string; text?: unknown; show?: { to?: unknown }; image?: { id?: unknown } }) =>
             (p?.type === "text" && typeof p.text === "string" && p.text.length <= MAX_TEXT) ||
-            (p?.type === "card" && typeof p.show?.to === "string"),
+            (p?.type === "card" && typeof p.show?.to === "string") ||
+            // Only its id is read back (lib/server/assistant.ts `history`), never what the browser says it shows.
+            (p?.type === "image" && typeof p.image?.id === "string"),
         ),
     ) &&
     messages.at(-1).role === "user"
@@ -109,7 +111,7 @@ export async function POST({ request, getClientAddress }) {
     secret && messages.length === 1 && !context.walking
       ? createHash("sha256")
           .update(
-            JSON.stringify([hospital.slug, hospital.revision, hospital.schedules, answer.model, context.lang, context.from ?? "", normalize(messageText(messages[0]))]),
+            JSON.stringify([hospital.slug, hospital.revision, hospital.schedules, hospital.leaflets, answer.model, context.lang, context.from ?? "", normalize(messageText(messages[0]))]),
           )
           .digest("hex")
       : null;

@@ -17,6 +17,7 @@ import type * as gaps from "../gaps.js";
 import type * as gapsDigest from "../gapsDigest.js";
 import type * as hospital from "../hospital.js";
 import type * as http from "../http.js";
+import type * as leaflets from "../leaflets.js";
 import type * as limits from "../limits.js";
 import type * as live from "../live.js";
 
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   gapsDigest: typeof gapsDigest;
   hospital: typeof hospital;
   http: typeof http;
+  leaflets: typeof leaflets;
   limits: typeof limits;
   live: typeof live;
 }>;

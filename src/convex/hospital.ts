@@ -77,13 +77,21 @@ export const get = query({
 /**
  * Which version of the hospital is saved and its name, without its contents:
  * for caches that keep the rest. `schedules` is when SIMRS's doctors'
- * schedules last changed (0 without any).
+ * schedules last changed (0 without any), `leaflets` when the leaflets did.
  */
 export const version = query({
   args: { slug: v.optional(v.string()) },
   handler: async (ctx, { slug }) => {
     const h = await find(ctx, slug);
-    return h && { slug: h.slug, title: h.title, revision: h.revision, schedules: (await schedulesOf(ctx, h._id)).at };
+    return (
+      h && {
+        slug: h.slug,
+        title: h.title,
+        revision: h.revision,
+        schedules: (await schedulesOf(ctx, h._id)).at,
+        leaflets: h.leafletsAt ?? 0,
+      }
+    );
   },
 });
 

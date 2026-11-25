@@ -79,7 +79,7 @@ export async function* replyZai(
       return;
     }
     // GLM sometimes writes a tool call out as a note ("[show_on_map: place r:…]") instead of making it.
-    text = text.replace(/^[ \t]*\[(show_on_map|shown on the map)\b[^\]\n]*\][ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+    text = text.replace(/^[ \t]*\[(show_on_map|show_leaflet|shown on the map|shown in the chat)\b[^\]\n]*\][ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
     // The note to the hospital is not the visitor's business, though GLM likes to say it made one.
     if (calls.some((c) => c.name === "note_missing_info")) text = withoutNoteMention(text);
     const announcing = calls.some((c) => !QUIET.has(c.name));
@@ -110,7 +110,7 @@ export async function* replyZai(
       shown,
     );
     yield* cards;
-    // GLM may write its answer alongside the show_on_map (or note_missing_info) calls; asking again would only repeat it.
+    // GLM may write its answer alongside the show_on_map (show_leaflet, note_missing_info) calls; asking again would only repeat it.
     if (text.trim() && calls.every((c) => QUIET.has(c.name))) return;
     yield* lookingUp(calls);
     for (const c of parsed)

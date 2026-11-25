@@ -7,6 +7,7 @@
     import type { Key } from "$lib/i18n/messages";
     import { runs } from "$lib/assistant/format";
     import MapCard from "./MapCard.svelte";
+    import LeafletCard from "./LeafletCard.svelte";
     import Logo from "$lib/components/shared/Logo.svelte";
     import { useLocale } from "$lib/i18n/locale.svelte";
     let {
@@ -50,6 +51,7 @@
         find_nearest: "lookingNearest",
         get_directions: "lookingRoute",
         show_on_map: "lookingMap",
+        search_leaflets: "lookingLeaflets",
     };
     const looking = (tool: string): Key => LOOKING[tool] ?? "writingReply";
     let draft = $state(""),
@@ -123,7 +125,7 @@
                             aria-label={m.status ? t(looking(m.status)) : t("writingReply")}
                             ><i></i><i></i><i></i>{#if m.status}<small in:rise={{ y: 4 }}>{t(looking(m.status))}</small>{/if}</span
                         >{/if}
-                    {#each m.parts as part}{#if part.type === "text"}<p>{#each runs(part.text) as run}{#if run.bold}<b>{run.text}</b>{:else}{run.text}{/if}{/each}</p>{:else}<div class="card" in:rise={{ y: 8 }}>
+                    {#each m.parts as part}{#if part.type === "text"}<p>{#each runs(part.text) as run}{#if run.bold}<b>{run.text}</b>{:else}{run.text}{/if}{/each}</p>{:else if part.type === "image"}<div class="card" in:rise={{ y: 8 }}><LeafletCard image={part.image} /></div>{:else}<div class="card" in:rise={{ y: 8 }}>
                                 <MapCard
                                     selection={part.show}
                                     {places}
