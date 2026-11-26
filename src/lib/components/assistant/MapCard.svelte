@@ -130,18 +130,13 @@
         border-radius: 16px;
         background: var(--card, #ffffff);
         overflow: hidden;
-        box-shadow:
-            0 0 0 1px var(--line, #e1e7dd),
-            0 1px 2px rgba(26, 46, 35, 0.05),
-            0 8px 24px -12px rgba(26, 46, 35, 0.18);
+        box-shadow: 0 0 0 1px var(--line, #e1e7dd);
         transition:
             transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
             box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     .map-card-wrap.shown {
-        box-shadow:
-            0 0 0 1.5px var(--forest, #1e4031),
-            0 10px 28px -12px rgba(30, 64, 49, 0.32);
+        box-shadow: 0 0 0 1.5px var(--forest, #1e4031);
     }
     .map-card {
         position: relative;
@@ -299,9 +294,7 @@
     }
     @media (hover: hover) and (pointer: fine) {
         .map-card-wrap:hover {
-            box-shadow:
-                0 0 0 1px rgba(26, 46, 35, 0.16),
-                0 14px 30px -14px rgba(26, 46, 35, 0.25);
+            box-shadow: 0 0 0 1px rgba(26, 46, 35, 0.24);
         }
         .map-card:hover .action svg {
             transform: translateX(3px);

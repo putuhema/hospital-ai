@@ -103,9 +103,9 @@
         overflow-y: auto;
         padding: 10px 20px calc(env(safe-area-inset-bottom) + 24px);
         border-radius: 22px 22px 0 0;
+        border-top: 1px solid #1b2a2117;
         background: #fffdf8;
         color: #1f3a2b;
-        box-shadow: 0 -18px 50px -20px #1b2a21aa;
     }
     .drawer.wide {
         left: auto;
@@ -113,8 +113,9 @@
         width: 360px;
         max-height: none;
         padding: 22px 24px;
+        border-top: 0;
+        border-left: 1px solid #1b2a2117;
         border-radius: 22px 0 0 22px;
-        box-shadow: -18px 0 50px -20px #1b2a21aa;
     }
     .grabber {
         align-self: center;

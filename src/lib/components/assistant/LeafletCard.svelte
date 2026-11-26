@@ -52,9 +52,7 @@
         overflow: hidden;
         border-radius: 16px;
         background: var(--card, #fffdf8);
-        box-shadow:
-            0 0 0 1px var(--line, #1d2b221a),
-            0 8px 22px -16px #1d2b2255;
+        box-shadow: 0 0 0 1px var(--line, #1d2b221a);
         text-align: left;
         transition:
             transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -183,9 +181,8 @@
     }
     @media (hover: hover) and (pointer: fine) {
         .leaflet:hover {
-            box-shadow:
-                0 0 0 1px #1d2b2226,
-                0 14px 30px -14px #1d2b2244;
+            background: var(--card, #fffdf8);
+            box-shadow: 0 0 0 1px #1d2b2233;
         }
     }
     @media (prefers-reduced-motion: reduce) {

@@ -861,16 +861,6 @@
         if (drag > 120 || speed > 0.5) sheetOpen = false;
         drag = 0;
     }
-    /**
-     * A WhatsApp message with the place and a link that opens AIRMA on it, so
-     * family can find the ward: "Perawatan Kelas 1 · Gedung B di RSUD …".
-     */
-    function whatsApp(place: Place) {
-        const base = shareUrl ?? (typeof location === "undefined" ? "" : location.origin + location.pathname);
-        const where = place.building && place.building !== place.name ? `${place.name} · ${place.building}` : place.name;
-        const text = t("shareWhatsAppText", { place: where, hospital: title, link: `${base}?to=${encodeURIComponent(place.id)}` });
-        return `https://wa.me/?text=${encodeURIComponent(text)}`;
-    }
     /** The route when there is one, else the map. Phones open their share sheet. */
     async function share() {
         const link = shareUrl ? shareUrl + (to ? location.search : "") : to ? location.href : location.origin;
@@ -1097,23 +1087,22 @@
             ></button
         >
     </div>
-    <!-- Phones: the two things a visitor comes for, side by side. Most want
-         the way somewhere, so that is the big one; asking is beside it. -->
+    <!-- Phones: the two things a visitor comes for, equal side by side: directions and asking. -->
     {#if ready && !wide}<div class="launcher" in:rise={{ y: 12 }}>
             <button class="find" onclick={findWay}>
                 <i aria-hidden="true"
-                    ><svg viewBox="0 0 24 24" width="18" height="18"
+                    ><svg viewBox="0 0 24 24" width="16" height="16"
                         ><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg
                     ></i
                 >
-                <span>{t("whereTo")}</span>
+                <span>{t("tabRoute")}</span>
             </button>
             <button
                 class="ask"
                 onclick={() => open("chat")}
                 aria-label={chat.messages.length ? t("continueChat") : t("askQuestion")}
             >
-                <span class="face" aria-hidden="true"><Logo size={26} title="" /></span>{t("askOnTheWay")}{#if chat.messages.length}<b class="unread" aria-hidden="true"></b>{/if}
+                <span>{t("askOnTheWay")}</span>{#if chat.messages.length}<b class="unread" aria-hidden="true"></b>{/if}
             </button>
         </div>{/if}
 
@@ -1165,19 +1154,6 @@
                             }}
                             >{t("steps")}</button
                         >{:else}<button class="go" onclick={() => open("route")}>{route ? t("steps") : t("directions")}</button>{/if}
-                    <a
-                        class="x wa"
-                        href={whatsApp(to)}
-                        target="_blank"
-                        rel="noopener"
-                        aria-label={t("shareWhatsApp")}
-                        title={t("shareWhatsApp")}
-                        ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
-                            ><path
-                                d="M12 3.5a8.5 8.5 0 0 0-7.4 12.7L3.5 20.5l4.4-1.1A8.5 8.5 0 1 0 12 3.5zm-3 4.6c.2 0 .4 0 .6.4l.8 1.9c.1.2 0 .4-.1.6l-.5.6c-.1.1-.2.3 0 .5a6.6 6.6 0 0 0 3.2 2.8c.2.1.4 0 .5-.1l.7-.8c.2-.2.3-.2.5-.1l1.9.9c.2.1.3.2.3.4 0 .6-.3 1.3-.8 1.6-.6.4-1.5.6-2.6.2a9.5 9.5 0 0 1-4.9-4.2c-.6-1-.8-2-.4-2.8.2-.5.5-.7.8-.8z"
-                            /></svg
-                        ></a
-                    >
                     <button class="x" aria-label={t("clearDestination")} onclick={() => (to = null)}
                         ><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg
                         ></button
@@ -1257,8 +1233,12 @@
                         <button class="primary" onclick={startGame}>{t("guideAgain")}</button>
                         <button onclick={stopGame}>{t("guideWalk")}</button>
                     </div>
-                </div>{:else if !playing}<button class="game-start" onclick={startGame}
-                    ><span aria-hidden="true">🧭</span>{t("guideStart")}</button
+                </div>{:else if !playing}<button
+                    class="game-start"
+                    title={t("guideStart")}
+                    aria-label={t("guideStart")}
+                    onclick={startGame}
+                    ><span aria-hidden="true">🧭</span>{wide ? t("guideStart") : t("guideStartShort")}</button
                 >{/if}
             <div class="roam-map">
                 <MiniMap
@@ -1339,9 +1319,7 @@
         flex-direction: column;
         padding: 22px 30px 22px 34px;
         background: var(--paper);
-        box-shadow:
-            1px 0 0 var(--line),
-            12px 0 32px -24px #1b2a2140;
+        border-right: 1px solid var(--line);
     }
     .masthead {
         display: flex;
@@ -1425,9 +1403,7 @@
         padding: 9px 14px;
         border-radius: 999px;
         background: #fffdf8f2;
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 10px 28px -14px #1b2a2166;
+        box-shadow: 0 0 0 1px var(--line);
         font-size: 14px;
         font-weight: 600;
         white-space: nowrap;
@@ -1458,7 +1434,6 @@
         border-radius: 999px;
         background: #1b2a21d9;
         color: white;
-        box-shadow: 0 10px 24px -12px #1b2a21aa;
         font-variant-numeric: tabular-nums;
     }
     .mobile .game-hud {
@@ -1512,9 +1487,7 @@
         padding: 8px 14px 8px 8px;
         border-radius: 14px;
         background: #fffdf8f2;
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 10px 28px -14px #1b2a2166;
+        box-shadow: 0 0 0 1px var(--line);
         font-size: 14px;
         font-weight: 600;
     }
@@ -1557,7 +1530,7 @@
         padding: 12px 20px;
         border-radius: 18px;
         background: #fffdf8;
-        box-shadow: 0 16px 36px -14px #1b2a21aa;
+        box-shadow: 0 0 0 1px var(--line);
         text-align: center;
         pointer-events: none;
     }
@@ -1588,7 +1561,7 @@
         padding: 22px 20px 18px;
         border-radius: 22px;
         background: #fffdf8;
-        box-shadow: 0 24px 60px -20px #1b2a21bb;
+        box-shadow: 0 0 0 1px var(--line);
         text-align: center;
     }
     .game-over h2 {
@@ -1619,10 +1592,19 @@
         padding: 0 16px;
         border-radius: 12px;
         background: var(--paper-2);
+        color: var(--ink);
         font-weight: 700;
+    }
+    .game-actions button:hover {
+        background: #e2dbc9;
+        color: var(--ink);
     }
     .game-actions .primary {
         background: var(--ink);
+        color: var(--card);
+    }
+    .game-actions .primary:hover {
+        background: var(--forest);
         color: var(--card);
     }
     .game-start {
@@ -1633,20 +1615,30 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        height: 48px;
-        padding: 0 22px;
+        height: 44px;
+        padding: 0 20px;
         border-radius: 999px;
         background: #f2b134;
         color: #3d2700;
-        font-size: 15px;
+        font-size: 14.5px;
         font-weight: 800;
-        box-shadow: 0 14px 30px -12px #7a4d00aa;
+    }
+    .game-start:hover {
+        background: #e5a324;
+        color: #3d2700;
     }
     .mobile .game-start {
         left: auto;
         right: 12px;
         translate: none;
-        bottom: calc(var(--bottom, 16px) + 16px);
+        bottom: calc(var(--bottom, 16px) + 12px);
+        height: 38px;
+        padding: 0 13px;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 700;
+        max-width: calc(100% - 164px);
+        white-space: nowrap;
     }
     .roam-done {
         position: absolute;
@@ -1659,7 +1651,10 @@
         color: var(--card);
         font-size: 14px;
         font-weight: 700;
-        box-shadow: 0 10px 24px -12px #1b2a21aa;
+    }
+    .roam-done:hover {
+        background: var(--forest);
+        color: var(--card);
     }
     .mobile .roam-done {
         top: calc(var(--top) + 66px);
@@ -1685,6 +1680,9 @@
         left: 22px;
         bottom: calc(var(--bottom, 16px) + 8px);
     }
+    .mobile .roam-pad {
+        left: 16px;
+    }
     .igd {
         display: flex;
         align-items: center;
@@ -1698,7 +1696,10 @@
         font-size: 12px;
         font-weight: 800;
         letter-spacing: 0.04em;
-        box-shadow: 0 4px 12px -6px #b8402d;
+    }
+    .igd:hover {
+        background: #9e3524;
+        color: white;
     }
     .igd svg {
         fill: none;
@@ -1716,13 +1717,18 @@
         background: var(--paper-2);
         color: var(--ink);
     }
+    .settings:hover {
+        background: #e2dbc9;
+        color: var(--ink);
+    }
     .settings svg {
         fill: none;
         stroke: currentColor;
         stroke-width: 1.8;
         stroke-linejoin: round;
     }
-    .settings[aria-expanded="true"] {
+    .settings[aria-expanded="true"],
+    .settings[aria-expanded="true"]:hover {
         background: var(--ink);
         color: var(--card);
     }
@@ -1746,6 +1752,10 @@
         display: flex;
         align-items: center;
         gap: 8px;
+        margin-bottom: 6px;
+    }
+    .mobile .tabs {
+        margin-bottom: 0;
     }
     /* Ask · Directions · Information, with a thumb that slides between them. */
     .switcher {
@@ -1754,7 +1764,6 @@
         display: grid;
         grid-template-columns: repeat(var(--tabs), 1fr);
         padding: 4px;
-        margin-bottom: 6px;
         border-radius: 14px;
         background: var(--paper-2);
     }
@@ -1766,9 +1775,7 @@
         width: calc((100% - 8px) / var(--tabs));
         border-radius: 10px;
         background: var(--card);
-        box-shadow:
-            0 1px 2px #1b2a2114,
-            0 4px 12px -4px #1b2a2126;
+        box-shadow: 0 0 0 1px var(--line);
         transform: translateX(calc(var(--at) * 100%));
         transition: transform 380ms cubic-bezier(0.32, 0.72, 0, 1);
     }
@@ -1827,11 +1834,11 @@
         border: 1px solid var(--line);
         border-radius: 18px;
         background: var(--card);
-        box-shadow: 0 1px 2px #1b2a210d, 0 8px 24px -14px #1b2a2140;
-        transition: box-shadow 0.2s;
+        transition: border-color 0.2s, box-shadow 0.2s;
     }
     .scroll :global(.route-finder .fields:focus-within) {
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--forest) 16%, transparent), 0 8px 24px -14px #1b2a2140;
+        border-color: var(--forest);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--forest) 16%, transparent);
     }
     .scroll :global(.route-finder .place-search input) {
         padding: 16px 54px 16px 42px;
@@ -1907,7 +1914,8 @@
         border-color: #1b2a2133;
         background: var(--card);
     }
-    .scroll :global(.route-finder .chip.active) {
+    .scroll :global(.route-finder .chip.active),
+    .scroll :global(.route-finder .chip.active:hover) {
         border-color: var(--forest);
         background: var(--forest);
         color: #fff;
@@ -1998,9 +2006,7 @@
         padding: 3px;
         border-radius: 14px;
         background: #fffdf8e6;
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 8px 24px -12px #1b2a2140;
+        box-shadow: 0 0 0 1px var(--line);
         backdrop-filter: blur(10px);
     }
     .segmented button {
@@ -2031,9 +2037,7 @@
         border-radius: 14px;
         background: #fffdf8e6;
         color: var(--ink);
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 8px 24px -12px #1b2a2140;
+        box-shadow: 0 0 0 1px var(--line);
         backdrop-filter: blur(10px);
         transition:
             transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -2074,9 +2078,7 @@
         gap: 4px;
         border-radius: 16px;
         background: var(--card);
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 18px 40px -14px #1b2a2140;
+        box-shadow: 0 0 0 1px var(--line);
         transform-origin: top right;
         animation: menu-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
     }
@@ -2091,7 +2093,7 @@
         padding: 6px 12px;
         border-radius: 999px;
         background: color-mix(in srgb, var(--card) 88%, transparent);
-        box-shadow: 0 2px 10px #1b2a2114;
+        box-shadow: 0 0 0 1px var(--line);
         backdrop-filter: blur(6px);
     }
 
@@ -2110,9 +2112,7 @@
         padding: 8px 8px 8px 10px;
         border-radius: 18px;
         background: var(--card);
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 22px 48px -18px #1b2a2166;
+        box-shadow: 0 0 0 1px var(--line);
     }
     /* Open on what is there: wide enough to read a doctors' schedule. */
     .journey.open {
@@ -2228,13 +2228,12 @@
     }
     .concierge .go:hover {
         background: var(--forest-2);
+        color: var(--paper);
     }
-    .concierge .go[aria-pressed="true"] {
+    .concierge .go[aria-pressed="true"],
+    .concierge .go[aria-pressed="true"]:hover {
         background: var(--paper-2);
         color: var(--forest);
-    }
-    .x.wa {
-        color: #1f8f4e;
     }
     .x {
         display: grid;
@@ -2257,7 +2256,6 @@
         background: #2f7fc4;
         color: white;
         font-size: 13px;
-        box-shadow: 0 10px 30px -10px #2f7fc4aa;
         animation: banner-in 280ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     .pick-banner button {
@@ -2311,24 +2309,38 @@
         font-size: 13px;
     }
 
-    @media (hover: hover) and (pointer: fine) {
-        .concierge .switcher button:hover {
-            background: none;
-            color: var(--ink);
-        }
-        .concierge .pick-banner button:hover {
-            background: none;
-        }
-        .concierge .segmented button:hover,
-        .concierge .round:hover:not(:disabled),
-        .concierge .close:hover,
-        .concierge .launcher .find:hover {
-            background: var(--paper);
-        }
-        .concierge .x:hover {
-            background: var(--paper-2);
-            color: var(--ink);
-        }
+    .concierge .switcher button:hover {
+        background: none;
+        color: var(--ink);
+    }
+    .concierge .pick-banner button:hover {
+        background: none;
+        color: white;
+    }
+    .concierge .where:hover:not(:disabled) {
+        background: none;
+    }
+    .concierge .clinics button:hover {
+        background: var(--paper-2);
+        color: var(--ink);
+    }
+    .concierge .segmented button:hover,
+    .concierge .round:hover:not(:disabled),
+    .concierge .launcher .find:hover {
+        background: var(--paper-2);
+        color: var(--ink);
+    }
+    .concierge .launcher .ask:hover {
+        background: var(--forest-2);
+        color: var(--paper);
+    }
+    .concierge .close:hover {
+        background: #e2dbc9;
+        color: var(--ink);
+    }
+    .concierge .x:hover {
+        background: var(--paper-2);
+        color: var(--ink);
     }
 
     /* Phones: the map fills the screen, like a maps app. The guide waits in
@@ -2348,9 +2360,7 @@
         padding: 7px 6px 7px 10px;
         border-radius: 18px;
         background: var(--card);
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 10px 28px -14px #1b2a2150;
+        box-shadow: 0 0 0 1px var(--line);
     }
     /* It steps back while the sheet is up, so nothing half-shows behind the sheet's top edge. */
     .mobile .masthead {
@@ -2383,78 +2393,64 @@
     }
 
     /* The chat bar */
-    /* Two buttons side by side, each its own card: the way somewhere, and asking. */
+    /* Two equal buttons side by side: Route and Ask. */
     .launcher {
         position: absolute;
         z-index: 6;
         left: 12px;
         right: 12px;
         bottom: var(--bottom);
-        display: flex;
-        align-items: stretch;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: 10px;
-        height: 58px;
+        height: 54px;
         color: var(--ink);
     }
     .launcher button {
         display: flex;
         align-items: center;
-        border-radius: 20px;
+        justify-content: center;
+        min-width: 0;
+        border-radius: 18px;
         font: inherit;
-        box-shadow:
-            0 0 0 1px var(--line),
-            0 16px 40px -16px #1b2a2166;
+        box-shadow: 0 0 0 1px var(--line);
         transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     .launcher button:active {
         transform: scale(0.97);
     }
     .launcher .find {
-        flex: 1;
-        min-width: 0;
-        gap: 10px;
-        padding: 0 12px;
+        gap: 8px;
+        padding: 0 14px;
         background: var(--card);
-        text-align: left;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink);
     }
     .launcher .find i {
         display: grid;
         place-items: center;
         flex-shrink: 0;
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
         border-radius: 50%;
         background: var(--paper-2);
         color: var(--forest);
     }
-    .launcher .find span {
-        flex: 1;
-        min-width: 0;
-        font-size: 16px;
-        color: var(--ink-2);
+    .launcher .find span,
+    .launcher .ask span {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
     .launcher .ask {
         position: relative;
-        flex-shrink: 0;
         gap: 7px;
-        padding: 0 18px 0 8px;
+        padding: 0 14px;
         background: var(--forest);
         color: var(--paper);
         font-size: 15px;
         font-weight: 600;
-    }
-    /* AIRMA's face, on the button that asks her. */
-    .launcher .face {
-        display: grid;
-        place-items: end center;
-        width: 36px;
-        height: 36px;
-        overflow: hidden;
-        border-radius: 50%;
-        background: var(--paper);
     }
     /* An earlier conversation to go back to. */
     .launcher .unread {
@@ -2487,8 +2483,9 @@
         top: calc(env(safe-area-inset-top) + 44px);
         width: 100%;
         padding: 0 16px var(--bottom);
+        border-right: 0;
+        border-top: 1px solid var(--line);
         border-radius: 26px 26px 0 0;
-        box-shadow: 0 -12px 40px -20px #1b2a2166;
         transform: translateY(calc(100% + 24px));
         transition: transform 460ms cubic-bezier(0.32, 0.72, 0, 1);
     }
@@ -2515,6 +2512,9 @@
     }
     .close {
         flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
         background: var(--paper-2);
         box-shadow: none;
         backdrop-filter: none;

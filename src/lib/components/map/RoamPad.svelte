@@ -55,9 +55,7 @@
         height: 128px;
         border-radius: 50%;
         background: #fffdf8b3;
-        box-shadow:
-            0 0 0 1px #dfe4d9,
-            0 10px 28px -14px #1b2a2166;
+        box-shadow: 0 0 0 1px #dfe4d9;
         backdrop-filter: blur(8px);
         touch-action: none;
         user-select: none;
@@ -71,7 +69,6 @@
         margin: -28px 0 0 -28px;
         border-radius: 50%;
         background: #2d4a38;
-        box-shadow: 0 6px 16px -6px #1b2a21aa;
         transition: background 160ms;
     }
     .knob.run {

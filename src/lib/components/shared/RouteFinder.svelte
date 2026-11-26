@@ -193,7 +193,8 @@
     .field-tool:hover {
         background: #edf3e7;
     }
-    .field-tool.active {
+    .field-tool.active,
+    .field-tool.active:hover {
         background: #2d4a38;
         color: white;
     }

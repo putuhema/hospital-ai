@@ -877,7 +877,6 @@
                 </button>
             {/if}
         </form>
-        {#if !chat.messages.length}<p class="note">{t("guideNote")}</p>{/if}
     </div>
 </section>
 
@@ -905,8 +904,10 @@
         display: flex;
         flex-direction: column;
         gap: 18px;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(26, 46, 35, 0.16) transparent;
+        scrollbar-width: none;
+    }
+    .log::-webkit-scrollbar {
+        display: none;
     }
     .log > :first-child {
         margin-top: auto;
@@ -1054,7 +1055,6 @@
         font-size: 15px;
         line-height: 1.45;
         overflow-wrap: anywhere;
-        box-shadow: 0 8px 20px -12px rgba(30, 64, 49, 0.55);
     }
 
     /* 0ms Emergency red-flag card */
@@ -1311,7 +1311,6 @@
         color: #f6f3ea;
         font-size: 12px;
         font-weight: 600;
-        box-shadow: 0 8px 20px rgba(26, 46, 35, 0.28);
     }
     .jump-latest svg {
         fill: none;
@@ -1456,18 +1455,12 @@
         padding: 6px 6px 6px 16px;
         border-radius: 22px;
         background: var(--card, #ffffff);
-        box-shadow:
-            0 0 0 1px var(--line, #e1e7dd),
-            0 2px 4px rgba(26, 46, 35, 0.04),
-            0 18px 40px -18px rgba(26, 46, 35, 0.3);
+        box-shadow: 0 0 0 1px var(--line, #e1e7dd);
         transition: box-shadow 200ms;
     }
     .composer:focus-within,
     .composer.listening {
-        box-shadow:
-            0 0 0 1.5px var(--forest, #1e4031),
-            0 2px 4px rgba(26, 46, 35, 0.04),
-            0 18px 40px -18px rgba(30, 64, 49, 0.4);
+        box-shadow: 0 0 0 1.5px var(--forest, #1e4031);
     }
     textarea {
         flex: 1;
@@ -1560,45 +1553,62 @@
     .send:active:not(:disabled) {
         transform: scale(0.92);
     }
-    .note {
-        margin: 2px 6px 0;
-        font-size: 11.5px;
-        line-height: 1.45;
-        color: var(--muted);
+    .signs button:hover,
+    .follow-chip:hover {
+        background: var(--forest, #1e4031);
+        color: #f6f3ea;
+        box-shadow: 0 0 0 1px var(--forest, #1e4031);
     }
-    @media (hover: hover) and (pointer: fine) {
-        .signs button:hover,
-        .follow-chip:hover {
-            background: var(--forest, #1e4031);
-            color: #f6f3ea;
-            box-shadow: 0 10px 24px -14px rgba(30, 64, 49, 0.6);
-        }
-        .signs button:hover svg {
-            stroke: #cfe0c3;
-        }
-        .quick-pill:hover {
-            background: var(--accent-soft, #e6efe9);
-            color: var(--forest, #1e4031);
-        }
-        .copy-btn:hover {
-            background: var(--paper-2, #eef2eb);
-            color: var(--ink);
-        }
-        .queue-cta:hover {
-            background: #dce8e0;
-        }
-        .icon:hover {
-            background: var(--paper-2, #eef2eb);
-            color: var(--ink);
-        }
-        .send:hover:not(:disabled) {
-            background: var(--forest-2, #295642);
-        }
-        .here:hover,
-        .forget:hover {
-            background: #fffdf8;
-            color: var(--ink);
-        }
+    .signs button:hover svg {
+        stroke: #cfe0c3;
+    }
+    .quick-pill:hover {
+        background: var(--accent-soft, #e6efe9);
+        color: var(--forest, #1e4031);
+    }
+    .copy-btn:hover {
+        background: var(--paper-2, #eef2eb);
+        color: var(--ink);
+    }
+    .copy-btn.voted:hover {
+        background: #d7eee0;
+        color: #1e613c;
+    }
+    .copy-btn.voted-down:hover {
+        background: #f9e2dc;
+        color: #962c20;
+    }
+    .queue-cta:hover {
+        background: #dce8e0;
+    }
+    .icon:hover {
+        background: var(--paper-2, #eef2eb);
+        color: var(--ink);
+    }
+    .icon.mic-active:hover {
+        background: #f9e2dc;
+        color: #b44332;
+    }
+    .clear-confirm:hover {
+        background: #f9e2dc;
+        color: #962c20;
+    }
+    .retry-btn:hover {
+        background: #f9e2dc;
+        color: #8c3422;
+    }
+    .jump-latest:hover {
+        background: var(--forest-2, #295642);
+        color: #f6f3ea;
+    }
+    .send:hover:not(:disabled) {
+        background: var(--forest-2, #295642);
+        color: #f6f3ea;
+    }
+    .here:hover,
+    .forget:hover {
+        background: #fffdf8;
+        color: var(--ink);
     }
     @media (prefers-reduced-motion: reduce) {
         .icon.mic-active {

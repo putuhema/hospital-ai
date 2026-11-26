@@ -109,21 +109,16 @@
         max-width: 360px;
         border-radius: 16px;
         background: #fffdf8f2;
-        box-shadow:
-            0 0 0 1px #dfe4d9,
-            0 10px 28px -14px #1b2a2166;
+        box-shadow: 0 0 0 1px #dfe4d9;
         color: #1f3a2b;
     }
     .my-turn.soon {
         background: #fdf3df;
-        box-shadow:
-            0 0 0 1.5px #d9a54a,
-            0 10px 28px -14px #1b2a2166;
+        box-shadow: 0 0 0 1.5px #d9a54a;
     }
     .my-turn.now {
         background: #2d4a38;
         color: white;
-        box-shadow: 0 10px 28px -12px #1b2a2199;
     }
     .body {
         display: flex;

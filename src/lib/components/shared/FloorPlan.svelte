@@ -806,9 +806,7 @@
         font: inherit;
         font-size: 14px;
         font-weight: 600;
-        box-shadow:
-            0 0 0 1px #1b2a2117,
-            0 10px 28px -12px #1b2a2166;
+        box-shadow: 0 0 0 1px #1b2a2117;
         animation: recenter-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     .recenter svg {
@@ -872,9 +870,7 @@
         border-radius: 14px;
         background: #fffdf8;
         overflow: hidden;
-        box-shadow:
-            0 0 0 1px #1b2a2117,
-            0 8px 24px -12px #1b2a2140;
+        box-shadow: 0 0 0 1px #1b2a2117;
     }
     .zoom button {
         display: grid;

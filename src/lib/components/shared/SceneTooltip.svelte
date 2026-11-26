@@ -44,7 +44,6 @@
         border: 1px solid #cbd7c1;
         border-radius: 7px;
         padding: 14px;
-        box-shadow: 0 5px 22px #243d2426;
         font-size: 12px;
     }
     .room-tooltip p {

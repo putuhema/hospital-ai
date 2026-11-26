@@ -219,7 +219,6 @@
         background: white;
         border: 1px solid #d3ddca;
         border-radius: 10px;
-        box-shadow: 0 12px 34px #1f35261f;
     }
     li {
         display: flex;

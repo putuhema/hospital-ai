@@ -61,8 +61,8 @@
         gap: 2px;
         padding: 3px;
         background: #ffffffed;
+        border: 1px solid #1b2a2117;
         border-radius: 20px;
-        box-shadow: 0 4px 18px #2b402414;
     }
     .scene-options button {
         padding: 7px 12px;
@@ -71,7 +71,8 @@
         color: #52664a;
         white-space: nowrap;
     }
-    .scene-options button[aria-pressed="true"] {
+    .scene-options button[aria-pressed="true"],
+    .scene-options button[aria-pressed="true"]:hover {
         background: #2d4a38;
         color: white;
     }

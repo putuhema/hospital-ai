@@ -149,7 +149,6 @@
         border-radius: 50%;
         box-shadow:
             0 0 0 3px #fffdf8,
-            0 0 0 4px #dfe4d9,
-            0 14px 30px -14px #1b2a21aa;
+            0 0 0 4px #dfe4d9;
     }
 </style>

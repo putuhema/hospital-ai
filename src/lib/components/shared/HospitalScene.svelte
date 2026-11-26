@@ -1171,9 +1171,7 @@
         color: #1f3a2b;
         font-size: 13px;
         line-height: 1.35;
-        box-shadow:
-            0 0 0 1px #1b2a2117,
-            0 10px 24px -10px #1b2a2166;
+        box-shadow: 0 0 0 1px #1b2a2117;
         translate: -50% -100%;
         animation: bubble-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
     }
@@ -1211,9 +1209,7 @@
         font: inherit;
         font-size: 14px;
         font-weight: 600;
-        box-shadow:
-            0 0 0 1px #1b2a2117,
-            0 10px 28px -12px #1b2a2166;
+        box-shadow: 0 0 0 1px #1b2a2117;
         animation: recenter-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     .recenter svg {
@@ -1247,9 +1243,7 @@
         place-items: center;
         border-radius: 50%;
         background: #fffdf8;
-        box-shadow:
-            0 0 0 1px #1b2a2117,
-            0 8px 24px -12px #1b2a2140;
+        box-shadow: 0 0 0 1px #1b2a2117;
         opacity: 0;
         scale: 0.8;
         pointer-events: none;
