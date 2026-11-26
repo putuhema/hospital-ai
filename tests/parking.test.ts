@@ -1,7 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assets, parseLayout, type Piece } from '../src/lib/model/layout.ts';
-import { gatewayParts, isParking, parkingBays, pieceType, walkwayAt } from '../src/lib/model/interiors.ts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { assets, parseLayout, pieceFrom, type Piece } from '../src/lib/model/layout.ts';
+import {
+  fenceSegments,
+  gatewayParts,
+  isArea,
+  isBuilding,
+  isCorridor,
+  isFence,
+  isOpenAir,
+  isParking,
+  parkingBays,
+  parkingFenceRuns,
+  pieceType,
+  walkwayAt,
+  whereAt,
+} from '../src/lib/model/interiors.ts';
+import { walkable, walls } from '../src/lib/wayfinding/navigation.ts';
 import { areaAt, buildGrid, nearestOfType, places, planRoute } from '../src/lib/wayfinding/routing.ts';
 import { search } from '../src/lib/wayfinding/search.ts';
 import { shortcuts } from '../src/lib/wayfinding/shortcuts.ts';
@@ -110,4 +127,168 @@ test('entrance, parking gate and motorcycle parking survive saving', () => {
   assert.deepEqual(loaded[1].info, info);
   assert.deepEqual(loaded[2].info, info, 'a parking gate has visitor info, e.g. its hours');
   for (const kind of ['motorcycle', 'gate', 'barrier']) assert.equal(assets.find((a) => a.kind === kind)?.group, 'Outdoor');
+});
+
+test('fence, fence corner, and fenced parking area assets exist, survive parseLayout, and have valid SVG thumbnails', () => {
+  const fenceAsset = assets.find((a) => a.name === 'Fence')!;
+  const cornerAsset = assets.find((a) => a.name === 'Fence corner')!;
+  const areaAsset = assets.find((a) => a.name === 'Parking area')!;
+  assert.ok(fenceAsset && cornerAsset && areaAsset);
+  for (const a of [fenceAsset, cornerAsset, areaAsset]) {
+    assert.equal(a.group, 'Outdoor');
+    assert.ok(a.image && a.image.startsWith('/models/') && a.image.endsWith('.svg'));
+    const file = path.resolve('static', a.image.slice(1));
+    const svg = fs.readFileSync(file, 'utf8');
+    assert.match(svg, /^<svg[^>]*viewBox="0 0 400 300"/);
+    assert.match(svg, /<\/svg>\s*$/);
+  }
+  assert.equal(fenceAsset.kind, 'fence');
+  assert.equal(cornerAsset.kind, 'fence');
+  assert.equal(cornerAsset.w, 1);
+  assert.equal(cornerAsset.h, 1);
+  assert.equal(areaAsset.kind, 'parking');
+  assert.equal(areaAsset.fenced, true);
+
+  const pieces = [
+    pieceFrom(fenceAsset, { id: 20, x: 2, y: 2 }),
+    pieceFrom(cornerAsset, { id: 21, x: 6, y: 2 }),
+    pieceFrom(areaAsset, { id: 22, x: 2, y: 8 }),
+  ];
+  assert.equal(pieces[2].fenced, true);
+  const loaded = parseLayout(JSON.stringify({ pieces })).pieces;
+  assert.equal(loaded.length, 3);
+  assert.equal(loaded[0].kind, 'fence');
+  assert.equal(loaded[1].kind, 'fence');
+  assert.equal(loaded[2].fenced, true);
+
+  assert.throws(
+    () => parseLayout(JSON.stringify({ pieces: [{ ...pieces[2], fenced: 'yes' }] })),
+    /Invalid layout/,
+  );
+});
+
+test('fences are physical barriers, not walkable ground or searchable destinations', () => {
+  const fence: Piece = {
+    id: 30,
+    name: 'North fence',
+    kind: 'fence',
+    x: 4,
+    y: 6,
+    w: 4,
+    h: 1,
+    rotation: 0,
+    color: '#eef2ec',
+    roofColor: '#2f5741',
+    rooms: [],
+  };
+  assert.equal(isFence(fence), true);
+  assert.equal(isOpenAir(fence), false);
+  assert.equal(isArea(fence), false);
+  assert.equal(isBuilding(fence), false);
+  assert.equal(isCorridor(fence), false);
+  assert.equal(pieceType(fence), 'Fence');
+  assert.equal(walkwayAt([fence], { x: 6, y: 6.5 }), undefined);
+  assert.equal(whereAt([fence], { x: 6, y: 6.5 }), null);
+  assert.equal(places([fence]).length, 0);
+});
+
+test('fenceSegments spans rectangular fences and connects 1x1 corners to perpendicular neighbors', () => {
+  const horiz: Piece = { id: 40, name: 'H', kind: 'fence', x: 2, y: 5, w: 4, h: 1, rotation: 0, color: '#eef2ec', rooms: [] };
+  const corner: Piece = { id: 41, name: 'C', kind: 'fence', x: 6, y: 5, w: 1, h: 1, rotation: 0, color: '#eef2ec', rooms: [] };
+  const vert: Piece = { id: 42, name: 'V', kind: 'fence', x: 6, y: 6, w: 1, h: 4, rotation: 90, color: '#eef2ec', rooms: [] };
+
+  assert.deepEqual(fenceSegments(horiz, [horiz]), [[{ x: 2, y: 5.5 }, { x: 6, y: 5.5 }]]);
+  assert.deepEqual(fenceSegments(vert, [vert]), [[{ x: 6.5, y: 6 }, { x: 6.5, y: 10 }]]);
+
+  // Isolated 1x1 corner falls back to straight centerline by rotation.
+  assert.deepEqual(fenceSegments(corner, [corner]), [[{ x: 6, y: 5.5 }, { x: 7, y: 5.5 }]]);
+  assert.deepEqual(fenceSegments({ ...corner, rotation: 90 }, [{ ...corner, rotation: 90 }]), [[{ x: 6.5, y: 5 }, { x: 6.5, y: 6 }]]);
+
+  // Connected to west (horiz) and south (vert) -> two L-corner segments from center to edge midpoints.
+  const cornerSegs = fenceSegments(corner, [horiz, corner, vert]);
+  assert.equal(cornerSegs.length, 2);
+  assert.deepEqual(cornerSegs, [
+    [{ x: 6.5, y: 5.5 }, { x: 6, y: 5.5 }],
+    [{ x: 6.5, y: 5.5 }, { x: 6.5, y: 6 }],
+  ]);
+});
+
+test('walls and planRoute treat fences as solid barriers and route around them', () => {
+  const fence: Piece = { id: 50, name: 'Barrier fence', kind: 'fence', x: 5, y: 8, w: 8, h: 1, rotation: 0, color: '#eef2ec', rooms: [] };
+  const pieces = [fence];
+  const segs = walls(pieces);
+  assert.equal(segs.length, 1);
+  assert.equal(walkable({ x: 9, y: 7 }, { x: 9, y: 10 }, pieces), false, 'straight path across fence is blocked');
+  assert.equal(walkable({ x: 3, y: 7 }, { x: 3, y: 10 }, pieces), true, 'path clear of fence is walkable');
+
+  const g = buildGrid(pieces, 20, 18);
+  const target = { id: 'n:south', name: 'South point', kind: 'landmark' as const, detail: 'Landmark', point: { x: 9, y: 10 } };
+  const route = planRoute(g, { x: 9, y: 7 }, target)!;
+  assert.ok(route, 'finds a detour around the fence');
+  // Detour must walk past either x <= 5 or x >= 13 and never cross the fence segment.
+  assert.ok(
+    route.points.some((pt) => pt.x < 5.1 || pt.x > 12.9),
+    'route detours around the end of the fence',
+  );
+  for (let i = 1; i < route.points.length; i++)
+    assert.equal(walkable(route.points[i - 1], route.points[i], pieces), true, 'route never crosses fence');
+});
+
+test('fenced parking encloses 3 sides, rotates open drive-in end, opens path/barrier gaps, and routes cleanly inside', () => {
+  const fencedLot: Piece = {
+    id: 60,
+    name: 'Fenced parking',
+    kind: 'parking',
+    fenced: true,
+    x: 4,
+    y: 6,
+    w: 8,
+    h: 5,
+    rotation: 0,
+    color: '#6e757a',
+    roofColor: '#2f5741',
+    rooms: [],
+  };
+  const runsEastOpen = parkingFenceRuns(fencedLot, [fencedLot]);
+  assert.equal(runsEastOpen.length, 3, '3 fenced sides when isolated');
+  // East end (x = 12) is open when rotation = 0; west (x = 4), north (y = 6), south (y = 11) are blocked.
+  assert.equal(walkable({ x: 11, y: 8.5 }, { x: 13, y: 8.5 }, [fencedLot]), true, 'east drive-in entry is open at rotation 0');
+  assert.equal(walkable({ x: 3, y: 8.5 }, { x: 5, y: 8.5 }, [fencedLot]), false, 'west side is fenced at rotation 0');
+  assert.equal(walkable({ x: 8, y: 5 }, { x: 8, y: 7 }, [fencedLot]), false, 'north side is fenced');
+  assert.equal(walkable({ x: 8, y: 10 }, { x: 8, y: 12 }, [fencedLot]), false, 'south side is fenced');
+
+  // Rotating 180° flips the open drive-in end to west (x = 4) and fences east (x = 12).
+  const flipped = { ...fencedLot, rotation: 180 };
+  assert.equal(walkable({ x: 3, y: 8.5 }, { x: 5, y: 8.5 }, [flipped]), true, 'west drive-in entry is open at rotation 180');
+  assert.equal(walkable({ x: 11, y: 8.5 }, { x: 13, y: 8.5 }, [flipped]), false, 'east side is fenced at rotation 180');
+
+  // Tall parking lot: open south at rotation 90, open north at rotation 270.
+  const tall90 = { ...fencedLot, w: 5, h: 8, rotation: 90 };
+  const tall270 = { ...fencedLot, w: 5, h: 8, rotation: 270 };
+  assert.equal(walkable({ x: 6.5, y: 13 }, { x: 6.5, y: 15 }, [tall90]), true, 'south open at rotation 90');
+  assert.equal(walkable({ x: 6.5, y: 5 }, { x: 6.5, y: 7 }, [tall90]), false, 'north fenced at rotation 90');
+  assert.equal(walkable({ x: 6.5, y: 5 }, { x: 6.5, y: 7 }, [tall270]), true, 'north open at rotation 270');
+  assert.equal(walkable({ x: 6.5, y: 13 }, { x: 6.5, y: 15 }, [tall270]), false, 'south fenced at rotation 270');
+
+  // planRoute from outside west of the lot must walk around to the open east entry (never crossing the fence).
+  const g1 = buildGrid([fencedLot], 20, 18);
+  const lotPlace = places([fencedLot])[0]!;
+  const toLot = planRoute(g1, { x: 2, y: 8.5 }, lotPlace)!;
+  assert.ok(toLot, 'routes into fenced parking through the open east entry');
+  assert.ok(toLot.points.some((pt) => pt.x > 12), 'enters from east side');
+  for (let i = 1; i < toLot.points.length; i++)
+    assert.equal(walkable(toLot.points[i - 1], toLot.points[i], [fencedLot]), true);
+
+  // Connecting a path or barrier on the north side opens a walkable gap in that fence side.
+  const northPath: Piece = { id: 61, name: 'Footpath', kind: 'path', x: 7, y: 4, w: 2, h: 2, rotation: 0, color: '#cfc6b4', rooms: [] };
+  const southBarrier: Piece = { id: 62, name: 'Gate', kind: 'barrier', x: 6, y: 11, w: 3, h: 1, rotation: 0, color: '#6f7579', rooms: [] };
+  const withGaps = [fencedLot, northPath, southBarrier];
+  assert.equal(walkable({ x: 8, y: 5 }, { x: 8, y: 7 }, withGaps), true, 'path opens a gap on the north fence');
+  assert.equal(walkable({ x: 5, y: 5 }, { x: 5, y: 7 }, withGaps), false, 'rest of north fence remains closed');
+  assert.equal(walkable({ x: 7.5, y: 10 }, { x: 7.5, y: 12 }, withGaps), true, 'barrier opens a gap on the south fence');
+
+  const g2 = buildGrid(withGaps, 20, 18);
+  const throughPath = planRoute(g2, { x: 8, y: 4.5 }, lotPlace)!;
+  assert.ok(throughPath, 'routes straight into fenced lot via the path gap');
+  assert.ok(throughPath.points.every((pt) => pt.x > 6.5 && pt.x < 9.5), 'goes straight through north gap without detouring east');
 });

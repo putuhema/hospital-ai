@@ -5,15 +5,18 @@
     import type { Piece } from "$lib/model/layout";
     import {
         doorSegment,
+        fenceSegments,
         footprint,
         inPolygon,
         isBuilding,
+        isFence,
         gatewayParts,
         isArea,
         isBarrier,
         isGate,
         isParking,
         parkingBays,
+        parkingFenceRuns,
         roomColor,
         roomDoor,
     } from "$lib/model/interiors";
@@ -195,6 +198,22 @@
     });
 
     const pts = (list: Point[]) => list.map((p) => `${p.x * S},${p.y * S}`).join(" ");
+    function fencePosts(segs: [Point, Point][]) {
+        const seen = new Set<string>(),
+            out: Point[] = [];
+        for (const [a, b] of segs) {
+            const n = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y)));
+            for (let i = 0; i <= n; i++) {
+                const x = a.x + ((b.x - a.x) * i) / n,
+                    y = a.y + ((b.y - a.y) * i) / n,
+                    key = `${Math.round(x * 100)},${Math.round(y * 100)}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                out.push({ x, y });
+            }
+        }
+        return out;
+    }
     /** The tile under a screen point. */
     function toTile(clientX: number, clientY: number): Point {
         const r = host.getBoundingClientRect();
@@ -369,7 +388,7 @@
             <!-- The grounds: lawn, running past the canvas's edge. -->
             <rect x={-width * S} y={-height * S} width={width * 3 * S} height={height * 3 * S} fill="#dfe7d2" />
             <!-- Walkways and open areas, paved. -->
-            {#each pieces.filter((p) => !isBuilding(p) && !isParking(p) && !isGate(p) && !isBarrier(p)) as p}<polygon
+            {#each pieces.filter((p) => !isBuilding(p) && !isParking(p) && !isGate(p) && !isBarrier(p) && !isFence(p)) as p}<polygon
                     class="walkway"
                     points={pts(footprint(p))}
                     stroke-width={1.5 * unit}
@@ -381,7 +400,24 @@
                             x2={b.x * S}
                             y2={b.y * S}
                             stroke-width={1.5 * unit}
-                        />{/each}<g transform={`translate(${(p.x + p.w / 2) * S} ${(p.y + p.h / 2) * S}) scale(${unit})`} class="badge"
+                        />{/each}{#if p.fenced}{@const runs = parkingFenceRuns(p, pieces)}{#each runs as [a, b]}<line
+                                class="fence-rail"
+                                x1={a.x * S}
+                                y1={a.y * S}
+                                x2={b.x * S}
+                                y2={b.y * S}
+                                style:stroke={p.roofColor ?? "#2f5741"}
+                                stroke-width={3.6 * unit}
+                            />{/each}{#each fencePosts(runs) as pt}<rect
+                                class="fence-post"
+                                x={pt.x * S - 3.5 * unit}
+                                y={pt.y * S - 3.5 * unit}
+                                width={7 * unit}
+                                height={7 * unit}
+                                rx={1 * unit}
+                                style:stroke={p.roofColor ?? "#2f5741"}
+                                stroke-width={1.5 * unit}
+                            />{/each}{/if}<g transform={`translate(${(p.x + p.w / 2) * S} ${(p.y + p.h / 2) * S}) scale(${unit})`} class="badge"
                         ><rect x="-12" y="-12" width="24" height="24" rx="6" /><text y="1">P</text></g
                     ></g
                 >{/each}
@@ -393,6 +429,36 @@
                         y2={g.span[1].y * S}
                         stroke-width={4 * unit}
                     />{#each g.blocks as b}<rect x={b.x * S} y={b.y * S} width={b.w * S} height={b.h * S} rx="3" />{/each}</g
+                >{/each}
+            <!-- Fences: physical barriers with pillars along their centerline. -->
+            {#each pieces.filter(isFence) as p}{@const segs = fenceSegments(p, pieces)}<g class="fence"
+                    >{#each segs as [a, b]}<line
+                            class="fence-base"
+                            x1={a.x * S}
+                            y1={a.y * S}
+                            x2={b.x * S}
+                            y2={b.y * S}
+                            style:stroke={p.color}
+                            stroke-width={6 * unit}
+                        /><line
+                            class="fence-rail"
+                            x1={a.x * S}
+                            y1={a.y * S}
+                            x2={b.x * S}
+                            y2={b.y * S}
+                            style:stroke={p.roofColor ?? "#2f5741"}
+                            stroke-width={3 * unit}
+                        />{/each}{#each fencePosts(segs) as pt}<rect
+                            class="fence-post"
+                            x={pt.x * S - 4 * unit}
+                            y={pt.y * S - 4 * unit}
+                            width={8 * unit}
+                            height={8 * unit}
+                            rx={1 * unit}
+                            style:fill={p.color}
+                            style:stroke={p.roofColor ?? "#2f5741"}
+                            stroke-width={1.6 * unit}
+                        />{/each}</g
                 >{/each}
             <!-- Buildings stand off the ground; their rooms and doors inside. -->
             {#each pieces.filter(isBuilding) as p}<g class="building"
@@ -649,6 +715,13 @@
     }
     .parking line {
         stroke: white;
+    }
+    .fence line,
+    .fence-rail {
+        stroke-linecap: square;
+    }
+    .fence-post {
+        fill: #eef2ec;
     }
     .parking .badge rect {
         fill: #3a5ba8;

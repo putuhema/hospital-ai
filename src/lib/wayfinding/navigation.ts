@@ -1,5 +1,15 @@
 import type { Piece } from "../model/layout.ts";
-import { corridorDoors, isBuilding, outline, roomDoor, type Door } from "../model/interiors.ts";
+import {
+  corridorDoors,
+  fenceSegments,
+  isBuilding,
+  isFence,
+  isParking,
+  outline,
+  parkingFenceRuns,
+  roomDoor,
+  type Door,
+} from "../model/interiors.ts";
 import { parseInfo, type PlaceInfo } from "../model/place-info.ts";
 import { isCategory, type LandmarkCategory } from "../model/categories.ts";
 
@@ -105,7 +115,7 @@ export function buildingDoors(p: Piece, pieces: Piece[]): Door[] {
   return [{ side: wall.side, offset: (wall.from + wall.to) / 2, width: 0.8 }];
 }
 type Segment = [Point, Point];
-/** Every wall segment on the campus: building shells and room partitions, minus door openings. */
+/** Every wall segment on the campus: building shells, room partitions, fences and fenced parking perimeters, minus openings. */
 export function walls(pieces: Piece[]): Segment[] {
   const out: Segment[] = [];
   function rectangle(
@@ -155,6 +165,10 @@ export function walls(pieces: Piece[]): Segment[] {
       rectangle(p.x + r.x + 0.04, p.y + r.y + 0.04, r.w - 0.08, r.h - 0.08, [
         { ...roomDoor(r), offset: roomDoor(r).offset - 0.04 },
       ]);
+  }
+  for (const p of pieces) {
+    if (isFence(p)) out.push(...fenceSegments(p, pieces));
+    else if (isParking(p) && p.fenced) out.push(...parkingFenceRuns(p, pieces));
   }
   return out;
 }

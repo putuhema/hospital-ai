@@ -1,7 +1,7 @@
 <script lang="ts">
     import type { Piece } from "$lib/model/layout";
     import { answered, type FaqEntry } from "$lib/model/faq";
-    import { isArea, isBarrier, isBuilding, isGate, isParking, isPath, pieceType } from "$lib/model/interiors";
+    import { isArea, isBarrier, isBuilding, isFence, isGate, isParking, isPath, pieceType } from "$lib/model/interiors";
     import ColorField from "$lib/components/shared/ColorField.svelte";
     import InteriorEditor from "./InteriorEditor.svelte";
     import DestinationsEditor from "./DestinationsEditor.svelte";
@@ -62,7 +62,9 @@
               ? "#5d7d63"
               : kind === "phtc"
                 ? "#d9ded8"
-                : "#5b7d63";
+                : kind === "fence" || kind === "parking" || kind === "motorcycle"
+                  ? "#2f5741"
+                  : "#5b7d63";
     const defaultWall = (kind: string) => (kind === "phtc" ? "#eef1ec" : "#82bf5c");
     const roofStyles = [
         ["pitched", "Pitched"],
@@ -162,15 +164,51 @@
                     fallback="#cfc6b4"
                     onchange={(c) => update("color", c)}
                 />
-                <p class="hint">Open-air path: no roof. Routes prefer it over crossing the grass.</p>{:else if isParking(piece)}<ColorField
+                <p class="hint">Open-air path: no roof. Routes prefer it over crossing the grass.</p>{:else if isParking(piece)}<div class="style-row">
+                    <span>Perimeter</span>
+                    <div class="segmented" role="group" aria-label="Parking perimeter">
+                        <button
+                            class:active={!piece.fenced}
+                            aria-pressed={!piece.fenced}
+                            onclick={() => edit({ fenced: undefined })}>Open</button
+                        ><button
+                            class:active={!!piece.fenced}
+                            aria-pressed={!!piece.fenced}
+                            onclick={() => edit({ fenced: true })}>Fenced</button
+                        >
+                    </div>
+                </div>
+                <ColorField
                     label="Surface"
                     value={piece.color}
                     fallback="#7c8286"
                     onchange={(c) => update("color", c)}
                 />
+                {#if piece.fenced}<ColorField
+                        label="Fence"
+                        value={piece.roofColor ?? "#2f5741"}
+                        fallback="#2f5741"
+                        onchange={(c) => update("roofColor", roofColor(piece, c))}
+                    />{/if}
                 <p class="hint">
                     Open-air parking: no building. Visitors can search for it and get directions
-                    to it, and start a route from where they parked.
+                    to it, and start a route from where they parked. Switch to Fenced to enclose
+                    three sides; rotate to choose which short end stays open for entry.
+                </p>{:else if isFence(piece)}<ColorField
+                    label="Base & pillars"
+                    value={piece.color}
+                    fallback="#eef2ec"
+                    onchange={(c) => update("color", c)}
+                />
+                <ColorField
+                    label="Railings"
+                    value={piece.roofColor ?? "#2f5741"}
+                    fallback="#2f5741"
+                    onchange={(c) => update("roofColor", roofColor(piece, c))}
+                />
+                <p class="hint">
+                    Blocks walking paths and encloses parking or restricted areas. Connects
+                    automatically at corners.
                 </p>{:else if isGate(piece)}<ColorField
                     label="Drive"
                     value={piece.color}

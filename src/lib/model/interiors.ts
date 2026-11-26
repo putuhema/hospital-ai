@@ -110,6 +110,8 @@ export const isMotorcycleParking = (p: Kind) => p.kind === "motorcycle";
 export const isGate = (p: Kind) => p.kind === "gate";
 /** A parking gate: a ticket booth and a barrier arm across the lane. */
 export const isBarrier = (p: Kind) => p.kind === "barrier";
+/** Perimeter fence: a physical barrier that blocks walking paths and encloses areas. */
+export const isFence = (p: Kind) => p.kind === "fence";
 /** Open-air ground people walk across: paths, car parks and gateways. */
 export const isOpenAir = (p: Kind) => isPath(p) || isParking(p) || isGate(p) || isBarrier(p);
 /** Open-air places visitors can search for and be given directions to. */
@@ -130,7 +132,9 @@ export const pieceType = (p: Kind) =>
             ? "Campus entrance"
             : isBarrier(p)
               ? "Parking gate"
-              : "Building";
+              : isFence(p)
+                ? "Fence"
+                : "Building";
 
 /**
  * Bays in tiles: a car's is 2.5 × 5 m (1.25 × 2.5 tiles), a motorcycle's
@@ -398,11 +402,112 @@ export function corridorDoors(b: Piece, pieces: Piece[]): Door[] {
   return doors;
 }
 
+/**
+ * Centerline segments of a fence piece in tile coordinates. A 1×1 fence post
+ * connects automatically to 2+ adjacent fences, gateways or buildings; other
+ * fences span their full length along their long axis (or rotation when square).
+ */
+export function fenceSegments(
+  p: Piece,
+  pieces: Piece[],
+): [{ x: number; y: number }, { x: number; y: number }][] {
+  const cx = p.x + p.w / 2,
+    cy = p.y + p.h / 2;
+  if (p.w === 1 && p.h === 1) {
+    const neighbors = pieces
+      .filter((o) => o.id !== p.id && (isFence(o) || isGateway(o) || isBuilding(o)))
+      .map(footprint);
+    const sides: { probe: Point; edge: Point }[] = [
+      { probe: { x: p.x - 0.5, y: cy }, edge: { x: p.x, y: cy } },
+      { probe: { x: p.x + 1.5, y: cy }, edge: { x: p.x + 1, y: cy } },
+      { probe: { x: cx, y: p.y - 0.5 }, edge: { x: cx, y: p.y } },
+      { probe: { x: cx, y: p.y + 1.5 }, edge: { x: cx, y: p.y + 1 } },
+    ];
+    const connected = sides.filter(({ probe }) => neighbors.some((poly) => inPolygon(probe, poly)));
+    if (connected.length >= 2)
+      return connected.map(({ edge }) => [{ x: cx, y: cy }, edge]);
+    return p.rotation % 180 === 0
+      ? [[{ x: p.x, y: cy }, { x: p.x + 1, y: cy }]]
+      : [[{ x: cx, y: p.y }, { x: cx, y: p.y + 1 }]];
+  }
+  const alongX = p.w !== p.h ? p.w > p.h : p.rotation % 180 === 0;
+  return alongX
+    ? [[{ x: p.x, y: cy }, { x: p.x + p.w, y: cy }]]
+    : [[{ x: cx, y: p.y }, { x: cx, y: p.y + p.h }]];
+}
+
+/**
+ * Perimeter fence segments of a fenced parking piece in tile coordinates.
+ * Leaves one short end completely open for drive-in entry (high-coordinate end
+ * when `rotation < 180`, low-coordinate end when `rotation >= 180`) and opens
+ * gaps along the remaining 3 sides where a corridor, open-air piece or fence meets it.
+ */
+export function parkingFenceRuns(
+  p: Piece,
+  pieces: Piece[],
+): [{ x: number; y: number }, { x: number; y: number }][] {
+  if (!isParking(p) || !p.fenced) return [];
+  const poly = footprint(p);
+  let area = 0;
+  for (let k = 0; k < poly.length; k++) {
+    const c = poly[k],
+      d = poly[(k + 1) % poly.length];
+    area += c.x * d.y - d.x * c.y;
+  }
+  const out = area > 0 ? 1 : -1;
+  const alongX = p.w >= p.h;
+  const openEnd: Side = alongX
+    ? p.rotation < 180
+      ? "east"
+      : "west"
+    : p.rotation < 180
+      ? "south"
+      : "north";
+  const others = pieces
+    .filter((o) => o.id !== p.id && (isCorridor(o) || isOpenAir(o) || isFence(o)))
+    .map(footprint);
+  const segments: [Point, Point][] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i],
+      b = poly[(i + 1) % poly.length],
+      length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length < 1e-9) continue;
+    const horizontal = Math.abs(a.y - b.y) < 1e-9;
+    const side: Side = horizontal
+      ? Math.abs(a.y - p.y) < 1e-9
+        ? "north"
+        : "south"
+      : Math.abs(a.x - p.x) < 1e-9
+        ? "west"
+        : "east";
+    if (side === openEnd) continue;
+    const nx = ((b.y - a.y) / length) * out,
+      ny = (-(b.x - a.x) / length) * out;
+    const steps = Math.max(1, Math.round(length / 0.25)),
+      runs: [number, number][] = [];
+    for (let k = 0; k < steps; k++) {
+      const t = (k + 0.5) / steps,
+        probe = { x: a.x + (b.x - a.x) * t + nx * 0.1, y: a.y + (b.y - a.y) * t + ny * 0.1 };
+      if (others.some((o) => inPolygon(probe, o))) continue;
+      const last = runs[runs.length - 1];
+      if (last && Math.abs(last[1] - k / steps) < 1e-9) last[1] = (k + 1) / steps;
+      else runs.push([k / steps, (k + 1) / steps]);
+    }
+    for (const [from, to] of runs)
+      segments.push([
+        { x: a.x + (b.x - a.x) * from, y: a.y + (b.y - a.y) * from },
+        { x: a.x + (b.x - a.x) * to, y: a.y + (b.y - a.y) * to },
+      ]);
+  }
+  return segments;
+}
+
 /** The piece (and room, if any) a point (tiles) stands in, for "you are in …" while walking about the map. */
 export function whereAt(pieces: Piece[], point: { x: number; y: number }): { piece: Piece; room?: RoomAsset } | null {
   // Rooms and buildings before the corridors and paths they may touch.
   const ordered = [...pieces].sort((a, b) => Number(isOpenAir(a)) - Number(isOpenAir(b)));
   for (const piece of ordered) {
+    if (isFence(piece)) continue;
     if (!inPolygon(point, footprint(piece))) continue;
     const room = piece.roomAssets?.find(
       (r) => point.x >= piece.x + r.x && point.x <= piece.x + r.x + r.w && point.y >= piece.y + r.y && point.y <= piece.y + r.y + r.h,

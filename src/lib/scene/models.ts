@@ -202,6 +202,82 @@ function signTexture(text = "P", background = "#2f5aa8", width = 128) {
   return makeCanvasTexture(canvas);
 }
 
+/** Realistic dark hospital tarmac grain texture for parking surfaces, subtly tinted from `baseHex`. */
+function asphaltTexture(baseHex: string) {
+  const tarmac = mixHex("#555b60", baseHex, 0.45);
+  const canvas = getCanvas(`asphalt:${tarmac}`, 256, 256, (g, w, h) => {
+    g.fillStyle = tarmac;
+    g.fillRect(0, 0, w, h);
+    let s = 1337;
+    const rnd = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+    // Soft tonal asphalt patches.
+    for (let i = 0; i < 42; i++) {
+      g.fillStyle = rnd() > 0.5 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.045)";
+      const r = 10 + rnd() * 28;
+      g.beginPath();
+      g.arc(rnd() * w, rnd() * h, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    // Fine mineral aggregate speckle.
+    for (let i = 0; i < 2400; i++) {
+      const bright = rnd();
+      g.fillStyle =
+        bright > 0.68
+          ? "rgba(235,238,240,0.11)"
+          : bright < 0.34
+            ? "rgba(18,22,25,0.16)"
+            : "rgba(120,128,134,0.08)";
+      const sz = rnd() > 0.85 ? 2 : 1.2;
+      g.fillRect(rnd() * w, rnd() * h, sz, sz);
+    }
+  });
+  // ExtrudeGeometry UVs are in metres; 0.32 repeat => ~3.1m seamless tile.
+  return makeCanvasTexture(canvas, 0.32, 0.32, true);
+}
+
+/** Blue painted accessible/disabled parking bay surface with white frame & wheelchair emblem. */
+function accessibleBayTexture() {
+  const canvas = getCanvas("accessible-parking-bay", 128, 256, (g, w, h) => {
+    g.fillStyle = "#2368b8";
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = "#f4f6f8";
+    g.lineWidth = 6;
+    g.strokeRect(7, 7, w - 14, h - 14);
+    // Clean high-contrast accessibility wheelchair icon centered in the bay.
+    const cx = w / 2,
+      cy = h / 2 + 4;
+    g.strokeStyle = "#ffffff";
+    g.fillStyle = "#ffffff";
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    // Head
+    g.beginPath();
+    g.arc(cx - 2, cy - 34, 8, 0, Math.PI * 2);
+    g.fill();
+    // Torso, lap & leg
+    g.lineWidth = 8;
+    g.beginPath();
+    g.moveTo(cx - 2, cy - 22);
+    g.lineTo(cx - 2, cy + 4);
+    g.lineTo(cx + 22, cy + 4);
+    g.lineTo(cx + 30, cy + 28);
+    g.lineTo(cx + 36, cy + 26);
+    g.stroke();
+    // Arm
+    g.lineWidth = 7;
+    g.beginPath();
+    g.moveTo(cx - 2, cy - 11);
+    g.lineTo(cx + 16, cy - 11);
+    g.stroke();
+    // Wheel arc
+    g.lineWidth = 7;
+    g.beginPath();
+    g.arc(cx - 4, cy + 16, 22, 0.25 * Math.PI, 1.52 * Math.PI);
+    g.stroke();
+  });
+  return makeCanvasTexture(canvas);
+}
+
 /** Glossy light cream/off-white square ceramic floor tiles for covered corridors (Photo 4). */
 function corridorFloorTexture(baseHex: string) {
   const tileHex = mixHex("#ecefe8", baseHex, 0.22);
@@ -663,108 +739,735 @@ function pathModel(p: Piece, pieces: Piece[]) {
   return group;
 }
 
+type TilePoint = { x: number; y: number };
+type TileSegment = [TilePoint, TilePoint];
+
+const isFenceKind = (p: Pick<Piece, "kind">) => p.kind === "fence";
+const isFencedParking = (p: Piece) => isParking(p) && Boolean((p as Piece & { fenced?: boolean }).fenced);
+
+/**
+ * Centerline segments for a fence piece in tile coordinates (matching wayfinding walls 1:1).
+ * A 1×1 corner/post automatically connects to 2+ adjacent fences, gateways, or buildings.
+ */
+function computeFenceSegments(p: Piece, pieces: Piece[]): TileSegment[] {
+  const cx = p.x + p.w / 2,
+    cy = p.y + p.h / 2;
+  if (p.w === 1 && p.h === 1) {
+    const probes: { probe: TilePoint; mid: TilePoint }[] = [
+      { probe: { x: p.x - 0.5, y: cy }, mid: { x: p.x, y: cy } },
+      { probe: { x: p.x + 1.5, y: cy }, mid: { x: p.x + 1, y: cy } },
+      { probe: { x: cx, y: p.y - 0.5 }, mid: { x: cx, y: p.y } },
+      { probe: { x: cx, y: p.y + 1.5 }, mid: { x: cx, y: p.y + 1 } },
+    ];
+    const neighbors = pieces
+      .filter((o) => o.id !== p.id && (isFenceKind(o) || isGate(o) || isBarrier(o) || isBuildingPiece(o)))
+      .map(footprint);
+    const connected = probes.filter(({ probe }) => neighbors.some((poly) => inPolygon(probe, poly)));
+    if (connected.length >= 2) {
+      return connected.map(({ mid }) => [{ x: cx, y: cy }, mid]);
+    }
+    return p.rotation % 180 === 0
+      ? [[{ x: p.x, y: cy }, { x: p.x + 1, y: cy }]]
+      : [[{ x: cx, y: p.y }, { x: cx, y: p.y + 1 }]];
+  }
+  const alongX = p.w !== p.h ? p.w > p.h : p.rotation % 180 === 0;
+  return alongX
+    ? [[{ x: p.x, y: cy }, { x: p.x + p.w, y: cy }]]
+    : [[{ x: cx, y: p.y }, { x: cx, y: p.y + p.h }]];
+}
+
+/**
+ * Exposed fenced perimeter segments for a fenced parking area in tile coordinates
+ * (matching wayfinding walls 1:1): skips the default drive-in open short end and
+ * opens gaps wherever a corridor, open-air walkway/gateway, or fence touches.
+ */
+function computeParkingFenceRuns(p: Piece, pieces: Piece[]): TileSegment[] {
+  if (!isFencedParking(p)) return [];
+  const poly = footprint(p);
+  let area = 0;
+  for (let k = 0; k < poly.length; k++) {
+    const c = poly[k],
+      d = poly[(k + 1) % poly.length];
+    area += c.x * d.y - d.x * c.y;
+  }
+  const out = area > 0 ? 1 : -1;
+  const alongX = p.w >= p.h;
+  const others = pieces
+    .filter((o) => o.id !== p.id && (isCorridor(o) || isOpenAir(o) || isFenceKind(o)))
+    .map(footprint);
+  const segments: TileSegment[] = [];
+
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i],
+      b = poly[(i + 1) % poly.length],
+      length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length < 1e-6) continue;
+    const horizontal = Math.abs(a.y - b.y) < 1e-6;
+
+    // Skip the default open drive-in short end.
+    if (alongX && !horizontal) {
+      const isEast = (a.x + b.x) / 2 > p.x + p.w / 2;
+      if (p.rotation < 180 ? isEast : !isEast) continue;
+    } else if (!alongX && horizontal) {
+      const isSouth = (a.y + b.y) / 2 > p.y + p.h / 2;
+      if (p.rotation < 180 ? isSouth : !isSouth) continue;
+    }
+
+    const nx = ((b.y - a.y) / length) * out,
+      ny = (-(b.x - a.x) / length) * out;
+    const steps = Math.max(1, Math.round(length / 0.25));
+    const runs: [number, number][] = [];
+    for (let k = 0; k < steps; k++) {
+      const t = (k + 0.5) / steps,
+        probe = { x: a.x + (b.x - a.x) * t + nx * 0.1, y: a.y + (b.y - a.y) * t + ny * 0.1 };
+      if (others.some((o) => inPolygon(probe, o))) continue;
+      const last = runs[runs.length - 1];
+      if (last && Math.abs(last[1] - k / steps) < 1e-9) last[1] = (k + 1) / steps;
+      else runs.push([k / steps, (k + 1) / steps]);
+    }
+    for (const [from, to] of runs) {
+      segments.push([
+        { x: a.x + (b.x - a.x) * from, y: a.y + (b.y - a.y) * from },
+        { x: a.x + (b.x - a.x) * to, y: a.y + (b.y - a.y) * to },
+      ]);
+    }
+  }
+  return segments;
+}
+
+type FenceMats = {
+  wall: THREE.MeshStandardMaterial;
+  plinth: THREE.MeshStandardMaterial;
+  coping: THREE.MeshStandardMaterial;
+  accent: THREE.MeshStandardMaterial;
+  iron: THREE.MeshStandardMaterial;
+};
+
+function makeFenceMaterials(wallColor: string, railColor: string): FenceMats {
+  const wallHex = wallColor && /^#[0-9a-f]{6}$/i.test(wallColor) ? wallColor : "#eef2ec";
+  const railHex = railColor && /^#[0-9a-f]{6}$/i.test(railColor) ? railColor : "#2f5741";
+  return {
+    wall: new THREE.MeshStandardMaterial({ color: wallHex, roughness: 0.78, metalness: 0.03 }),
+    plinth: new THREE.MeshStandardMaterial({ color: shade(wallHex, -0.14), roughness: 0.86, metalness: 0.03 }),
+    coping: new THREE.MeshStandardMaterial({ color: "#d8ddd4", roughness: 0.72, metalness: 0.04 }),
+    accent: new THREE.MeshStandardMaterial({ color: "#74b450", roughness: 0.62, metalness: 0.05 }),
+    iron: new THREE.MeshStandardMaterial({ color: railHex, roughness: 0.44, metalness: 0.26 }),
+  };
+}
+
+/**
+ * Reusable RSUD Mamuju Tengah architectural fence run (in metres):
+ * plastered concrete base wall + dark plinth + coping ledge, square concrete
+ * pillars with hospital-green accent collar bands & overhanging caps, and
+ * forest-green/wrought-iron vertical picket bars with horizontal rails & finials.
+ */
+function addFenceRun(
+  group: THREE.Group,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  mats: FenceMats,
+  includeStartPillar: boolean,
+  includeEndPillar: boolean,
+  placedPillars: Set<string>,
+  baseY = 0,
+) {
+  const dx = bx - ax,
+    dz = bz - az,
+    len = Math.hypot(dx, dz);
+  if (len < 0.05) return;
+  const alongX = Math.abs(dx) >= Math.abs(dz);
+  const ux = dx / len,
+    uz = dz / len;
+
+  const pillarKey = (x: number, z: number) => `${Math.round(x * 50)}:${Math.round(z * 50)}`;
+  const addPillar = (px: number, pz: number) => {
+    const key = pillarKey(px, pz);
+    if (placedPillars.has(key)) return;
+    placedPillars.add(key);
+    // Strictly stacked non-overlapping Y intervals so pillars never Z-fight.
+    addBox(group, "Fence pillar footing", px, baseY + 0.08, pz, 0.33, 0.16, 0.33, mats.plinth);
+    addBox(group, "Fence pillar shaft", px, baseY + 0.84, pz, 0.28, 1.36, 0.28, mats.wall);
+    addBox(group, "Fence pillar accent", px, baseY + 1.62, pz, 0.3, 0.2, 0.3, mats.accent);
+    addBox(group, "Fence pillar shaft", px, baseY + 1.84, pz, 0.28, 0.24, 0.28, mats.wall);
+    addBox(group, "Fence pillar cap", px, baseY + 2.0, pz, 0.34, 0.08, 0.34, mats.coping);
+    addBox(group, "Fence pillar crown", px, baseY + 2.065, pz, 0.22, 0.05, 0.22, mats.coping);
+  };
+
+  // Evenly space intermediate pillars every ~3.0m along long runs.
+  const bays = Math.max(1, Math.round(len / 3.0));
+  const bayNodes: { t: number; hasPillar: boolean }[] = [];
+  for (let i = 0; i <= bays; i++) {
+    const t = (i / bays) * len;
+    const isStart = i === 0,
+      isEnd = i === bays;
+    const wantPillar = isStart ? includeStartPillar : isEnd ? includeEndPillar : len >= 2.2;
+    if (wantPillar) addPillar(ax + ux * t, az + uz * t);
+    bayNodes.push({ t, hasPillar: wantPillar });
+  }
+
+  const placeSpan = (
+    name: string,
+    t0: number,
+    t1: number,
+    yCenter: number,
+    h: number,
+    thick: number,
+    mat: THREE.Material,
+  ) => {
+    const span = t1 - t0;
+    if (span < 0.04) return;
+    const tm = (t0 + t1) / 2;
+    addBox(
+      group,
+      name,
+      ax + ux * tm,
+      yCenter,
+      az + uz * tm,
+      alongX ? span : thick,
+      h,
+      alongX ? thick : span,
+      mat,
+    );
+  };
+
+  for (let i = 0; i < bayNodes.length - 1; i++) {
+    const left = bayNodes[i],
+      right = bayNodes[i + 1];
+    // Trim cleanly to pillar shafts/plinths so wall faces never Z-fight with pillars.
+    const plinth0 = left.t + (left.hasPillar ? 0.165 : 0);
+    const plinth1 = right.t - (right.hasPillar ? 0.165 : 0);
+    const wall0 = left.t + (left.hasPillar ? 0.14 : 0);
+    const wall1 = right.t - (right.hasPillar ? 0.14 : 0);
+
+    // 1. Subtle darker bottom plinth (y = 0..0.12m), base wall (0.12..0.52m), coping (0.52..0.58m).
+    placeSpan("Fence plinth", plinth0, plinth1, baseY + 0.06, 0.12, 0.22, mats.plinth);
+    placeSpan("Fence base wall", wall0, wall1, baseY + 0.32, 0.4, 0.18, mats.wall);
+    placeSpan("Fence coping", wall0, wall1, baseY + 0.55, 0.06, 0.24, mats.coping);
+
+    // 2. Wrought-iron / dark forest-green horizontal rails & vertical picket bars with spear finials.
+    const rail0 = left.t + (left.hasPillar ? 0.14 : 0.01);
+    const rail1 = right.t - (right.hasPillar ? 0.14 : 0.01);
+    const bayLen = rail1 - rail0;
+    if (bayLen < 0.12) continue;
+
+    placeSpan("Fence rail", rail0, rail1, baseY + 0.68, 0.04, 0.046, mats.iron);
+    placeSpan("Fence rail", rail0, rail1, baseY + 1.7, 0.028, 0.036, mats.iron);
+    placeSpan("Fence rail", rail0, rail1, baseY + 1.82, 0.044, 0.05, mats.iron);
+
+    const picketCount = Math.max(1, Math.floor((bayLen - 0.06) / 0.24));
+    const step = bayLen / (picketCount + 1);
+    for (let k = 1; k <= picketCount; k++) {
+      const t = rail0 + k * step;
+      const px = ax + ux * t,
+        pz = az + uz * t;
+      // Vertical picket bar rising from top of coping (0.58m) through top rail to 1.88m.
+      addBox(group, "Fence picket", px, baseY + 1.23, pz, 0.032, 1.3, 0.032, mats.iron);
+      // Clean stepped spear finial crowning each picket.
+      addBox(group, "Fence finial", px, baseY + 1.895, pz, 0.044, 0.03, 0.044, mats.iron);
+      addBox(group, "Fence finial tip", px, baseY + 1.935, pz, 0.022, 0.05, 0.022, mats.iron);
+    }
+  }
+}
+
+/** Modular RSUD hospital perimeter fence (straight runs & auto-joining 1×1 corners). */
+function fenceModel(p: Piece, pieces: Piece[]) {
+  const group = new THREE.Group();
+  const segments = computeFenceSegments(p, pieces);
+  const mats = makeFenceMaterials(p.color || "#eef2ec", p.roofColor ?? "#2f5741");
+  const placedPillars = new Set<string>();
+
+  // Deduplicate shared endpoints across touching fence pieces so adjacent fences never double-place a pillar.
+  const lowerFenceEndpoints: TilePoint[] = [];
+  for (const o of pieces) {
+    if (o.id === p.id || !isFenceKind(o) || o.id >= p.id) continue;
+    for (const [sa, sb] of computeFenceSegments(o, pieces)) {
+      lowerFenceEndpoints.push(sa, sb);
+    }
+  }
+  const takenByLowerFence = (pt: TilePoint) =>
+    lowerFenceEndpoints.some((e) => Math.hypot(e.x - pt.x, e.y - pt.y) < 1e-3);
+
+  for (const [a, b] of segments) {
+    addFenceRun(
+      group,
+      a.x * 2,
+      a.y * 2,
+      b.x * 2,
+      b.y * 2,
+      mats,
+      !takenByLowerFence(a),
+      !takenByLowerFence(b),
+      placedPillars,
+      0,
+    );
+  }
+  return group;
+}
+
 const CAR_COLOURS = ["#e8e8e4", "#2f3437", "#a8b0b5", "#7d2a2a", "#2c4a6e", "#c9c2b0", "#556b4f"],
   MOTORCYCLE_COLOURS = ["#c23b32", "#1f2427", "#e8e8e4", "#2d5fa0", "#9aa3a8", "#d9a32c"];
 
 /**
- * An open-air car park: asphalt with painted bays in one row (or two facing
- * an aisle when it is deep enough), some parked cars, kerbs along the sides
- * and a "P" sign. The short ends stay open for cars to drive in.
+ * An open-air (or fenced) hospital parking area: textured tarmac asphalt,
+ * painted white bay lines, accessible blue disabled bay, yellow/white wheel-stops,
+ * refined low-poly parked cars or motorcycles, sleek perimeter LED lamp posts,
+ * entrance "P" sign, and optional RSUD perimeter fence around the 3 non-entry sides.
  */
 function parkingModel(p: Piece, pieces: Piece[]) {
   const group = new THREE.Group();
   const poly = footprint(p).map((v) => ({ x: v.x * 2, z: v.y * 2 }));
-  group.add(slab("Parking surface", poly, 0, 0.05, new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.9 })));
+  const fenced = isFencedParking(p);
+  const asphaltTex = asphaltTexture(p.color || "#6e757a");
+  const asphaltMat = new THREE.MeshStandardMaterial({
+    color: asphaltTex ? "#ffffff" : mixHex("#555b60", p.color || "#6e757a", 0.45),
+    map: asphaltTex,
+    roughness: 0.9,
+    metalness: 0.03,
+  });
+  group.add(slab("Parking surface", poly, 0, 0.05, asphaltMat));
+
   const { alongX, bayDepth, lines, bays } = parkingBays(p);
-  const box = (name: string, x: number, y: number, z: number, du: number, h: number, dv: number, material: THREE.Material) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(alongX ? du : dv, h, alongX ? dv : du), material);
-    mesh.position.set(x, y, z);
-    mesh.name = name;
-    group.add(mesh);
-    return mesh;
-  };
-  const paint = new THREE.MeshStandardMaterial({ color: "#f2f2ee", roughness: 0.6 }),
-    glass = new THREE.MeshStandardMaterial({ color: "#39444c", roughness: 0.25, metalness: 0.3 });
+  const box = (
+    name: string,
+    x: number,
+    y: number,
+    z: number,
+    du: number,
+    h: number,
+    dv: number,
+    material: THREE.Material,
+    noCastShadow = false,
+  ) => addBox(group, name, x, y, z, alongX ? du : dv, h, alongX ? dv : du, material, noCastShadow);
+
+  const paintMat = new THREE.MeshStandardMaterial({ color: "#f3f4ef", roughness: 0.58 }),
+    wheelStopWhiteMat = new THREE.MeshStandardMaterial({ color: "#eceee8", roughness: 0.78 }),
+    wheelStopYellowMat = new THREE.MeshStandardMaterial({ color: "#e5b82e", roughness: 0.65 }),
+    cabinMat = new THREE.MeshStandardMaterial({ color: "#2d3a42", roughness: 0.18, metalness: 0.22 }),
+    trimMat = new THREE.MeshStandardMaterial({ color: "#2a2f33", roughness: 0.72 }),
+    rubberMat = new THREE.MeshStandardMaterial({ color: "#1c1e21", roughness: 0.9 }),
+    hubcapMat = new THREE.MeshStandardMaterial({ color: "#bfc6cb", roughness: 0.36, metalness: 0.32 }),
+    headlightMat = new THREE.MeshStandardMaterial({
+      color: "#f5f2dc",
+      emissive: "#fff8dc",
+      emissiveIntensity: 0.2,
+      roughness: 0.25,
+    }),
+    taillightMat = new THREE.MeshStandardMaterial({
+      color: "#c9312b",
+      emissive: "#a0201c",
+      emissiveIntensity: 0.16,
+      roughness: 0.3,
+    });
+
+  // 1. Crisp painted white bay lines.
   for (const [a, b] of lines) {
     const length = Math.hypot(b.x - a.x, b.y - a.y) * 2,
-      horizontal = Math.abs(b.x - a.x) > Math.abs(b.y - a.y),
-      mesh = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? length : 0.1, 0.012, horizontal ? 0.1 : length), paint);
-    mesh.name = "Parking bay line";
-    mesh.position.set(a.x + b.x, 0.056, a.y + b.y);
-    group.add(mesh);
+      horizontal = Math.abs(b.x - a.x) > Math.abs(b.y - a.y);
+    addBox(
+      group,
+      "Parking bay line",
+      a.x + b.x,
+      0.056,
+      a.y + b.y,
+      horizontal ? length : 0.1,
+      0.012,
+      horizontal ? 0.1 : length,
+      paintMat,
+      true,
+    );
   }
-  const rubber = new THREE.MeshStandardMaterial({ color: "#1d1f21", roughness: 0.9 });
-  const motorcycle = (bay: { x: number; y: number; row: number }, colour: string) => {
-    const x = bay.x * 2,
-      z = bay.y * 2,
-      out = bay.row ? -1 : 1,
-      along = (d: number) => (alongX ? { x, z: z + d * out } : { x: x + d * out, z });
-    const body = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.4, metalness: 0.2 });
-    for (const d of [-0.62, 0.62]) {
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16), rubber),
-        at = along(d);
-      wheel.rotation[alongX ? "z" : "x"] = Math.PI / 2;
-      wheel.position.set(at.x, 0.35, at.z);
-      wheel.name = "Parking motorcycle wheel";
-      group.add(wheel);
-    }
-    const mid = along(0.05),
-      seat = along(0.25),
-      bars = along(-0.55);
-    box("Parking motorcycle body", mid.x, 0.62, mid.z, 0.32, 0.36, 1.1, body);
-    box("Parking motorcycle seat", seat.x, 0.86, seat.z, 0.28, 0.1, 0.62, rubber);
-    box("Parking motorcycle handlebars", bars.x, 1.02, bars.z, 0.7, 0.05, 0.05, rubber);
-  };
-  let seed = p.id * 9301 + 49297;
-  const random = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+
+  const x0 = p.x * 2,
+    x1 = (p.x + p.w) * 2,
+    z0 = p.y * 2,
+    z1 = (p.y + p.h) * 2;
+  const lenM = alongX ? x1 - x0 : z1 - z0;
+  const depthM = alongX ? z1 - z0 : x1 - x0;
   const depth = bayDepth * 2;
   const motorcycles = isMotorcycleParking(p);
-  for (const bay of bays) {
-    if (random() > (motorcycles ? 0.7 : 0.6)) continue;
-    if (motorcycles) {
-      motorcycle(bay, MOTORCYCLE_COLOURS[Math.floor(random() * MOTORCYCLE_COLOURS.length)]);
-      continue;
-    }
-    const colour = CAR_COLOURS[Math.floor(random() * CAR_COLOURS.length)],
-      body = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.35, metalness: 0.25 }),
-      back = bay.row ? 0.25 : -0.25,
-      x = bay.x * 2,
-      z = bay.y * 2;
-    box("Parking car body", x, 0.5, z, 1.8, 0.6, Math.min(4.2, depth - 0.6), body);
-    box("Parking car cabin", alongX ? x : x + back, 1.05, alongX ? z + back : z, 1.6, 0.5, Math.min(2.2, depth - 1.6), glass);
-  }
-  const kerb = new THREE.MeshStandardMaterial({ color: "#a3a197", roughness: 0.85 }),
-    inward = turning(poly) > 0 ? 1 : -1;
-  poly.forEach((a, i) => {
-    const b = poly[(i + 1) % poly.length],
-      side = Math.hypot(b.x - a.x, b.z - a.z),
-      horizontal = Math.abs(b.x - a.x) > Math.abs(b.z - a.z);
-    if (horizontal !== alongX) return;
-    const nx = (-(b.z - a.z) / side) * inward,
-      nz = ((b.x - a.x) / side) * inward;
-    for (const [from, to] of exposedRuns(p, i, pieces)) {
-      const run = (to - from) * side,
-        t = (from + to) / 2,
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? run : 0.18, 0.14, horizontal ? 0.18 : run), kerb);
-      mesh.name = "Parking kerb";
-      mesh.position.set(a.x + (b.x - a.x) * t + nx * 0.09, 0.07, a.z + (b.z - a.z) * t + nz * 0.09);
-      group.add(mesh);
-    }
-  });
-  const steel = new THREE.MeshStandardMaterial({ color: "#8d9599", metalness: 0.6, roughness: 0.4 }),
-    corner = { x: p.x * 2 + 0.35, z: (p.y + p.h) * 2 - 0.35 };
-  box("Parking sign post", corner.x, 1.1, corner.z, 0.08, 2.2, 0.08, steel);
+  const rows = bays.some((b) => b.row === 1) ? 2 : 1;
+  const openHigh = p.rotation < 180;
+
+  // 2. Entrance "P" sign positioned cleanly beside the open drive-in entry (clear of fence & cars).
+  const signU = openHigh ? lenM - 0.48 : 0.48;
+  const signV = rows === 1 ? Math.max(depth + 0.45, depthM - 0.74) : depthM - 0.5;
+  const signPos = alongX ? { x: x0 + signU, z: z0 + signV } : { x: x0 + signV, z: z0 + signU };
+  const signSteelMat = new THREE.MeshStandardMaterial({ color: "#7f898e", metalness: 0.35, roughness: 0.42 });
+  box("Parking sign footing", signPos.x, 0.09, signPos.z, 0.2, 0.08, 0.2, wheelStopWhiteMat);
+  box("Parking sign post", signPos.x, 1.32, signPos.z, 0.08, 2.38, 0.08, signSteelMat);
   const face = signTexture();
   box(
     "Parking sign",
-    corner.x,
-    2.35,
-    corner.z,
+    signPos.x,
+    2.54,
+    signPos.z,
     0.06,
-    0.8,
-    0.8,
-    new THREE.MeshStandardMaterial({ color: face ? "white" : "#2f5aa8", map: face, roughness: 0.5 }),
+    0.72,
+    0.72,
+    new THREE.MeshStandardMaterial({ color: face ? "#ffffff" : "#2f5aa8", map: face, roughness: 0.48 }),
   );
+
+  // 3. Accessible blue disabled parking bay on the first car bay closest to the open drive-in entry.
+  let accessibleBayIndex = -1;
+  if (!motorcycles && bays.length >= 2) {
+    let bestScore = -Infinity;
+    bays.forEach((bay, idx) => {
+      if (bay.row !== 0) return;
+      const u = alongX ? bay.x : bay.y;
+      const score = openHigh ? u : -u;
+      if (score > bestScore) {
+        bestScore = score;
+        accessibleBayIndex = idx;
+      }
+    });
+  }
+  if (accessibleBayIndex >= 0) {
+    const bay = bays[accessibleBayIndex];
+    const blueTex = accessibleBayTexture();
+    const blueMat = new THREE.MeshStandardMaterial({
+      color: blueTex ? "#ffffff" : "#2368b8",
+      map: blueTex,
+      roughness: 0.65,
+    });
+    const pad = new THREE.Mesh(
+      new THREE.BoxGeometry(2.26, 0.014, Math.max(1.8, depth - 0.32)),
+      blueMat,
+    );
+    pad.name = "Parking accessible bay";
+    pad.position.set(bay.x * 2, 0.058, bay.y * 2);
+    pad.rotation.y = alongX ? (bay.row === 0 ? 0 : Math.PI) : bay.row === 0 ? Math.PI / 2 : -Math.PI / 2;
+    pad.userData.noCastShadow = true;
+    group.add(pad);
+  }
+
+  // 4. Yellow/white-striped concrete wheel-stops in car bays.
+  if (!motorcycles) {
+    const segCount = 5,
+      segW = 0.34,
+      totalW = segCount * segW;
+    for (const bay of bays) {
+      const out = bay.row ? -1 : 1;
+      const stopOffset = -out * (depth / 2 - 0.72);
+      const bx = bay.x * 2,
+        bz = bay.y * 2;
+      for (let s = 0; s < segCount; s++) {
+        const duOff = -totalW / 2 + (s + 0.5) * segW;
+        const wx = alongX ? bx + duOff : bx + stopOffset;
+        const wz = alongX ? bz + stopOffset : bz + duOff;
+        box(
+          "Parking wheel stop",
+          wx,
+          0.12,
+          wz,
+          segW,
+          0.14,
+          0.18,
+          s % 2 === 0 ? wheelStopYellowMat : wheelStopWhiteMat,
+        );
+      }
+    }
+  }
+
+  // 5. Refined low-poly parked cars & motorcycles (shared material maps for clean batching).
+  const carBodyMats = new Map<string, THREE.MeshStandardMaterial>();
+  const getCarMat = (colour: string) => {
+    let m = carBodyMats.get(colour);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.36, metalness: 0.22 });
+      carBodyMats.set(colour, m);
+    }
+    return m;
+  };
+  const motoBodyMats = new Map<string, THREE.MeshStandardMaterial>();
+  const getMotoMat = (colour: string) => {
+    let m = motoBodyMats.get(colour);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.4, metalness: 0.2 });
+      motoBodyMats.set(colour, m);
+    }
+    return m;
+  };
+
+  const addMotorcycle = (bay: { x: number; y: number; row: number }, colour: string) => {
+    const out = bay.row ? -1 : 1,
+      shift = 0.16 * out,
+      x = alongX ? bay.x * 2 : bay.x * 2 + shift,
+      z = alongX ? bay.y * 2 + shift : bay.y * 2,
+      along = (d: number) => (alongX ? { x, z: z + d * out } : { x: x + d * out, z });
+    const body = getMotoMat(colour);
+    for (const d of [-0.5, 0.5]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.1, 12), rubberMat),
+        at = along(d);
+      wheel.rotation[alongX ? "z" : "x"] = Math.PI / 2;
+      wheel.position.set(at.x, 0.31, at.z);
+      wheel.name = "Parking motorcycle wheel";
+      group.add(wheel);
+    }
+    const mid = along(0.04),
+      seat = along(0.2),
+      bars = along(-0.42);
+    box("Parking motorcycle body", mid.x, 0.58, mid.z, 0.32, 0.34, 0.94, body);
+    box("Parking motorcycle seat", seat.x, 0.81, seat.z, 0.28, 0.1, 0.54, rubberMat);
+    box("Parking motorcycle handlebars", bars.x, 0.96, bars.z, 0.66, 0.05, 0.05, rubberMat);
+  };
+
+  const addCar = (bay: { x: number; y: number; row: number }, colour: string) => {
+    const out = bay.row ? -1 : 1; // points from kerb toward driving aisle
+    const carW = 1.76;
+    const carLen = Math.min(4.05, Math.max(2.5, depth - 0.85));
+    const shift = 0.14 * out;
+    const cx = alongX ? bay.x * 2 : bay.x * 2 + shift;
+    const cz = alongX ? bay.y * 2 + shift : bay.y * 2;
+    const bodyMat = getCarMat(colour);
+    const pt = (u: number, v: number) => (alongX ? { x: cx + u, z: cz + v * out } : { x: cx + v * out, z: cz + u });
+
+    // 4 wheels + hubcaps touching the asphalt cleanly (y = 0.05..0.63m).
+    const wheelU = carW / 2 - 0.08,
+      wheelV = carLen * 0.3;
+    for (const su of [-1, 1]) {
+      for (const sv of [-1, 1]) {
+        const wp = pt(su * wheelU, sv * wheelV);
+        const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.18, 12), rubberMat);
+        tire.rotation[alongX ? "z" : "x"] = Math.PI / 2;
+        tire.position.set(wp.x, 0.34, wp.z);
+        tire.name = "Parking car wheel";
+        group.add(tire);
+
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.2, 10), hubcapMat);
+        hub.rotation[alongX ? "z" : "x"] = Math.PI / 2;
+        hub.position.set(wp.x, 0.34, wp.z);
+        hub.name = "Parking car hubcap";
+        hub.userData.noCastShadow = true;
+        group.add(hub);
+      }
+    }
+
+    // Dark lower chassis sills & bumpers (y = 0.28..0.46m).
+    box("Parking car chassis", cx, 0.37, cz, carW - 0.04, 0.18, carLen + 0.06, trimMat);
+    // Painted sculpted lower body (y = 0.46..0.88m).
+    box("Parking car body", cx, 0.67, cz, carW, 0.42, carLen, bodyMat);
+
+    // Cabin (shifted slightly toward rear so hood reads clearly longer than trunk).
+    const cabinLen = Math.min(2.05, carLen * 0.5);
+    const cabinW = carW - 0.24;
+    const cab = pt(0, -carLen * 0.05);
+    box("Parking car cabin", cab.x, 1.08, cab.z, cabinW, 0.4, cabinLen, cabinMat);
+    // Painted upper cabin cap (named without "roof" so tint() never touches it).
+    box("Parking car top", cab.x, 1.32, cab.z, cabinW - 0.08, 0.08, cabinLen - 0.16, bodyMat);
+
+    // Sloped front windshield & rear screen for a sleek low-poly sedan/SUV profile.
+    const addSlopedPane = (vOff: number, tiltSign: number) => {
+      const sp = pt(0, -carLen * 0.05 + vOff);
+      const pane = new THREE.Mesh(
+        new THREE.BoxGeometry(alongX ? cabinW - 0.06 : 0.07, 0.46, alongX ? 0.07 : cabinW - 0.06),
+        cabinMat,
+      );
+      pane.name = "Parking car screen";
+      pane.position.set(sp.x, 1.07, sp.z);
+      if (alongX) pane.rotation.x = tiltSign * out * 0.48;
+      else pane.rotation.z = -tiltSign * out * 0.48;
+      group.add(pane);
+    };
+    addSlopedPane(cabinLen / 2 + 0.07, -1);
+    addSlopedPane(-cabinLen / 2 - 0.06, 1);
+
+    // Subtle headlights (aisle-facing) and taillights (kerb-facing).
+    for (const su of [-1, 1]) {
+      const hl = pt(su * (carW * 0.32), carLen / 2 + 0.01);
+      box("Parking car headlight", hl.x, 0.7, hl.z, 0.3, 0.12, 0.04, headlightMat, true);
+      const tl = pt(su * (carW * 0.32), -carLen / 2 - 0.01);
+      box("Parking car taillight", tl.x, 0.72, tl.z, 0.32, 0.11, 0.04, taillightMat, true);
+    }
+  };
+
+  let seed = p.id * 9301 + 49297;
+  const random = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  bays.forEach((bay, idx) => {
+    const r = random();
+    // Keep the accessible disabled bay open so its blue emblem stays clearly visible.
+    if (idx === accessibleBayIndex) return;
+    // Skip any bay whose edge would crowd the entrance P sign post.
+    const distToSign = Math.hypot(bay.x * 2 - signPos.x, bay.y * 2 - signPos.z);
+    if (distToSign < (motorcycles ? 0.9 : 1.55)) return;
+    if (r > (motorcycles ? 0.68 : 0.58)) return;
+    if (motorcycles) {
+      addMotorcycle(bay, MOTORCYCLE_COLOURS[Math.floor(random() * MOTORCYCLE_COLOURS.length)]);
+    } else {
+      addCar(bay, CAR_COLOURS[Math.floor(random() * CAR_COLOURS.length)]);
+    }
+  });
+
+  // 6. Perimeter kerbs and built-in RSUD perimeter fence when `fenced === true`.
+  const kerbMat = new THREE.MeshStandardMaterial({ color: "#a6a59c", roughness: 0.84 });
+  const inward = turning(poly) > 0 ? 1 : -1;
+  const placedPillars = new Set<string>();
+
+  if (fenced) {
+    const fenceInset = 0.17; // keeps even 0.34m pillar caps flush inside the tile footprint (0 overhang)
+    const fenceMats = makeFenceMaterials("#eef2ec", p.roofColor ?? "#2f5741");
+    const clampX = (x: number) => Math.max(x0 + fenceInset, Math.min(x1 - fenceInset, x));
+    const clampZ = (z: number) => Math.max(z0 + fenceInset, Math.min(z1 - fenceInset, z));
+
+    for (const [sa, sb] of computeParkingFenceRuns(p, pieces)) {
+      const ax = clampX(sa.x * 2),
+        az = clampZ(sa.y * 2),
+        bx = clampX(sb.x * 2),
+        bz = clampZ(sb.y * 2);
+      const segLen = Math.hypot(bx - ax, bz - az);
+      if (segLen < 0.12) continue;
+      const horizontal = Math.abs(bx - ax) >= Math.abs(bz - az);
+
+      // Clean perimeter concrete kerb pad directly beneath the fence run (y = 0.05..0.08m).
+      addBox(
+        group,
+        "Parking fence kerb",
+        (ax + bx) / 2,
+        0.065,
+        (az + bz) / 2,
+        horizontal ? segLen + 0.34 : 0.34,
+        0.03,
+        horizontal ? 0.34 : segLen + 0.34,
+        kerbMat,
+      );
+
+      // Shared RSUD architectural fence seated cleanly on top of the kerb at y = 0.08m.
+      addFenceRun(group, ax, az, bx, bz, fenceMats, true, true, placedPillars, 0.08);
+    }
+  } else {
+    poly.forEach((a, i) => {
+      const b = poly[(i + 1) % poly.length],
+        side = Math.hypot(b.x - a.x, b.z - a.z),
+        horizontal = Math.abs(b.x - a.x) > Math.abs(b.z - a.z);
+      if (horizontal !== alongX) return;
+      const nx = (-(b.z - a.z) / side) * inward,
+        nz = ((b.x - a.x) / side) * inward;
+      for (const [from, to] of exposedRuns(p, i, pieces)) {
+        const run = (to - from) * side,
+          t = (from + to) / 2;
+        addBox(
+          group,
+          "Parking kerb",
+          a.x + (b.x - a.x) * t + nx * 0.09,
+          0.1,
+          a.z + (b.z - a.z) * t + nz * 0.09,
+          horizontal ? run : 0.18,
+          0.1,
+          horizontal ? 0.18 : run,
+          kerbMat,
+        );
+      }
+    });
+  }
+
+  // 7. Sleek parking lot LED lamp posts along exposed long-side kerbs (spaced ~8m, zero runtime lights).
+  const lampPoleMat = new THREE.MeshStandardMaterial({ color: "#3d464a", roughness: 0.42, metalness: 0.32 });
+  const lampLedMat = new THREE.MeshStandardMaterial({
+    color: "#fff8e4",
+    emissive: "#ffe8b0",
+    emissiveIntensity: 0.65,
+    roughness: 0.25,
+  });
+
+  // Collect bay divider u-coordinates (in metres from lot start) so lamps on bay-occupied sides sit cleanly between bays.
+  const bayWidthM = motorcycles ? 1.0 : 2.5;
+  const bayCount = Math.max(1, Math.floor((lenM / 2 - 0.2) / (bayWidthM / 2)));
+  const bayStartM = (lenM - bayCount * bayWidthM) / 2;
+  const dividerUs: number[] = [];
+  for (let i = 1; i < bayCount; i++) dividerUs.push(bayStartM + i * bayWidthM);
+
+  const lampInset = fenced ? 0.44 : 0.28; // clear of 0.34m fence cap & kerbs
+  const addLampPost = (lx: number, lz: number, inX: number, inZ: number) => {
+    // Keep clear of the P sign.
+    if (Math.hypot(lx - signPos.x, lz - signPos.z) < 1.25) return;
+    // Compact concrete base plinth + slim tapered steel pole.
+    addBox(group, "Parking lamp plinth", lx, 0.13, lz, 0.18, 0.16, 0.18, kerbMat);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.052, 3.45, 8), lampPoleMat);
+    pole.name = "Parking lamp pole";
+    pole.position.set(lx, 1.93, lz);
+    group.add(pole);
+    // Curved/cantilevered arm + sleek LED luminaire head reaching inward over bays/aisle.
+    const armLen = 0.72;
+    const armCx = lx + inX * (armLen / 2),
+      armCz = lz + inZ * (armLen / 2);
+    addBox(
+      group,
+      "Parking lamp arm",
+      armCx,
+      3.64,
+      armCz,
+      Math.abs(inX) > 0.5 ? armLen : 0.06,
+      0.06,
+      Math.abs(inZ) > 0.5 ? armLen : 0.06,
+      lampPoleMat,
+    );
+    const headX = lx + inX * (armLen + 0.14),
+      headZ = lz + inZ * (armLen + 0.14);
+    addBox(
+      group,
+      "Parking lamp housing",
+      headX,
+      3.62,
+      headZ,
+      Math.abs(inX) > 0.5 ? 0.44 : 0.2,
+      0.07,
+      Math.abs(inZ) > 0.5 ? 0.44 : 0.2,
+      lampPoleMat,
+    );
+    addBox(
+      group,
+      "Parking lamp LED",
+      headX,
+      3.57,
+      headZ,
+      Math.abs(inX) > 0.5 ? 0.36 : 0.15,
+      0.03,
+      Math.abs(inZ) > 0.5 ? 0.36 : 0.15,
+      lampLedMat,
+      true,
+    );
+  };
+
+  if (lenM >= 5.5) {
+    poly.forEach((a, i) => {
+      const b = poly[(i + 1) % poly.length],
+        side = Math.hypot(b.x - a.x, b.z - a.z),
+        horizontal = Math.abs(b.x - a.x) > Math.abs(b.z - a.z);
+      if (horizontal !== alongX) return;
+      const nx = (-(b.z - a.z) / side) * inward,
+        nz = ((b.x - a.x) / side) * inward;
+      const isRow0Side = alongX ? (a.z + b.z) / 2 < (z0 + z1) / 2 : (a.x + b.x) / 2 < (x0 + x1) / 2;
+      // On single-row lots, put lamps on the open aisle side (and on wide lots > 10m also along row-0 bay dividers).
+      if (rows === 1 && isRow0Side && lenM < 11) return;
+
+      const open = exposedRuns(p, i, pieces);
+      const targetCount = Math.max(1, Math.round(side / 8.0));
+      const usedUs: number[] = [];
+      for (let k = 0; k < targetCount; k++) {
+        const idealF = (k + 0.5) / targetCount;
+        let targetU = idealF * side;
+        // On bay-occupied sides, snap lamp post to nearest bay divider line so it never touches a vehicle.
+        const hasBaysOnSide = rows === 2 || isRow0Side;
+        if (hasBaysOnSide && dividerUs.length > 0) {
+          targetU = dividerUs.reduce((best, u) => (Math.abs(u - targetU) < Math.abs(best - targetU) ? u : best), dividerUs[0]);
+        }
+        if (usedUs.some((u) => Math.abs(u - targetU) < 3.5)) continue;
+        // Convert targetU (from x0 or z0) to fraction f along directed edge a -> b.
+        const coord = (alongX ? x0 : z0) + targetU;
+        const aCoord = alongX ? a.x : a.z,
+          bCoord = alongX ? b.x : b.z;
+        const f = (coord - aCoord) / (bCoord - aCoord);
+        if (f < 0.08 || f > 0.92) continue;
+        if (!open.some(([from, to]) => f >= from + 0.03 && f <= to - 0.03)) continue;
+        usedUs.push(targetU);
+        const lx = a.x + (b.x - a.x) * f + nx * lampInset;
+        const lz = a.z + (b.z - a.z) * f + nz * lampInset;
+        addLampPost(lx, lz, nx, nz);
+      }
+    });
+  }
+
   return group;
 }
 
@@ -1938,34 +2641,37 @@ export function pieceModel(
   inside: boolean,
 ) {
   const isPhtc = p.kind === "phtc";
+  const isFence = isFenceKind(p);
   const isProceduralRoof = p.kind === "pitched" || p.kind === "flat";
   const building = isBuildingPiece(p);
-  const generated = isOpenAir(p) || isCorridor(p) || isProceduralRoof || isPhtc;
+  const generated = isOpenAir(p) || isCorridor(p) || isProceduralRoof || isPhtc || isFence;
   const empty = new THREE.Group();
 
-  const model: THREE.Object3D = isPath(p)
-    ? pathModel(p, pieces)
-    : isParking(p)
-      ? parkingModel(p, pieces)
-      : isGate(p)
-        ? gateModel(p)
-        : isBarrier(p)
-          ? barrierModel(p)
-          : isCorridor(p)
-            ? corridorModel(p, template ?? empty, pieces)
-            : isPhtc
-              ? inside
-                ? empty
-                : phtcModel(p)
-              : isProceduralRoof
+  const model: THREE.Object3D = isFence
+    ? fenceModel(p, pieces)
+    : isPath(p)
+      ? pathModel(p, pieces)
+      : isParking(p)
+        ? parkingModel(p, pieces)
+        : isGate(p)
+          ? gateModel(p)
+          : isBarrier(p)
+            ? barrierModel(p)
+            : isCorridor(p)
+              ? corridorModel(p, template ?? empty, pieces)
+              : isPhtc
                 ? inside
                   ? empty
-                  : p.kind === "pitched"
-                    ? pitchedRoofModel(p)
-                    : flatRoofModel(p)
-                : template
-                  ? fittedTemplate(p, template)
-                  : empty;
+                  : phtcModel(p)
+                : isProceduralRoof
+                  ? inside
+                    ? empty
+                    : p.kind === "pitched"
+                      ? pitchedRoofModel(p)
+                      : flatRoofModel(p)
+                  : template
+                    ? fittedTemplate(p, template)
+                    : empty;
 
   // Built here rather than cloned from templates, so the scene may free this geometry.
   if (generated) model.traverse((o) => (o.userData.generated = true));

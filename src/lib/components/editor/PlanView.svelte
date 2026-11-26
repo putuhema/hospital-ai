@@ -1,6 +1,19 @@
 <script lang="ts">
     import type { Piece } from "$lib/model/layout";
-    import { center, footprint, gatewayParts, isBarrier, isBuilding, isGate, isParking, parkingBays, roomColor } from "$lib/model/interiors";
+    import {
+        center,
+        fenceSegments,
+        footprint,
+        gatewayParts,
+        isBarrier,
+        isBuilding,
+        isFence,
+        isGate,
+        isParking,
+        parkingBays,
+        parkingFenceRuns,
+        roomColor,
+    } from "$lib/model/interiors";
     type Tile = { x: number; y: number };
     let {
         pieces,
@@ -144,6 +157,22 @@
         [p.x, p.y + p.h],
         [p.x + p.w, p.y + p.h],
     ];
+    function fencePosts(segs: [{ x: number; y: number }, { x: number; y: number }][]) {
+        const seen = new Set<string>(),
+            pts: { x: number; y: number }[] = [];
+        for (const [a, b] of segs) {
+            const n = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y)));
+            for (let i = 0; i <= n; i++) {
+                const x = a.x + ((b.x - a.x) * i) / n,
+                    y = a.y + ((b.y - a.y) * i) / n,
+                    key = `${Math.round(x * 100)},${Math.round(y * 100)}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                pts.push({ x, y });
+            }
+        }
+        return pts;
+    }
 </script>
 
 <div
@@ -211,8 +240,8 @@
                         : ""}</title
                 ><polygon
                     points={outline(p)}
-                    fill={p.color}
-                    stroke={selected === p.id ? "#49775b" : "#8c9a8b"}
+                    fill={isFence(p) ? "rgba(47, 87, 65, 0.08)" : p.color}
+                    stroke={selected === p.id ? "#49775b" : isFence(p) ? "none" : "#8c9a8b"}
                     stroke-width={selected === p.id ? 3 : 1}
                 />
                 {#each p.roomAssets ?? [] as r}<rect
@@ -252,7 +281,24 @@
                             stroke="#fff"
                             stroke-opacity=".85"
                             stroke-width="2"
-                        />{/each}<g
+                        />{/each}{#if p.fenced}{@const runs = parkingFenceRuns(p, pieces)}{#each runs as [a, b]}<line
+                                x1={a.x * TILE}
+                                y1={a.y * TILE}
+                                x2={b.x * TILE}
+                                y2={b.y * TILE}
+                                stroke={p.roofColor ?? "#2f5741"}
+                                stroke-width="5"
+                                stroke-linecap="square"
+                            />{/each}{#each fencePosts(runs) as pt}<rect
+                                x={pt.x * TILE - 3.5}
+                                y={pt.y * TILE - 3.5}
+                                width="7"
+                                height="7"
+                                rx="1"
+                                fill="#eef2ec"
+                                stroke={p.roofColor ?? "#2f5741"}
+                                stroke-width="1.8"
+                            />{/each}{/if}<g
                         transform={`translate(${center(p).x * TILE} ${center(p).y * TILE})`}
                         class="parking-badge"
                         ><rect x="-11" y="-11" width="22" height="22" rx="5" /><text y="5">P</text></g
@@ -261,7 +307,32 @@
                         y={center(p).y * TILE + 28}
                         text-anchor="middle"
                         class="building-label parking-label">{p.name}</text
-                    >{:else if isGate(p) || isBarrier(p)}{@const g = gatewayParts(p)}<line
+                    >{:else if isFence(p)}{@const segs = fenceSegments(p, pieces)}{#each segs as [a, b]}<line
+                            x1={a.x * TILE}
+                            y1={a.y * TILE}
+                            x2={b.x * TILE}
+                            y2={b.y * TILE}
+                            stroke={p.color}
+                            stroke-width="7"
+                            stroke-linecap="square"
+                        /><line
+                            x1={a.x * TILE}
+                            y1={a.y * TILE}
+                            x2={b.x * TILE}
+                            y2={b.y * TILE}
+                            stroke={p.roofColor ?? "#2f5741"}
+                            stroke-width="3.5"
+                            stroke-linecap="square"
+                        />{/each}{#each fencePosts(segs) as pt}<rect
+                            x={pt.x * TILE - 4.5}
+                            y={pt.y * TILE - 4.5}
+                            width="9"
+                            height="9"
+                            rx="1"
+                            fill={p.color}
+                            stroke={p.roofColor ?? "#2f5741"}
+                            stroke-width="1.8"
+                        />{/each}{:else if isGate(p) || isBarrier(p)}{@const g = gatewayParts(p)}<line
                         x1={g.span[0].x * TILE}
                         y1={g.span[0].y * TILE}
                         x2={g.span[1].x * TILE}

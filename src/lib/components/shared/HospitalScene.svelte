@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import * as THREE from "three";
     import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
-    import { center, isArea, isBuilding, isOpenAir, whereAt } from "$lib/model/interiors";
+    import { center, isArea, isBuilding, isFence, isOpenAir, whereAt } from "$lib/model/interiors";
     import type { Piece } from "$lib/model/layout";
     import type { Point } from "$lib/wayfinding/navigation";
     import { createScenery, LAWN } from "$lib/scene/scenery";
@@ -667,9 +667,9 @@
             faded.clear();
             clearBuildings();
             for (const p of pieces) {
-                // Open-air pieces and the procedural PHTC building are built without a Blender template.
+                // Open-air pieces, fences and the procedural PHTC building are built without a Blender template.
                 const template = templates.get(p.kind);
-                if (!template && !isOpenAir(p) && p.kind !== "phtc") continue;
+                if (!template && !isOpenAir(p) && !isFence(p) && p.kind !== "phtc") continue;
                 const { model, interior } = pieceModel(p, template, pieces, inside);
                 // On the map nothing is dragged, so each building's look-alike parts
                 // are merged: far fewer draw calls for a phone.

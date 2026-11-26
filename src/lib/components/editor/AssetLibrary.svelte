@@ -80,7 +80,7 @@
                         >{/if}
                     <img
                         class="asset-render"
-                        src={`${a.image ?? `/models/${a.kind}.png`}?v=rsud-green-2`}
+                        src={`${a.image ?? `/models/${a.kind}.png`}?v=rsud-green-3`}
                         alt={`${a.name} model`}
                     /><span class="asset-add">+</span>
                 </div>

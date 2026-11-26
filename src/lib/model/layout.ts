@@ -25,6 +25,8 @@ export type Piece = {
   floors?: number;
   /** Buildings only: "L" cuts away one quarter, turning with `rotation`. */
   shape?: "L";
+  /** Parking only: encloses 3 sides with a perimeter fence, leaving one short end open. */
+  fenced?: boolean;
   /** Buildings, car parks and gateways: description, phone and hours shown to visitors. */
   info?: PlaceInfo;
 };
@@ -39,6 +41,7 @@ export type Asset = {
   roofColor?: string;
   floors?: number;
   shape?: "L";
+  fenced?: boolean;
   roomAssets?: RoomAsset[];
   description?: string;
   /** Library thumbnail, when it isn't the kind's own render. */
@@ -213,6 +216,43 @@ export const assets: Asset[] = [
     image: "/models/barrier.svg",
   },
   {
+    name: "Fence",
+    group: "Outdoor",
+    kind: "fence",
+    w: 4,
+    h: 1,
+    color: "#eef2ec",
+    roofColor: "#2f5741",
+    label: "4 × 1 tiles",
+    description: "Perimeter fence to block off or enclose areas",
+    image: "/models/fence.svg",
+  },
+  {
+    name: "Fence corner",
+    group: "Outdoor",
+    kind: "fence",
+    w: 1,
+    h: 1,
+    color: "#eef2ec",
+    roofColor: "#2f5741",
+    label: "1 × 1 tile",
+    description: "Corner post that connects adjacent fences",
+    image: "/models/fence-corner.svg",
+  },
+  {
+    name: "Parking area",
+    group: "Outdoor",
+    kind: "parking",
+    w: 8,
+    h: 5,
+    fenced: true,
+    color: "#6e757a",
+    roofColor: "#2f5741",
+    label: "8 × 5 tiles",
+    description: "Fenced parking zone with drive-in entry, bays & lamps",
+    image: "/models/parking-area.svg",
+  },
+  {
     name: "PHTC 3-storey hospital",
     group: "Templates",
     kind: "phtc",
@@ -360,6 +400,7 @@ export function pieceFrom(
     ...(a.roofColor && { roofColor: a.roofColor }),
     ...(a.floors && { floors: a.floors }),
     ...(a.shape && { shape: a.shape }),
+    ...(a.fenced && { fenced: a.fenced }),
     ...(a.roomAssets && {
       roomAssets: a.roomAssets.map((r, i) => ({ ...r, id: extra.id + i + 1 })),
     }),
@@ -547,7 +588,8 @@ export function parseLayout(text: string) {
         (p.roofColor === undefined || /^#[0-9a-f]{6}$/i.test(p.roofColor)) &&
         (p.floors === undefined ||
           (Number.isInteger(p.floors) && p.floors >= 1 && p.floors <= 4)) &&
-        (p.shape === undefined || (p.shape === "L" && isBuilding(p) && p.kind !== "phtc")),
+        (p.shape === undefined || (p.shape === "L" && isBuilding(p) && p.kind !== "phtc")) &&
+        (p.fenced === undefined || typeof p.fenced === "boolean"),
     )
   )
     throw Error("Invalid layout");
