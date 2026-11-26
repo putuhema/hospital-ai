@@ -109,6 +109,7 @@ The corridor GLBs now only supply materials: corridors, garden paths and L-shape
 - `src/lib/i18n/` — the visitor map's languages: Indonesian first, English one tap away (the switch is remembered per device). `messages.ts` holds every visitor-facing string in both, `places.ts` the Indonesian names of kinds of place (Apotek, Parkir, IGD…), and `locale.svelte.ts` gives the map's components their language; the editor has none and stays English. Opening hours (`place-info.ts`) and walking steps (`stepText` in `routing.ts`) are written in either; the canned chat replies answer in the language of the question.
 - `src/lib/scene/` — the Three.js scene in parts: camera rig, stage (lights, ground, grid), model loading, generated interiors, labels, route overlay, pointer handling and the map's scenery. `src/lib/components/shared/HospitalScene.svelte` puts them together.
 - `src/styles/` — global styles, imported in cascade order by `src/routes/layout.css`.
+- `src/routes/showcase/` — the sales pitch at `/showcase` (Indonesian): every feature with a short animated demo, and what the assistant's model costs per question. It serves `src/lib/showcase/showcase.html` as is, a self-contained page built from the stageshow example `airma-pitch` (`build/build.sh` there regenerates it); React and icons load from a CDN.
 
 ## Validation
 
