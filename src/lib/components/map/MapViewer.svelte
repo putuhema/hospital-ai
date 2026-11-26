@@ -2384,6 +2384,10 @@
         top: calc(var(--top) + 66px);
         right: 12px;
     }
+    /* No room for walking about on a phone: the row keeps layers, view and share. */
+    .mobile .roam {
+        display: none;
+    }
     /* On a phone the compass sits at the free left end of the map controls' row,
        clear of the "Nomor saya" banner below them. */
     .mobile :global(.compass) {

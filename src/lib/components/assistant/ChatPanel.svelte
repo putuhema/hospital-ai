@@ -1299,10 +1299,13 @@
     .jump-latest {
         position: absolute;
         bottom: 10px;
-        left: 50%;
-        transform: translateX(-50%);
+        /* Centered without a transform, so the rise-in (which sets transform) starts in place. */
+        left: 0;
+        right: 0;
+        width: fit-content;
+        margin: 0 auto;
         z-index: 4;
-        display: inline-flex;
+        display: flex;
         align-items: center;
         gap: 5px;
         padding: 6px 12px;

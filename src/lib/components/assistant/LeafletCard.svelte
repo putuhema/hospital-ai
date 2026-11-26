@@ -7,6 +7,74 @@
         failed = $state(false);
     // Its own shape while it loads, so the reply doesn't jump; a tall leaflet is cut at the bottom, whole when opened.
     let ratio = $derived(image.width && image.height ? `${image.width} / ${image.height}` : "3 / 4");
+
+    // Zoom: the image's width as a multiple of the fitted width, from 1 (whole leaflet) to 4.
+    const MIN = 1,
+        MAX = 4,
+        STEP = 1.5;
+    let zoom = $state(1),
+        scroller = $state<HTMLDivElement>(),
+        picture = $state<HTMLImageElement>(),
+        fitted = $state(0),
+        saving = $state(false);
+
+    /** Zoom to `next`, keeping the point at (x, y) in the scroller (its centre by default) where it was. */
+    function zoomTo(next: number, x?: number, y?: number) {
+        const el = scroller;
+        next = Math.min(MAX, Math.max(MIN, next));
+        if (!el || !picture || next === zoom) return;
+        // The width it has when it fits, which zooming multiplies.
+        if (zoom === MIN) fitted = picture.clientWidth;
+        const r = el.getBoundingClientRect();
+        const px = x ?? r.width / 2,
+            py = y ?? r.height / 2;
+        const k = next / zoom;
+        const left = (el.scrollLeft + px) * k - px,
+            top = (el.scrollTop + py) * k - py;
+        zoom = next;
+        // After the image has its new size.
+        requestAnimationFrame(() => el.scrollTo({ left, top }));
+    }
+    function at(e: MouseEvent) {
+        const r = scroller!.getBoundingClientRect();
+        return [e.clientX - r.left, e.clientY - r.top] as const;
+    }
+    function onWheel(e: WheelEvent) {
+        // Ctrl + wheel (and trackpad pinch, which arrives as it) zooms; plain wheel scrolls.
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        zoomTo(zoom * Math.exp(-e.deltaY / 200), ...at(e));
+    }
+    function onDouble(e: MouseEvent) {
+        zoomTo(zoom > MIN ? MIN : 2.5, ...at(e));
+    }
+
+    function fileName() {
+        const ext = image.url.match(/\.(png|jpe?g|webp|gif|avif)(?:$|\?)/i)?.[1] ?? "jpg";
+        const base = image.title.trim().replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, "-") || "leaflet";
+        return `${base}.${ext}`;
+    }
+    async function download() {
+        if (saving) return;
+        saving = true;
+        try {
+            // Fetched first: a link's `download` is ignored for images on another origin.
+            const res = await fetch(image.url);
+            if (!res.ok) throw new Error(String(res.status));
+            const blob = await res.blob();
+            const href = URL.createObjectURL(blob);
+            const a = Object.assign(document.createElement("a"), { href, download: fileName() });
+            document.body.append(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(href), 10_000);
+        } catch {
+            // Not fetchable here: open it, where the browser can save it.
+            window.open(image.url, "_blank", "noopener");
+        } finally {
+            saving = false;
+        }
+    }
 </script>
 
 {#if failed}<p class="leaflet gone">{t("leafletGone")}</p>
@@ -26,6 +94,7 @@
         class="viewer"
         bind:this={viewer}
         aria-label={image.title}
+        onclose={() => (zoom = 1)}
         onclick={(e) => {
             // A tap beside the image closes it.
             if (e.target === e.currentTarget) viewer?.close();
@@ -33,12 +102,29 @@
     >
         <header>
             <b>{image.title}</b>
-            <a href={image.url} target="_blank" rel="noopener">{t("leafletOpen")}</a>
+            <button class="tool download" onclick={download} disabled={saving} aria-label={t("leafletDownload")} title={t("leafletDownload")}
+                ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 4v11m-4-4 4 4 4-4M5 19h14" /></svg
+                ><span>{t("leafletDownload")}</span></button
+            >
             <button class="close" aria-label={t("close")} onclick={() => viewer?.close()}
                 ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button
             >
         </header>
-        <div class="scroll"><img src={image.url} alt={image.title} /></div>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="scroll" class:zoomed={zoom > MIN} bind:this={scroller} onwheel={onWheel} ondblclick={onDouble}>
+            <img bind:this={picture} src={image.url} alt={image.title} style:width={zoom > MIN ? `${fitted * zoom}px` : undefined} draggable="false" />
+        </div>
+        <div class="zoom" role="group" aria-label={`${t("zoomIn")} / ${t("zoomOut")}`}>
+            <button onclick={() => zoomTo(zoom / STEP)} disabled={zoom <= MIN} aria-label={t("zoomOut")} title={t("zoomOut")}
+                ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 12h12" /></svg></button
+            >
+            <button class="level" onclick={() => zoomTo(MIN)} disabled={zoom <= MIN} aria-label={t("leafletZoomReset")} title={t("leafletZoomReset")}
+                >{Math.round(zoom * 100)}%</button
+            >
+            <button onclick={() => zoomTo(zoom * STEP)} disabled={zoom >= MAX} aria-label={t("zoomIn")} title={t("zoomIn")}
+                ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg></button
+            >
+        </div>
     </dialog>
 {/if}
 
@@ -117,6 +203,7 @@
         color: #f6f3ea;
     }
     .viewer[open] {
+        position: fixed;
         display: flex;
         flex-direction: column;
         animation: fade 180ms ease-out;
@@ -138,10 +225,66 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .viewer header a {
+    .tool {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 40px;
+        padding: 0 14px 0 12px;
+        border-radius: 999px;
+        background: #ffffff1a;
+        color: inherit;
         font-size: 13px;
-        color: #cfe0c3;
+        font-weight: 600;
         white-space: nowrap;
+    }
+    .tool:disabled {
+        opacity: 0.6;
+    }
+    .tool svg,
+    .zoom svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+    .zoom {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+        width: fit-content;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 4px;
+        border-radius: 999px;
+        background: #1d2b22e6;
+        box-shadow: 0 0 0 1px #ffffff1f;
+        backdrop-filter: blur(10px);
+    }
+    .zoom button {
+        display: grid;
+        place-items: center;
+        min-width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        color: inherit;
+        transition: background-color 150ms, transform 140ms;
+    }
+    .zoom button:active:not(:disabled) {
+        transform: scale(0.94);
+    }
+    .zoom button:disabled {
+        opacity: 0.4;
+    }
+    .zoom .level {
+        min-width: 56px;
+        font-size: 13px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
     }
     .close {
         display: grid;
@@ -165,11 +308,22 @@
         overflow: auto;
         overscroll-behavior: contain;
         touch-action: pan-x pan-y pinch-zoom;
-        padding: 0 12px max(12px, env(safe-area-inset-bottom));
+        /* Room below for the zoom controls. */
+        padding: 0 12px calc(72px + env(safe-area-inset-bottom));
+    }
+    .scroll.zoomed {
+        cursor: zoom-out;
+    }
+    .scroll.zoomed img {
+        max-width: none;
+    }
+    .scroll:not(.zoomed) {
+        cursor: zoom-in;
     }
     .scroll img {
         display: block;
         max-width: 100%;
+        user-select: none;
         height: auto;
         margin: 0 auto;
         border-radius: 6px;
@@ -183,6 +337,12 @@
         .leaflet:hover {
             background: var(--card, #fffdf8);
             box-shadow: 0 0 0 1px #1d2b2233;
+        }
+        .tool:hover:not(:disabled),
+        .close:hover,
+        .zoom button:hover:not(:disabled) {
+            background: #ffffff2e;
+            color: inherit;
         }
     }
     @media (prefers-reduced-motion: reduce) {
