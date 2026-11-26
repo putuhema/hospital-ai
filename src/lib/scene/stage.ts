@@ -5,14 +5,24 @@ import * as THREE from "three";
  * box and placement ghost. Sizes are in tiles; one tile is 2 m.
  */
 export function createStage(scene: THREE.Scene, presentation: boolean) {
-  const hemi = new THREE.HemisphereLight("#e3eef8", "#a3b88c", 2.4);
+  // Balanced tropical daylight so bright white PHTC concrete and fresh green
+  // RSUD hospital walls both hold clean architectural contrast without washout.
+  const hemi = new THREE.HemisphereLight("#e6f1fa", "#9cb488", 2.15);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight("#fff0d8", 3.1);
+
+  const sun = new THREE.DirectionalLight("#fff1da", 2.85);
   sun.castShadow = true;
-  // The map draws its shadows once per rebuild, at a size budget phones manage.
-  sun.shadow.mapSize.setScalar(presentation ? 1024 : 2048);
-  sun.shadow.normalBias = 0.06;
+  // Crisp shadow map (on the map, drawn once per rebuild so 2048 stays lightweight).
+  sun.shadow.mapSize.setScalar(2048);
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.045;
+  sun.shadow.radius = 2.4;
   scene.add(sun, sun.target);
+
+  // Gentle cool sky-fill light from the opposite azimuth for sculpted shadow sides.
+  const fill = new THREE.DirectionalLight("#d5e7f7", 0.42);
+  fill.castShadow = false;
+  scene.add(fill, fill.target);
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
@@ -26,7 +36,7 @@ export function createStage(scene: THREE.Scene, presentation: boolean) {
 
   const grid = new THREE.LineSegments(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: "#becab3", transparent: true, opacity: 0.7 }),
+    new THREE.LineBasicMaterial({ color: "#becab3", transparent: true, opacity: 0.68 }),
   );
   scene.add(grid);
 
@@ -43,6 +53,11 @@ export function createStage(scene: THREE.Scene, presentation: boolean) {
   /** Light the campus from `direction` (x east, z south, y up), e.g. the sun's at this hour. */
   function aim(direction: THREE.Vector3) {
     sun.position.copy(sun.target.position).addScaledVector(direction, reach * 1.2);
+    fill.position.set(
+      sun.target.position.x - direction.x * reach * 0.9,
+      sun.target.position.y + reach * 0.75,
+      sun.target.position.z - direction.z * reach * 0.9,
+    );
   }
 
   /** Fit ground, grid and sun shadows to a canvas of `width` × `height` tiles. */
@@ -60,8 +75,10 @@ export function createStage(scene: THREE.Scene, presentation: boolean) {
     grid.geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
     const extent = Math.max(width, height) * 1.5;
     reach = extent + 20;
-    sun.position.set(width - 15, extent + 20, height - 10);
+    sun.position.set(width - 14, extent + 22, height + 14);
     sun.target.position.set(width, 0, height);
+    fill.position.set(width + 18, extent * 0.85, height - 18);
+    fill.target.position.set(width, 0, height);
     Object.assign(sun.shadow.camera, {
       left: -extent,
       right: extent,

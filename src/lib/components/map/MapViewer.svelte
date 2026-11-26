@@ -977,10 +977,10 @@
                 </div>{/if}{/if}
     </section>
     {#snippet masthead()}<header class="masthead">
-            <Logo size={30} title="" />
+            <Logo size={34} title="" />
             <div class="name">
-                <small>{t("guide")}</small>
-                <h1>{title}</h1>
+                <h1>{t("guide")}</h1>
+                <small>{title}</small>
             </div>
             <button class="igd" onclick={emergency} aria-label={t("emergencyGo")} title={t("emergencyGo")}
                 ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>IGD</button
@@ -1353,34 +1353,33 @@
         flex: 1;
         min-width: 0;
     }
+    .name h1 {
+        margin: 0;
+        font-family: var(--display);
+        font-size: 22px;
+        font-weight: 620;
+        font-variation-settings: "opsz" 36;
+        letter-spacing: -0.02em;
+        line-height: 1.05;
+        color: var(--forest, #1e4031);
+    }
     .name small {
         display: block;
-        font-size: 10.5px;
-        font-weight: 600;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
+        margin-top: 2px;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0;
         color: var(--muted);
-    }
-    h1 {
-        margin: 1px 0 0;
-        font-family: var(--display);
-        font-size: 21px;
-        font-weight: 540;
-        font-variation-settings: "opsz" 36;
-        letter-spacing: -0.012em;
-        line-height: 1.15;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    /* Phones: the hospital's name on up to two lines beside the IGD, text size and language buttons. */
-    .mobile h1 {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-        line-clamp: 2;
-        font-size: 16px;
-        white-space: normal;
+    /* Phones: AIRMA stays crisp and prominent with the hospital name neatly below it. */
+    .mobile .name h1 {
+        font-size: 19px;
+    }
+    .mobile .name small {
+        font-size: 11.5px;
     }
     .mobile .masthead .igd svg {
         display: none;

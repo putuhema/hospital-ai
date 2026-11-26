@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {corridorDoors,fitsRoom} from '../src/lib/model/interiors.ts';
+import {corridorDoors,fitsRoom,isBuilding} from '../src/lib/model/interiors.ts';
 import type {Piece} from '../src/lib/model/layout.ts';
 const b:Piece={id:1,name:'Building',kind:'flat',x:4,y:4,w:5,h:4,color:'#ffffff',rotation:0};
 const corridor:Piece={...b,id:2,name:'Corridor',kind:'straight',x:9,y:5,w:4,h:1};
@@ -20,4 +20,10 @@ test('resizing a room ignores itself but rejects its neighbours',()=>{
  const neighbour={...r,id:2,x:3};
  assert.equal(fitsRoom(b,{...r,w:3},[r,neighbour]),true);
  assert.equal(fitsRoom(b,{...r,w:4},[r,neighbour]),false);
+});
+test('isBuilding recognises pitched, flat and phtc buildings',()=>{
+ assert.equal(isBuilding({...b,kind:'pitched'}),true);
+ assert.equal(isBuilding({...b,kind:'flat'}),true);
+ assert.equal(isBuilding({...b,kind:'phtc'}),true);
+ assert.equal(isBuilding(corridor),false);
 });

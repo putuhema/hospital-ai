@@ -74,11 +74,13 @@
                 onclick={() => pick(a)}
                 ><div class="asset-preview" style={`--asset-color:${a.color}`}>
                     {#if a.group === "Templates"}<span class="template-badge"
-                            >{a.roomAssets?.length} rooms</span
+                            >{a.floors && a.floors > 1 ? `${a.floors}F · ` : ""}{a.roomAssets?.length} rooms</span
+                        >{:else if a.floors && a.floors > 1}<span class="template-badge"
+                            >{a.floors} storeys</span
                         >{/if}
                     <img
                         class="asset-render"
-                        src={`${a.image ?? `/models/${a.kind}.png`}?v=continuous-corridor-4`}
+                        src={`${a.image ?? `/models/${a.kind}.png`}?v=rsud-green-2`}
                         alt={`${a.name} model`}
                     /><span class="asset-add">+</span>
                 </div>

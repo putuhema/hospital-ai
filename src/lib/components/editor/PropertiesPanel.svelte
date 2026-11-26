@@ -54,12 +54,20 @@
         onexportmodel: () => void;
         onnotify: (message: string) => void;
     } = $props();
-    // Model colours (sRGB) of the Blender materials, used as "Reset" targets.
+    // Model colours (sRGB) matching the RSUD Mamuju Tengah green hospital palette & PHTC building.
     const defaultRoof = (kind: string) =>
-        kind === "pitched" ? "#4f9497" : kind === "flat" ? "#ebeeea" : "#a9b5b2";
+        kind === "pitched"
+            ? "#4c7051"
+            : kind === "flat"
+              ? "#5d7d63"
+              : kind === "phtc"
+                ? "#d9ded8"
+                : "#5b7d63";
+    const defaultWall = (kind: string) => (kind === "phtc" ? "#eef1ec" : "#82bf5c");
     const roofStyles = [
         ["pitched", "Pitched"],
         ["flat", "Flat"],
+        ["phtc", "PHTC"],
     ];
     const shapes = [
         [undefined, "Box"],
@@ -95,11 +103,15 @@
         <details class="section" open>
             <summary>Appearance</summary>
             {#if isBuilding(piece)}<div class="style-row">
-                    <span>Roof</span>
-                    <div class="segmented" role="group" aria-label="Roof style">
+                    <span>Style</span>
+                    <div class="segmented" role="group" aria-label="Building style">
                         {#each roofStyles as [kind, label]}<button
                                 class:active={piece.kind === kind}
                                 aria-pressed={piece.kind === kind}
+                                disabled={kind === "phtc" && piece.shape === "L"}
+                                title={kind === "phtc" && piece.shape === "L"
+                                    ? "Switch to Box shape first"
+                                    : undefined}
                                 onclick={() => update("kind", kind)}>{label}</button
                             >{/each}
                     </div>
@@ -110,6 +122,10 @@
                         {#each shapes as [shape, label]}<button
                                 class:active={piece.shape === shape}
                                 aria-pressed={piece.shape === shape}
+                                disabled={piece.kind === "phtc" && shape === "L"}
+                                title={piece.kind === "phtc" && shape === "L"
+                                    ? "PHTC buildings are rectangular"
+                                    : undefined}
                                 onclick={() => update("shape", shape)}>{label}</button
                             >{/each}
                     </div>
@@ -131,7 +147,7 @@
                 <ColorField
                     label="Walls"
                     value={piece.color}
-                    fallback="#d3ddd0"
+                    fallback={defaultWall(piece.kind)}
                     onchange={(c) => update("color", c)}
                 />
                 <ColorField
@@ -177,7 +193,7 @@
                 </p>{:else}<ColorField
                     label="Floor"
                     value={piece.color}
-                    fallback="#d9d4c9"
+                    fallback="#e6eae2"
                     onchange={(c) => update("color", c)}
                 />
                 <ColorField

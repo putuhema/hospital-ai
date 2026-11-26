@@ -1,5 +1,5 @@
 import type { Piece } from "../model/layout.ts";
-import { corridorDoors, outline, roomDoor, type Door } from "../model/interiors.ts";
+import { corridorDoors, isBuilding, outline, roomDoor, type Door } from "../model/interiors.ts";
 import { parseInfo, type PlaceInfo } from "../model/place-info.ts";
 import { isCategory, type LandmarkCategory } from "../model/categories.ts";
 
@@ -134,7 +134,7 @@ export function walls(pieces: Piece[]): Segment[] {
       if (cursor < length) out.push([point(cursor), point(length)]);
     }
   }
-  for (const p of pieces.filter((p) => ["pitched", "flat"].includes(p.kind))) {
+  for (const p of pieces.filter(isBuilding)) {
     const doors = buildingDoors(p, pieces);
     for (const e of outline(p)) {
       const horizontal = e.side === "north" || e.side === "south";

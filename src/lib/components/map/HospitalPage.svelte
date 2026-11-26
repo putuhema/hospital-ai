@@ -57,7 +57,7 @@
 </script>
 
 <svelte:head>
-    {#if map.data}<title>{map.data.title} — AIRMA</title>{:else}<title>AIRMA</title>{/if}
+    {#if map.data}<title>AIRMA — {map.data.title}</title>{:else}<title>AIRMA</title>{/if}
     <!-- Installable: the home screen app opens on this page. -->
     <link rel="manifest" href="/manifest.webmanifest?start={encodeURIComponent(page.url.pathname)}" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />

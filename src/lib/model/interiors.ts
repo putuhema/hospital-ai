@@ -101,7 +101,8 @@ type Kind = Pick<Piece, "kind">;
 export const isCorridor = (p: Kind) => corridorKinds.includes(p.kind);
 /** Open-air paved footpath: walkable and gets building doors, but no canopy. */
 export const isPath = (p: Kind) => p.kind === "path";
-export const isBuilding = (p: Piece) => p.kind === "pitched" || p.kind === "flat";
+export const isBuilding = (p: Piece) =>
+  p.kind === "pitched" || p.kind === "flat" || p.kind === "phtc";
 /** Open-air car or motorcycle park: no building, walkable, and a destination in its own right. */
 export const isParking = (p: Kind) => p.kind === "parking" || p.kind === "motorcycle";
 export const isMotorcycleParking = (p: Kind) => p.kind === "motorcycle";
