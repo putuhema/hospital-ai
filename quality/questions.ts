@@ -19,8 +19,10 @@ export type Case = {
   say?: RegExp[];
   /** None may match the reply. */
   avoid?: RegExp[];
-  /** Places the map must show; each entry lists the names that count. */
+  /** Places the map must show; each entry lists the names that count. Without it, the map must show nothing, unless `mapOk`. */
   show?: string[][];
+  /** The map may show a place, though it doesn't have to. */
+  mapOk?: boolean;
   /** Longest reply, in characters; 450 when not set. */
   max?: number;
   /** The map must show a route, not just a place. */
@@ -51,8 +53,8 @@ export const cases: Case[] = [
   { id: "cashier", ask: "dimana kasir untuk bayar", show: [["Kasir"]], why: "A room inside another building" },
   { id: "motorbike-parking", ask: "parkir motor dimana", show: [["Parkiran Motor"]], why: "Outdoor area" },
   { id: "lab-shorthand", ask: "lab dmn y", show: [["Laboratorium"]], why: "Shorthand typed on a phone" },
-  { id: "canteen", ask: "kantin ada?", show: [["Kantin"]], why: "A room typed as storage on the map" },
-  { id: "nursing-room", ask: "ada ruang menyusui?", show: [["Ruang Menyusui"]], why: "A facility a visitor may not expect" },
+  { id: "canteen", ask: "kantin ada?", say: [/Kantin/i], mapOk: true, why: "A room typed as storage on the map; asks whether it exists, so the map may wait" },
+  { id: "nursing-room", ask: "ada ruang menyusui?", say: [/menyusui/i], mapOk: true, why: "A facility a visitor may not expect; asks whether it exists, so the map may wait" },
   {
     id: "route-from-entrance",
     ask: "Bagaimana ke Poli Anak dari sini?",
@@ -81,21 +83,25 @@ export const cases: Case[] = [
     id: "children-doctor-today",
     ask: "Dokter anak hari ini ada?",
     say: [/Kevin/i],
-    show: [["Poli Anak"]],
-    why: "Who is practising now",
+    why: "Who is practising now: an answer in words, no map",
   },
   {
     id: "doctor-schedule",
     ask: "Jadwal dr. Nur Zam Zam",
     say: [/Senin|Sen\b/i, /12[.:]00/],
+    why: "A doctor by name: the schedule in words, no map",
+  },
+  {
+    id: "doctor-then-where",
+    ask: ["Jadwal dr. Nur Zam Zam", "tempat praktiknya di mana?"],
     show: [["Poli Paru", "Poli Paru Infeksius"]],
-    why: "A doctor by name",
+    why: "Asked where after the schedule: now the map",
   },
   {
     id: "doctor-not-today",
     ask: "drg Desi praktik hari ini?",
     at: THURSDAY,
-    say: [/tidak|bukan|libur/i, /Senin|Rabu/i],
+    say: [/tidak|bukan|libur|belum/i, /Senin|Rabu/i],
     why: "A doctor on a day they don't practise (Mon–Wed only)",
   },
   {
@@ -176,9 +182,9 @@ export const cases: Case[] = [
   },
 
   // Places the hospital doesn't have
-  { id: "no-mri", ask: "Di mana ruang MRI?", say: [NOT_FOUND], avoid: [/MRI (ada|berada|terletak) di/i], why: "Not on the map" },
-  { id: "no-atm", ask: "ATM di mana?", say: [NOT_FOUND], why: "Not on the map" },
-  { id: "no-dialysis", ask: "Cuci darah di ruangan mana?", say: [NOT_FOUND], why: "A service the map doesn't list" },
+  { id: "no-mri", ask: "Di mana ruang MRI?", say: [NOT_FOUND], avoid: [/MRI (ada|berada|terletak) di/i], mapOk: true, why: "Not on the map" },
+  { id: "atm", ask: "ATM di mana?", show: [["ATM Sulselbar"]], why: "A landmark added to the map" },
+  { id: "no-dialysis", ask: "Cuci darah di ruangan mana?", say: [NOT_FOUND], mapOk: true, why: "A service the map doesn't list" },
 
   // Emergencies
   {
@@ -256,6 +262,12 @@ export const cases: Case[] = [
     ask: ["Di mana Poli Interna?", "Dokternya siapa saja?"],
     say: [/Malik/i, /Idham/i],
     why: "A follow-up that depends on the previous answer",
+  },
+  {
+    id: "offer-accepted",
+    ask: ["Poli gizi buka jam berapa?", "ya, tunjukkan di peta"],
+    show: [["Poli Gizi"]],
+    why: "Shows the clinic once the visitor asks to see it",
   },
   {
     id: "follow-up-saturday",

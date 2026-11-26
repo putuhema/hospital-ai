@@ -681,7 +681,8 @@ export const toolDefinitions: ToolDefinition[] = [
     name: "show_on_map",
     description:
       "Show a place on the visitor's map, or the route to it when you give a starting place. " +
-      "Use it whenever you mention a place the visitor wants to go to.",
+      "Use it only when the visitor wants to go there or see where it is (they ask where it is, how to get there or to see it, " +
+      "or accept your offer to show it), and for the IGD in an emergency. Not for schedules, opening hours, fees or other information.",
     input_schema: {
       type: "object",
       properties: {

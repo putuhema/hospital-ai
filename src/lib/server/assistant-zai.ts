@@ -60,10 +60,12 @@ export async function* replyZai(
       streamed = "",
       finish: string | null = null;
     const calls: { id: string; name: string; args: string }[] = [];
-    // On post-lookup rounds (round > 0), stream safe text immediately as tokens arrive
-    // for faster time-to-first-word, holding back only lines that look like tool notes
-    // or "I noted this for the hospital" mentions.
-    const canStreamLive = round > 0;
+    // Text streams out word by word as it arrives, so the first words show while
+    // the model is still writing. In the first round only once a whole sentence
+    // is written and more follows: a lone sentence there may just announce a
+    // lookup ("Saya cari apoteknya …"), which is dropped. Held back from the
+    // first sign of a written-out tool note ("[show_on_map …]") or of "I noted
+    // this for the hospital", which are cleaned up once the round is complete.
     const UNSAFE_PREFIX = /\[|catat|noted|made a note|passed (this|it) on/i;
 
     for await (const chunk of stream) {
@@ -71,7 +73,7 @@ export async function* replyZai(
       if (!choice) continue;
       if (choice.delta?.content) {
         text += choice.delta.content;
-        if (canStreamLive && !calls.length && !UNSAFE_PREFIX.test(text)) {
+        if (!calls.length && !UNSAFE_PREFIX.test(text) && (round > 0 || /[.!?]\s+\S/.test(text))) {
           const pending = text.slice(streamed.length);
           // Hold a tiny tail if the chunk ends mid-bracket or mid-word near "catat"/"noted".
           const safeEnd = pending.lastIndexOf(" ");
@@ -104,16 +106,19 @@ export async function* replyZai(
     // The note to the hospital is not the visitor's business, though GLM likes to say it made one.
     if (calls.some((c) => c.name === "note_missing_info")) text = withoutNoteMention(text);
     const announcing = calls.some((c) => !QUIET.has(c.name));
-    if (text.trim() && !announcing) {
-      if (streamed) {
-        // Flush any remaining tail not yet yielded during live streaming.
-        const rest = text.startsWith(streamed) ? text.slice(streamed.length) : "";
-        if (rest) yield { type: "text", text: rest };
-      } else {
-        if (wrote) yield { type: "text", text: "\n\n" };
-        wrote = true;
-        yield { type: "text", text };
-      }
+    if (streamed) {
+      // What was held back, cleaned. (The cleanup trims, so the streamed trailing space may be gone.)
+      const shownSoFar = streamed.trimEnd();
+      const rest = text.startsWith(streamed)
+        ? text.slice(streamed.length)
+        : text.startsWith(shownSoFar)
+          ? text.slice(shownSoFar.length).replace(/^[ \t]+/, "")
+          : "";
+      if (rest.trim()) yield { type: "text", text: rest };
+    } else if (text.trim() && !announcing) {
+      if (wrote) yield { type: "text", text: "\n\n" };
+      wrote = true;
+      yield { type: "text", text };
     }
     // Done, or a tool call cut off at the token limit, which must not run.
     if (!calls.length || finish === "length") return;
@@ -130,6 +135,16 @@ export async function* replyZai(
         return { id: c.id, name: c.name, input: null, bad: c.args };
       }
     });
+    // After a lookup, a reply the visitor has already read is the answer: show
+    // what it puts on screen and stop, rather than look up more and answer twice.
+    if (round > 0 && streamed.trim()) {
+      yield* runCalls(
+        ctx,
+        parsed.filter((c) => !("bad" in c) && QUIET.has(c.name)),
+        shown,
+      ).cards;
+      return;
+    }
     const { results, cards } = runCalls(
       ctx,
       parsed.filter((c) => !("bad" in c)),

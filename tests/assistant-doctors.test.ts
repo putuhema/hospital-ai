@@ -18,10 +18,12 @@ const ctx = (when: string) => assistantContext(layout, new Date(when));
 const text = (events: ReplyEvent[]) => events.filter((e) => e.type === 'text').map((e) => e.text).join('');
 const cards = (events: ReplyEvent[]) => events.filter((e) => e.type === 'card');
 
-test('"Kapan dr. Sari praktik?" gets her schedule, today\'s status and where', () => {
+test('"Kapan dr. Sari praktik?" gets her schedule, today\'s status and where, without a map nobody asked for', () => {
   const reply = cannedAnswer(ctx('2026-09-28T09:00:00'), [], 'Kapan dr. Sari praktik?');
   assert.equal(text(reply), 'dr. Sari Wijaya, Sp.A (Anak) praktik di Exam room 1, Outpatient clinic: Sen, Rab 08.00–12.00. Praktik, sampai 12.00.');
-  assert.equal(cards(reply).length, 1);
+  assert.equal(cards(reply).length, 0);
+  // Asked where, the clinic comes on the map with her schedule.
+  assert.equal(cards(cannedAnswer(ctx('2026-09-28T09:00:00'), [], 'dr. Sari praktik di mana?')).length, 1);
   // On leave: says when she's back (Monday, five days on).
   assert.match(text(cannedAnswer(ctx('2026-09-30T09:00:00'), [], 'jadwal dr sari')), /Cuti, praktik lagi Sen 08\.00\.$/);
 });

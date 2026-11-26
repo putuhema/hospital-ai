@@ -188,3 +188,47 @@ test('LLM_* env vars configure any OpenAI-compatible provider, Anthropic, or leg
   assert.equal(legacyZai?.kind, 'openai');
   assert.equal(legacyZai?.kind === 'openai' && legacyZai.disableThinking, true);
 });
+
+test('a reply written after a lookup streams out word by word, with its card, in one more request', async () => {
+  const { client, requests } = fakeZai([
+    { calls: [{ name: 'search_places', args: JSON.stringify({ query: 'apotek' }) }] },
+    { text: 'Apotek ada di Pharmacy & lab, buka sampai jam 16.00.', calls: [{ name: 'show_on_map', args: JSON.stringify({ place_id: pharmacy.id }) }] },
+  ]);
+  const events = await run(client, [user('Di mana apotek?')]);
+  assert.equal(text(events), 'Apotek ada di Pharmacy & lab, buka sampai jam 16.00.');
+  // Several text events, not one at the end: the words show as they are written.
+  assert.ok(events.filter((e) => e.type === 'text').length > 3);
+  assert.equal(events.filter((e) => e.type === 'card').length, 1);
+  assert.equal(requests.length, 2);
+});
+
+test('after a reply the visitor has read, a further lookup is not made and nothing is answered twice', async () => {
+  const { client, requests } = fakeZai([
+    { calls: [{ name: 'search_hospital_info', args: JSON.stringify({ query: 'jam besuk' }) }] },
+    {
+      text: 'Maaf, jam besuk belum ada dalam informasi rumah sakit. Silakan tanyakan di bagian informasi.',
+      calls: [
+        { name: 'note_missing_info', args: JSON.stringify({ topic: 'besuk', subject: 'jam besuk' }) },
+        { name: 'search_places', args: JSON.stringify({ query: 'bagian informasi' }) },
+      ],
+    },
+    { text: 'Maaf, informasi jam besuk belum tersedia.' },
+  ]);
+  const local = { ...ctx };
+  const out: ReplyEvent[] = [];
+  for await (const e of replyZai(client, 'glm-5', { title: 'RS Uji', faq: [], ctx: local, messages: [user('jam besuk?')], context: { lang: 'id' }, signal: new AbortController().signal }))
+    out.push(e);
+  assert.equal(text(out), 'Maaf, jam besuk belum ada dalam informasi rumah sakit. Silakan tanyakan di bagian informasi.');
+  assert.equal(requests.length, 2);
+  // The note for the hospital still runs.
+  assert.deepEqual(local.missing, { topic: 'besuk', subject: 'jam besuk' });
+});
+
+test('a first answer longer than a sentence streams before the model has finished', async () => {
+  const { client } = fakeZai([
+    { text: 'Segera ke IGD sekarang. Mintalah bantuan petugas mana pun di jalan.', calls: [{ name: 'show_on_map', args: JSON.stringify({ place_id: pharmacy.id }) }] },
+  ]);
+  const events = await run(client, [user('ayah saya pingsan')]);
+  assert.equal(text(events), 'Segera ke IGD sekarang. Mintalah bantuan petugas mana pun di jalan.');
+  assert.ok(events.filter((e) => e.type === 'text').length > 3);
+});

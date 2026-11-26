@@ -139,6 +139,8 @@ export function suggestions(ctx: AssistantContext, faq: FaqEntry[], lang: Lang =
 
 const WHERE = /\b(where|wheres|di ?mana|letak(nya)?|arah ke|jalan ke|how (do|can) i (get|go)|way to|find|cari|lokasi)\b/;
 const NEAREST = /\b(nearest|closest|terdekat)\b/;
+/** The visitor wants the place itself, so the reply comes with its card: where it is, the way there, to see it. Otherwise words are enough. */
+const WANTS_MAP = /\b(where|wheres|di ?mana|dmn|letak(nya)?|lokasi(nya)?|arah|rute|route|jalan ke|mau ke|ingin ke|pergi ke|antar(kan)?|ke mana|way to|how (do|can) i (get|go)|get to|peta|map|tunjuk(kan|in)?|show me)\b/;
 const FILLER =
   /\b(where|wheres|is|are|the|a|an|di ?mana|letak(nya)?|arah|jalan|ke|ada|how (do|can) i (get|go) to|way to|find|cari|lokasi|nearest|closest|terdekat|please|tolong|yang|mau|saya|dong)\b/g;
 
@@ -169,8 +171,8 @@ const SAY = {
 
 const DOCTOR = /\b(dr|drg|dokter|doktor|doctor|jadwal|praktik|praktek|spesialis|specialist|schedule)\b/;
 
-/** Doctors the question is about, in the reply's language, with a card for where the first one practises. */
-function doctorAnswer(ctx: AssistantContext, question: string, lang: Lang, from?: string): ReplyEvent[] | null {
+/** Doctors the question is about, in the reply's language; with `map`, a card for where the first one practises. */
+function doctorAnswer(ctx: AssistantContext, question: string, lang: Lang, from?: string, map = false): ReplyEvent[] | null {
   const found = getDoctorSchedule(ctx, { query: question, limit: 3 });
   if (!("doctors" in found)) return null;
   if (!found.doctors.length)
@@ -197,7 +199,7 @@ function doctorAnswer(ctx: AssistantContext, question: string, lang: Lang, from?
     );
   });
   const first = found.doctors[0];
-  return [{ type: "text", text: lines.join("\n") }, ...card(ctx, first.place!.id, from, first.name)];
+  return [{ type: "text", text: lines.join("\n") }, ...(map ? card(ctx, first.place!.id, from, first.name) : [])];
 }
 
 /** Open-now in the reply's language, e.g. " Buka, sampai 16.00." */
@@ -237,7 +239,7 @@ export function cannedAnswer(
     }
   }
   if (DOCTOR.test(q)) {
-    const reply = doctorAnswer(ctx, question, lang, from);
+    const reply = doctorAnswer(ctx, question, lang, from, WANTS_MAP.test(q));
     if (reply) return reply;
   }
   const entry = WHERE.test(q) ? null : faqFor(faq, question);
@@ -245,7 +247,7 @@ export function cannedAnswer(
   const hits = subject ? searchPlaces(ctx, { query: subject, limit: 3 }) : null;
   if (hits && "results" in hits && hits.results.length) {
     const [p] = hits.results;
-    return [{ type: "text", text: say.isAt(p.name, say.where(p)) + status(ctx, p.id, lang) }, ...card(ctx, p.id, from)];
+    return [{ type: "text", text: say.isAt(p.name, say.where(p)) + status(ctx, p.id, lang) }, ...(WANTS_MAP.test(q) ? card(ctx, p.id, from) : [])];
   }
   // No dead end: the hospital's number, and questions it can answer.
   return [{ type: "text", text: say.unknown(hospitalPhone(faq), suggestions(ctx, faq, lang).slice(0, 2)) }];
