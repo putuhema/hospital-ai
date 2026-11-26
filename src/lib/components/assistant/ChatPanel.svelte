@@ -9,6 +9,8 @@
     import MapCard from "./MapCard.svelte";
     import LeafletCard from "./LeafletCard.svelte";
     import Logo from "$lib/components/shared/Logo.svelte";
+    import AirmaRive from "./AirmaRive.svelte";
+    import { REST, moodOf, visemeOfChunk, type Mouth } from "$lib/assistant/mascot";
     import { useLocale } from "$lib/i18n/locale.svelte";
 
     let {
@@ -113,6 +115,127 @@
         return out.slice(0, 3);
     }
 
+    // AIRMA's face: her mood follows the chat, her mouth follows the reply as it is written.
+    const latest = $derived(chat.messages.at(-1));
+    const latestReply = $derived(latest?.role === "assistant" ? latest : undefined);
+    const replyText = $derived(latestReply ? plainText(latestReply) : "");
+    let justAnswered = $state(false);
+    const mood = $derived(
+        moodOf({
+            busy: chat.busy,
+            speaking: !!replyText,
+            lookingUp: !!latestReply?.status,
+            failed:
+                !!latestReply?.error ||
+                (!!latestReply && votes[chat.messages.length - 1] === "unhelpful"),
+            justAnswered,
+            hearing: listening || !!draft.trim(),
+        }),
+    );
+
+    const fresh = $derived(!chat.messages.length);
+
+    // She is one canvas, laid over one of two empty spots in the conversation:
+    // the middle of an empty chat, or the head of the latest reply. She sits in
+    // the scrolling log, so she scrolls with it; moving to a new spot glides.
+    let replySlot = $state<HTMLElement>(),
+        heroSlot = $state<HTMLElement>(),
+        spot = $state<{ x: number; y: number; size: number } | null>(null),
+        glide = $state(false),
+        glideTimer: ReturnType<typeof setTimeout> | null = null;
+    function place() {
+        const slot = fresh ? heroSlot : replySlot;
+        if (!log || !slot) return;
+        const c = log.getBoundingClientRect(),
+            r = slot.getBoundingClientRect();
+        if (!r.width) return;
+        const next = {
+            x: Math.round(r.left - c.left + log.scrollLeft),
+            y: Math.round(r.top - c.top + log.scrollTop),
+            size: Math.round(r.width),
+        };
+        if (!spot || next.x !== spot.x || next.y !== spot.y || next.size !== spot.size) spot = next;
+    }
+    // A new spot: glide there (but not to the first, which she takes in place).
+    $effect(() => {
+        const slot = fresh ? heroSlot : replySlot;
+        if (!slot) return;
+        tick().then(() => {
+            if (spot) {
+                glide = true;
+                if (glideTimer) clearTimeout(glideTimer);
+                glideTimer = setTimeout(() => (glide = false), 620);
+            }
+            place();
+        });
+    });
+    // The conversation around her moves (a card loads, the panel resizes): follow it at once.
+    $effect(() => {
+        if (!log) return;
+        const observer = new ResizeObserver(() => place());
+        observer.observe(log);
+        const mutations = new MutationObserver(() => requestAnimationFrame(place));
+        mutations.observe(log, { childList: true, subtree: true, characterData: true });
+        return () => {
+            observer.disconnect();
+            mutations.disconnect();
+        };
+    });
+
+    // A moment of "success" when a reply finishes well, then back to neutral.
+    let wasBusy = false,
+        answeredTimer: ReturnType<typeof setTimeout> | null = null;
+    $effect(() => {
+        const busy = chat.busy;
+        if (busy) justAnswered = false;
+        else if (wasBusy && latestReply && !latestReply.error && replyText) {
+            justAnswered = true;
+            if (answeredTimer) clearTimeout(answeredTimer);
+            answeredTimer = setTimeout(() => (justAnswered = false), 2400);
+        }
+        wasBusy = busy;
+    });
+
+    /** One mouth shape this often, a few letters at a time. */
+    const BEAT_MS = 85,
+        BEAT_CHARS = 3,
+        /** Letters her mouth may fall behind the text before she skips ahead. */
+        MAX_LAG = 48;
+    let mouth = $state<Mouth>(REST),
+        said = 0,
+        saidIn = -1,
+        quiet = 0,
+        beat: ReturnType<typeof setInterval> | null = null;
+    const stopBeat = () => {
+        if (beat) clearInterval(beat);
+        beat = null;
+        mouth = REST;
+    };
+    $effect(() => {
+        const text = replyText,
+            at = chat.messages.length - 1,
+            busy = chat.busy;
+        // A new reply starts from its first letter; one already written is not read aloud.
+        if (at !== saidIn) {
+            saidIn = at;
+            said = busy ? 0 : text.length;
+        }
+        if (!busy || text.length <= said || beat) return;
+        quiet = 0;
+        beat = setInterval(() => {
+            const now = replyText;
+            if (said >= now.length) {
+                mouth = REST;
+                if (!chat.busy || ++quiet > 4) stopBeat();
+                return;
+            }
+            quiet = 0;
+            said = Math.max(said, now.length - MAX_LAG);
+            mouth = visemeOfChunk(now.slice(said, said + BEAT_CHARS));
+            said += BEAT_CHARS;
+        }, BEAT_MS);
+    });
+
     // SpeechRecognition typing (browser-prefixed on Safari/Chrome).
     type SpeechRec = {
         lang: string;
@@ -145,6 +268,9 @@
             vv?.removeEventListener("resize", onViewport);
             recognition?.stop();
             if (clearTimer) clearTimeout(clearTimer);
+            if (answeredTimer) clearTimeout(answeredTimer);
+            if (glideTimer) clearTimeout(glideTimer);
+            stopBeat();
         };
     });
 
@@ -385,27 +511,17 @@
 <section class="chat" aria-label={t("askAbout")}>
     <div class="log-wrap">
         <div class="log" role="log" aria-busy={chat.busy} bind:this={log} onscroll={scrolled}>
-            {#if !chat.messages.length}
-                <div class="welcome">
-                    <img
-                        class="mascot"
-                        src="/mascot/airma-wave.webp"
-                        width="400"
-                        height="403"
-                        alt=""
-                        draggable="false"
-                        in:rise={{ y: 14, duration: 560 }}
-                    />
+            {#if fresh}
+                <div class="intro">
+                    <div class="hero-slot" bind:this={heroSlot}></div>
                     <h2 in:rise={{ y: 10, duration: 520 }}>{t("greetingAsk")}</h2>
-                    <p class="lead" in:rise={{ delay: 120, duration: 480 }}>{t("greetingLead")}</p>
+                    <p class="lead" in:rise={{ delay: 80, y: 8, duration: 480 }}>{t("greetingLead")}</p>
                     {#if suggestions.length}
-                        <p class="label" in:rise={{ delay: 180 }}>{t("tryAsking")}</p>
-                        <div class="signs">
+                        <div class="signs" aria-label={t("tryAsking")}>
                             {#each suggestions as s, i}
-                                <button in:rise={{ delay: 220 + i * 55, y: 10 }} onclick={() => ask(s)}>
-                                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">{@html iconOf(s)}</svg>
+                                <button in:rise={{ delay: 120 + i * 55, y: 8 }} onclick={() => ask(s)}>
+                                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">{@html iconOf(s)}</svg>
                                     <span>{s}</span>
-                                    <i aria-hidden="true">→</i>
                                 </button>
                             {/each}
                         </div>
@@ -468,7 +584,11 @@
                     <div class="reply" in:rise={{ y: 6, duration: 300 }}>
                         <div class="reply-head">
                             <span class="who" aria-hidden="true">
-                                <Logo size={24} title="" talking={chat.busy && isLatest} />{t("guide")}
+                                {#if isLatest}
+                                    <span class="reply-slot" bind:this={replySlot}></span>
+                                {:else}
+                                    <Logo size={24} title="" />
+                                {/if}{t("guide")}
                             </span>
                             {#if isDone && plainText(m)}
                                 <div class="reply-tools">
@@ -629,6 +749,17 @@
                     {/each}
                 </div>
             {/if}
+
+            <div
+                class="buddy"
+                class:glide
+                class:placed={!!spot}
+                style:transform={spot ? `translate(${spot.x}px, ${spot.y}px)` : undefined}
+                style:width={spot ? `${spot.size}px` : undefined}
+                style:height={spot ? `${spot.size}px` : undefined}
+            >
+                <AirmaRive {mood} {mouth} label={t("guide")} />
+            </div>
         </div>
 
         {#if !stick && chat.messages.length}
@@ -781,34 +912,21 @@
         margin-top: auto;
     }
 
-    /* Welcome */
-    .welcome {
+    /* The empty chat: AIRMA in the middle, what she can help with below her. */
+    .intro {
         display: flex;
         flex-direction: column;
-        padding: 12px 0 4px;
+        align-items: center;
+        margin-block: auto;
+        padding: 8px 2px;
+        text-align: center;
     }
-    .mascot {
-        display: block;
-        align-self: flex-start;
-        width: auto;
-        height: clamp(84px, 15vh, 132px);
-        aspect-ratio: 400 / 404;
-        object-fit: contain;
-        margin: 0 0 10px -6px;
-        user-select: none;
-        -webkit-user-drag: none;
-        transform-origin: 50% 100%;
-        animation: sway 3.2s ease-in-out 700ms infinite alternate;
+    .hero-slot {
+        width: clamp(150px, 28vh, 220px);
+        aspect-ratio: 1;
+        margin-bottom: 8px;
     }
-    @keyframes sway {
-        from {
-            transform: rotate(-2deg);
-        }
-        to {
-            transform: rotate(2deg);
-        }
-    }
-    h2 {
+    .intro h2 {
         margin: 0;
         font-family: var(--display, var(--font-serif, Georgia, serif));
         font-size: clamp(24px, min(2.6vw, 3.6vh), 32px);
@@ -820,46 +938,35 @@
         text-wrap: balance;
     }
     .lead {
-        margin: 10px 0 0;
+        margin: 8px 0 0;
         max-width: 36ch;
         font-size: 15px;
         line-height: 1.55;
         color: var(--ink-2);
         text-wrap: pretty;
     }
-    .label {
-        margin: clamp(16px, 2.8vh, 26px) 0 10px;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--muted);
-    }
     .signs {
         display: flex;
-        flex-direction: column;
+        flex-wrap: wrap;
+        justify-content: center;
         gap: 6px;
+        margin-top: clamp(16px, 2.6vh, 24px);
     }
     .signs button {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 12px;
-        width: 100%;
-        min-height: 48px;
-        padding: 10px 14px 10px 12px;
-        border-radius: 13px;
+        gap: 7px;
+        min-height: 38px;
+        padding: 7px 14px 7px 11px;
+        border-radius: 999px;
         background: var(--card, #ffffff);
-        box-shadow:
-            0 0 0 1px var(--line, #e1e7dd),
-            0 1px 2px rgba(26, 46, 35, 0.04);
-        text-align: left;
-        font-size: 14.5px;
+        box-shadow: 0 0 0 1px var(--line, #e1e7dd);
+        font-size: 13.5px;
         font-weight: 500;
         color: var(--ink);
         transition:
             transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
             background 180ms,
-            color 180ms,
             box-shadow 180ms;
     }
     .signs svg {
@@ -869,21 +976,40 @@
         stroke-width: 1.8;
         stroke-linecap: round;
         stroke-linejoin: round;
-        transition: stroke 180ms;
-    }
-    .signs span {
-        flex: 1;
-    }
-    .signs i {
-        font-style: normal;
-        font-size: 16px;
-        color: var(--muted);
-        transition:
-            transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
-            color 180ms;
     }
     .signs button:active {
-        transform: scale(0.985);
+        transform: scale(0.97);
+    }
+
+    /* Once the conversation starts, AIRMA is the latest reply's face. */
+    .log {
+        position: relative;
+    }
+    .reply-slot {
+        display: block;
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        margin: -10px -2px -10px -8px;
+    }
+    .buddy {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 2;
+        pointer-events: none;
+        opacity: 0;
+        will-change: transform;
+    }
+    .buddy.placed {
+        opacity: 1;
+    }
+    .buddy.glide {
+        transition:
+            transform 560ms cubic-bezier(0.32, 0.72, 0, 1),
+            width 560ms cubic-bezier(0.32, 0.72, 0, 1),
+            height 560ms cubic-bezier(0.32, 0.72, 0, 1),
+            opacity 200ms ease-out;
     }
 
     /* Messages */
@@ -1322,6 +1448,8 @@
 
     /* Composer */
     .composer {
+        position: relative;
+        z-index: 1;
         display: flex;
         align-items: flex-end;
         gap: 4px;
@@ -1448,10 +1576,6 @@
         .signs button:hover svg {
             stroke: #cfe0c3;
         }
-        .signs button:hover i {
-            color: #f6f3ea;
-            transform: translateX(4px);
-        }
         .quick-pill:hover {
             background: var(--accent-soft, #e6efe9);
             color: var(--forest, #1e4031);
@@ -1477,7 +1601,6 @@
         }
     }
     @media (prefers-reduced-motion: reduce) {
-        .mascot,
         .icon.mic-active {
             animation: none;
         }
@@ -1486,7 +1609,7 @@
             opacity: 0.6;
         }
         .signs button,
-        .signs i,
+        .buddy.glide,
         .follow-chip {
             transition: none;
         }

@@ -17,6 +17,9 @@ importers:
       '@mmailaender/convex-better-auth-svelte':
         specifier: ^0.9.0
         version: 0.9.0(dc1ae60f0761f1bf7e9ae9487193e97c)
+      '@rive-app/canvas':
+        specifier: 2.50.0
+        version: 2.50.0
       '@vercel/blob':
         specifier: ^2.9.0
         version: 2.9.0
@@ -387,6 +390,9 @@ packages:
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
+
+  '@rive-app/canvas@2.50.0':
+    resolution: {integrity: sha512-9D92BeRK3yzIh2Fy/YxTfrjKQxDIdzEoasMuD5nupJ67aW1JFrSt8bW0Bg7EP9Hm7r5D+u3g/Q+kqRQ2rpH8+g==}
 
   '@rolldown/binding-android-arm-eabi@1.2.11':
     resolution: {integrity: sha512-A5kXfGKvKWWZE0TtPrfsvT+q4Y5d1QG8gGUzpYjGydM+fARM9MuX90PrXYXe0XbsDVgyxxNzHo6giCj90bsFNw==}
@@ -1670,6 +1676,8 @@ snapshots:
   '@oxc-project/types@0.151.0': {}
 
   '@polka/url@1.0.0-next.29': {}
+
+  '@rive-app/canvas@2.50.0': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.11':
     optional: true
