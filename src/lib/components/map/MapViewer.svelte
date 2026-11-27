@@ -921,6 +921,7 @@
     class:layers-open={layersOpen}
     class:navigating
     style:--column={`${COLUMN}px`}
+    style:--recenter-offset={ready && hasQueueAccess ? "52px" : "0px"}
 >
     <section class="stage" aria-label={t("mapRegion")}>
         {#if ready}{#if view === "3D"}<HospitalScene
@@ -1099,12 +1100,12 @@
             ></button
         >
     </div>
-    <!-- Quick access to live queues, stacked right above the Recenter pill. -->
+    <!-- Quick access to live queues, anchored at the bottom-right with Recenter stacked above it. -->
     {#if ready && hasQueueAccess}
         <button
             type="button"
             class="queue-fab"
-            style:bottom={`${insetBottom + 64}px`}
+            style:bottom={`${insetBottom + 12}px`}
             aria-haspopup="dialog"
             aria-expanded={queueOpen}
             onclick={() => (queueOpen = true)}
@@ -1795,10 +1796,12 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 6px;
+        margin: 0 0 6px;
+        border-bottom: 0;
+        overflow: visible;
     }
     .mobile .tabs {
-        margin-bottom: 0;
+        margin: 0;
     }
     /* Ask · Directions · Information, with a thumb that slides between them. */
     .switcher {

@@ -560,7 +560,7 @@
     {#if options}<SceneOptions bind:prefs bind:cutaway={unusedCutaway} bind:overhead={unusedOverhead} routeShown={false} plan />{/if}
     {#if away}<button
             class="recenter"
-            style:bottom={`${insetBottom + 12}px`}
+            style:bottom={`calc(${insetBottom + 12}px + var(--recenter-offset, 0px))`}
             title={t("recenterHint")}
             onclick={() => frame(focus.box, focus.pad)}
             ><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"

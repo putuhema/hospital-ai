@@ -49,6 +49,49 @@
         zoomTo(zoom > MIN ? MIN : 2.5, ...at(e));
     }
 
+    // Two-finger pinch zoom on touchscreens, attached with passive: false so the browser doesn't zoom the chrome.
+    $effect(() => {
+        const el = scroller;
+        if (!el) return;
+        let pinch: { dist: number; zoom: number } | null = null;
+        const measure = (e: TouchEvent) => {
+            const [a, b] = [e.touches[0], e.touches[1]];
+            return {
+                dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+                x: (a.clientX + b.clientX) / 2,
+                y: (a.clientY + b.clientY) / 2,
+            };
+        };
+        const onTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 2) {
+                const { dist } = measure(e);
+                if (dist > 0) pinch = { dist, zoom };
+            } else {
+                pinch = null;
+            }
+        };
+        const onTouchMove = (e: TouchEvent) => {
+            if (!pinch || e.touches.length !== 2) return;
+            e.preventDefault();
+            const { dist, x, y } = measure(e);
+            const r = el.getBoundingClientRect();
+            zoomTo(pinch.zoom * (dist / pinch.dist), x - r.left, y - r.top);
+        };
+        const onTouchEnd = (e: TouchEvent) => {
+            if (e.touches.length < 2) pinch = null;
+        };
+        el.addEventListener("touchstart", onTouchStart, { passive: true });
+        el.addEventListener("touchmove", onTouchMove, { passive: false });
+        el.addEventListener("touchend", onTouchEnd, { passive: true });
+        el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+        return () => {
+            el.removeEventListener("touchstart", onTouchStart);
+            el.removeEventListener("touchmove", onTouchMove);
+            el.removeEventListener("touchend", onTouchEnd);
+            el.removeEventListener("touchcancel", onTouchEnd);
+        };
+    });
+
     function fileName() {
         const ext = image.url.match(/\.(png|jpe?g|webp|gif|avif)(?:$|\?)/i)?.[1] ?? "jpg";
         const base = image.title.trim().replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, "-") || "leaflet";
@@ -225,21 +268,26 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .tool {
+    .viewer .tool {
         display: inline-flex;
         align-items: center;
         gap: 6px;
         height: 40px;
         padding: 0 14px 0 12px;
         border-radius: 999px;
-        background: #ffffff1a;
-        color: inherit;
+        background: #ffffff24;
+        color: #ffffff;
         font-size: 13px;
         font-weight: 600;
         white-space: nowrap;
     }
-    .tool:disabled {
-        opacity: 0.6;
+    .viewer .tool:hover:not(:disabled),
+    .viewer .close:hover {
+        background: #ffffff38;
+        color: #ffffff;
+    }
+    .viewer .tool:disabled {
+        opacity: 0.55;
     }
     .tool svg,
     .zoom svg {
@@ -249,7 +297,7 @@
         stroke-linecap: round;
         stroke-linejoin: round;
     }
-    .zoom {
+    .viewer .zoom {
         position: absolute;
         left: 0;
         right: 0;
@@ -261,39 +309,52 @@
         gap: 2px;
         padding: 4px;
         border-radius: 999px;
-        background: #1d2b22e6;
-        box-shadow: 0 0 0 1px #ffffff1f;
+        background: #141f18f2;
+        color: #ffffff;
+        box-shadow:
+            0 4px 18px #00000059,
+            0 0 0 1px #ffffff33;
         backdrop-filter: blur(10px);
     }
-    .zoom button {
+    .viewer .zoom button {
         display: grid;
         place-items: center;
+        width: auto;
         min-width: 40px;
         height: 40px;
+        padding: 0 10px;
         border-radius: 999px;
-        color: inherit;
+        background: transparent;
+        color: #ffffff;
         transition: background-color 150ms, transform 140ms;
     }
-    .zoom button:active:not(:disabled) {
+    .viewer .zoom button:hover:not(:disabled) {
+        background: #ffffff29;
+        color: #ffffff;
+    }
+    .viewer .zoom button:active:not(:disabled) {
         transform: scale(0.94);
     }
-    .zoom button:disabled {
-        opacity: 0.4;
+    .viewer .zoom button:disabled {
+        opacity: 0.42;
     }
-    .zoom .level {
+    .viewer .zoom .level {
         min-width: 56px;
         font-size: 13px;
         font-weight: 600;
         font-variant-numeric: tabular-nums;
     }
-    .close {
+    .viewer .zoom .level:disabled {
+        opacity: 0.9;
+    }
+    .viewer .close {
         display: grid;
         place-items: center;
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background: #ffffff1a;
-        color: inherit;
+        background: #ffffff24;
+        color: #ffffff;
     }
     .close svg {
         fill: none;
@@ -301,13 +362,13 @@
         stroke-width: 2.4;
         stroke-linecap: round;
     }
-    /* Scrolls and pinches like a photo; the whole leaflet fits the width. */
+    /* One-finger scroll, two-finger pinch handled in script; the whole leaflet fits the width. */
     .scroll {
         flex: 1;
         min-height: 0;
         overflow: auto;
         overscroll-behavior: contain;
-        touch-action: pan-x pan-y pinch-zoom;
+        touch-action: pan-x pan-y;
         /* Room below for the zoom controls. */
         padding: 0 12px calc(72px + env(safe-area-inset-bottom));
     }

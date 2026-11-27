@@ -1099,7 +1099,7 @@
     {#if speech}<div class="npc-bubble" bind:this={bubble} role="status">{speech.text}</div>{/if}
     {#if presentation && away}<button
             class="recenter"
-            style:bottom={`${insetBottom + 12}px`}
+            style:bottom={`calc(${insetBottom + 12}px + var(--recenter-offset, 0px))`}
             title={t("recenterHint")}
             onclick={() => recenter()}
             ><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
