@@ -26,6 +26,7 @@
     import RoamPad from "./RoamPad.svelte";
     import MiniMap from "./MiniMap.svelte";
     import SettingsDrawer from "./SettingsDrawer.svelte";
+    import QueueDrawer from "./QueueDrawer.svelte";
     import type { RoamInput } from "$lib/scene/roam";
     import { WANTED, type Game, type GameEvent } from "$lib/scene/guide-game";
     import { hoursStatus } from "$lib/model/place-info";
@@ -35,7 +36,7 @@
     import { createFollower, STRIDE } from "$lib/wayfinding/follow";
     import { createTurnWindow } from "$lib/wayfinding/motion";
     import { useLive } from "$lib/live.svelte";
-    import { fresh, liveFor } from "$lib/model/live";
+    import { COUNTER_KEY, fresh, liveFor } from "$lib/model/live";
     import { busyHours } from "$lib/scene/daylight";
     import { startWalkSensor, type SensorState } from "$lib/wayfinding/walk-sensor";
     let {
@@ -236,10 +237,15 @@
         }
     });
     let settingsOpen = $state(false);
+    let queueOpen = $state(false);
     /** Close the settings, back to the gear that opened them. */
     function closeSettings() {
         settingsOpen = false;
         document.querySelector<HTMLButtonElement>(".masthead .settings")?.focus({ preventScroll: true });
+    }
+    function closeQueue() {
+        queueOpen = false;
+        document.querySelector<HTMLButtonElement>(".queue-fab")?.focus({ preventScroll: true });
     }
     function setText(large: boolean) {
         largeText = large;
@@ -281,6 +287,11 @@
      * them head for the clinics where the queue is.
      */
     const liveData = useLive();
+    let hasQueueAccess = $derived(
+        !!liveData()?.counter ||
+            (liveData()?.clinics.length ?? 0) > 0 ||
+            placeList.some((p) => p.info?.simrs?.some((k) => k === COUNTER_KEY || k.startsWith("poli:"))),
+    );
     let clock = $state(new Date());
     onMount(() => {
         const timer = setInterval(() => (clock = new Date()), 5 * 60_000);
@@ -890,6 +901,7 @@
     bind:innerHeight={height}
     onkeydown={(e) => {
         // The drawer first, then walking about.
+        if (e.key === "Escape" && queueOpen) return closeQueue();
         if (e.key === "Escape" && settingsOpen) return closeSettings();
         if (e.key === "Escape" && roaming) return void (roaming = false);
         if (e.key === "Escape") {
@@ -1087,12 +1099,33 @@
             ></button
         >
     </div>
+    <!-- Quick access to live queues, stacked right above the Recenter pill. -->
+    {#if ready && hasQueueAccess}
+        <button
+            type="button"
+            class="queue-fab"
+            style:bottom={`${insetBottom + 64}px`}
+            aria-haspopup="dialog"
+            aria-expanded={queueOpen}
+            onclick={() => (queueOpen = true)}
+        >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
+                ><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" /></svg
+            >
+            <span>{t("quickQueue")}</span>
+            {#if fresh(liveData(), clock.getTime())}<i class="live-dot" aria-hidden="true"></i>{/if}
+        </button>
+    {/if}
     <!-- Phones: the two things a visitor comes for, equal side by side: directions and asking. -->
     {#if ready && !wide}<div class="launcher" in:rise={{ y: 12 }}>
             <button class="find" onclick={findWay}>
                 <i aria-hidden="true"
                     ><svg viewBox="0 0 24 24" width="16" height="16"
-                        ><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg
+                        ><circle cx="6" cy="19" r="2.5" /><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" /><circle
+                            cx="18"
+                            cy="5"
+                            r="2.5"
+                        /></svg
                     ></i
                 >
                 <span>{t("tabRoute")}</span>
@@ -1268,6 +1301,15 @@
             ontext={setText}
             onclose={closeSettings}
         />{/if}
+    {#if queueOpen}<QueueDrawer
+            places={placeList}
+            {wide}
+            onselect={(p) => {
+                to = p;
+                about = true;
+            }}
+            onclose={closeQueue}
+        />{/if}
     {#if toast}<div class="toast" role="status"><span>✓</span>{toast}</div>{/if}
     {#if scanning}<QrScanner {slug} onfound={atSign} onclose={() => (scanning = false)} />{/if}
 </div>
@@ -1367,6 +1409,7 @@
     }
     /* Walking about the map: the rest of the map's controls step aside. */
     .roaming .launcher,
+    .roaming .queue-fab,
     .roaming .journey,
     .roaming .map-controls,
     .roaming :global(.compass),
@@ -2396,6 +2439,42 @@
         left: 12px;
     }
 
+    .queue-fab {
+        position: absolute;
+        right: 12px;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        height: 44px;
+        padding: 0 15px 0 13px;
+        border-radius: 22px;
+        background: var(--card);
+        color: var(--forest);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: 0 0 0 1px var(--line);
+        transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), opacity 200ms ease, visibility 200ms;
+    }
+    .queue-fab:active {
+        transform: scale(0.96);
+    }
+    .queue-fab svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex-shrink: 0;
+    }
+    .queue-fab .live-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #3f9a52;
+        flex-shrink: 0;
+    }
     /* The chat bar */
     /* Two equal buttons side by side: Route and Ask. */
     .launcher {
@@ -2573,6 +2652,7 @@
        and the "Nomor saya" banner; the name bar, map controls and chat bar step aside. */
     .navigating .masthead,
     .navigating .map-controls,
+    .navigating .queue-fab,
     .navigating .launcher {
         opacity: 0;
         visibility: hidden;
