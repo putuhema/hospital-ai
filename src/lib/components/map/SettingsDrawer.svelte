@@ -82,7 +82,8 @@
 </div>
 
 <style>
-    .scrim {
+    .scrim,
+    button.scrim:hover:not(:disabled) {
         position: fixed;
         inset: 0;
         z-index: 40;

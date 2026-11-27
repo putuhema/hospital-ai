@@ -314,7 +314,8 @@
 </div>
 
 <style>
-    .scrim {
+    .scrim,
+    button.scrim:hover:not(:disabled) {
         position: fixed;
         inset: 0;
         z-index: 40;
@@ -438,7 +439,8 @@
         cursor: pointer;
         transition: background 140ms ease, color 140ms ease;
     }
-    .tab-bar button.selected {
+    .tab-bar button.selected,
+    .tab-bar button.selected:hover:not(:disabled) {
         background: #fffdf8;
         color: #1b2a21;
         box-shadow: 0 1px 2px #1b2a2114;

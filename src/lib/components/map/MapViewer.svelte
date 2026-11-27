@@ -2560,6 +2560,9 @@
         pointer-events: none;
         transition: opacity 400ms cubic-bezier(0.32, 0.72, 0, 1);
     }
+    button.scrim:hover:not(:disabled) {
+        background: #1b2a2140;
+    }
     .scrim.shown {
         opacity: 1;
         pointer-events: auto;
