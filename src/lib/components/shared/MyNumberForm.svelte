@@ -36,8 +36,31 @@
 </script>
 
 {#if turn && (!clinic || doctors.length)}
-    {#if !open}<button class="mine" onclick={() => (open = true)}>{locale.t("myNumber")}</button>
+    {#if !open}<button
+            type="button"
+            class="mine"
+            aria-label={clinic ? `${locale.t("myNumber")} (${clinic.name})` : locale.t("myNumber")}
+            onclick={() => (open = true)}
+        >
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"
+                ><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg
+            >
+            {locale.t("myNumber")}
+        </button>
     {:else}<form class="mine-form" onsubmit={follow}>
+            <div class="mine-head">
+                <b>{clinic ? clinic.name : locale.t("turnLoket")}</b>
+                <button
+                    type="button"
+                    class="mine-close"
+                    aria-label={locale.t("close")}
+                    onclick={() => {
+                        open = false;
+                        number = "";
+                    }}
+                    ><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button
+                >
+            </div>
             {#if doctors.length > 1}<label
                     >{locale.t("myNumberDoctor")}<select bind:value={doctor}>
                         {#each doctors as d (d.code)}<option value={d.code}>{d.name}</option>{/each}
@@ -60,6 +83,9 @@
 
 <style>
     .mine {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         align-self: flex-start;
         margin-top: 8px;
         padding: 6px 12px;
@@ -71,6 +97,19 @@
         font-weight: 600;
         font-size: 12px;
         cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease;
+    }
+    .mine:hover {
+        background: #e6f2e2;
+        border-color: #b7ccb0;
+    }
+    .mine svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex-shrink: 0;
     }
     .mine-form {
         display: flex;
@@ -79,8 +118,43 @@
         gap: 8px;
         margin-top: 8px;
         padding: 10px;
-        border-radius: 8px;
+        border: 1px solid #d5e2cf;
+        border-radius: 10px;
         background: #f3f8f0;
+    }
+    .mine-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-basis: 100%;
+    }
+    .mine-head b {
+        font-size: 12px;
+        font-weight: 600;
+        color: #1f3a2b;
+    }
+    .mine-close {
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: #6a7a66;
+        cursor: pointer;
+    }
+    .mine-close:hover {
+        background: #1b2a2112;
+        color: #1f3a2b;
+    }
+    .mine-close svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
     }
     .mine-form label {
         display: flex;

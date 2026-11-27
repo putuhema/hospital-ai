@@ -3,9 +3,13 @@
     import { hoursLines, hoursStatus, type PlaceInfo } from "$lib/model/place-info";
     import { useLocale } from "$lib/i18n/locale.svelte";
     import { dateOf, doctorStatus, shortDate, type Doctor } from "$lib/model/doctors";
-    import { fresh, liveFor, quotaLeft, type DoctorQueue } from "$lib/model/live";
+    import { fresh, liveFor, quotaLeft, type ClinicLive, type DoctorQueue } from "$lib/model/live";
     import { useLive } from "$lib/live.svelte";
     import MyNumberForm from "./MyNumberForm.svelte";
+
+    type DoctorRow = { key: string; name: string; doctor?: Doctor; queue?: DoctorQueue };
+    type ClinicGroup = { clinic: ClinicLive; doctors: DoctorRow[]; active: boolean };
+
     let { info, place }: { info: PlaceInfo; /** The place's id on the map, for "Nomor saya" to come back to. */ place?: string } = $props();
     // The visitor's own clock: they are at the hospital, so it is the hospital's
     // time too. Unknown during server rendering, so the badge waits for the browser.
@@ -23,27 +27,111 @@
     const liveData = useLive();
     let recent = $derived(now && fresh(liveData(), now.getTime()));
     let live = $derived(liveFor(info.simrs, recent));
+
+    // Expanded state per clinic code when a place groups multiple clinics.
+    let expanded = $state<Record<string, boolean>>({});
+    function toggleClinic(code: string) {
+        expanded = { ...expanded, [code]: !expanded[code] };
+    }
+
     /**
-     * The doctors, each once: from the schedule, with today's queue from SIMRS
-     * beside them (matched by SIMRS's doctor code, or the name), and any doctor
-     * in the queue who isn't in the schedule after them.
+     * Group doctors under their clinic when live SIMRS clinics are present so each
+     * clinic's queue, doctors and queue tracker stay together. Any scheduled doctor
+     * not matched to a live clinic is kept in `extraDoctors`.
      */
-    let rows = $derived.by(() => {
-        const queues = live?.clinics.flatMap((c) => c.doctors.filter((d) => d.registered || d.quota)) ?? [],
-            name = (s: string) => s.toLowerCase().replace(/[^a-z]/g, ""),
-            matched = new Set<string>();
-        const rows: { key: string; name: string; doctor?: Doctor; queue?: DoctorQueue }[] = (info.doctors ?? []).map((d) => {
-            const queue = queues.find((q) => (d.code && q.code === d.code) || name(q.name) === name(d.name));
-            if (queue) matched.add(queue.code);
-            return { key: `d:${d.name}`, name: d.name, doctor: d, queue };
+    let grouped = $derived.by(() => {
+        const scheduled = info.doctors ?? [];
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+        const usedScheduled = new Set<number>();
+
+        const groups: ClinicGroup[] = (live?.clinics ?? []).map((c) => {
+            const matchedQueueCodes = new Set<string>();
+            const doctors: DoctorRow[] = [];
+
+            // First, match scheduled doctors that belong to this clinic.
+            scheduled.forEach((d, idx) => {
+                if (usedScheduled.has(idx)) return;
+                const q = c.doctors.find((x) => (d.code && x.code === d.code) || norm(x.name) === norm(d.name));
+                if (!q) return;
+                usedScheduled.add(idx);
+                matchedQueueCodes.add(q.code);
+                doctors.push({ key: `d:${c.code}:${d.name}`, name: d.name, doctor: d, queue: q.registered || q.quota ? q : undefined });
+            });
+
+            // Then any doctor in today's SIMRS queue for this clinic not in the schedule.
+            for (const q of c.doctors) {
+                if (!matchedQueueCodes.has(q.code) && (q.registered || q.quota)) {
+                    doctors.push({ key: `q:${c.code}:${q.code}`, name: q.name, queue: q });
+                }
+            }
+
+            // Active doctors first: serving, then waiting, then registered.
+            doctors.sort((a, b) => {
+                const aServe = a.queue?.serving ? 1 : 0;
+                const bServe = b.queue?.serving ? 1 : 0;
+                if (bServe !== aServe) return bServe - aServe;
+                const wDiff = (b.queue?.waiting ?? 0) - (a.queue?.waiting ?? 0);
+                if (wDiff !== 0) return wDiff;
+                return (b.queue?.registered ?? 0) - (a.queue?.registered ?? 0);
+            });
+
+            return { clinic: c, doctors, active: c.waiting > 0 || c.registered > 0 };
         });
-        for (const q of queues) if (!matched.has(q.code)) rows.push({ key: `q:${q.code}`, name: q.name, queue: q });
-        return rows;
+
+        // For multi-clinic places, surface active queues first, then clinics with doctors.
+        if (groups.length > 1) {
+            groups.sort((a, b) => {
+                if (b.clinic.waiting !== a.clinic.waiting) return b.clinic.waiting - a.clinic.waiting;
+                if (b.clinic.registered !== a.clinic.registered) return b.clinic.registered - a.clinic.registered;
+                return Number(b.doctors.length > 0) - Number(a.doctors.length > 0);
+            });
+        }
+
+        const extraDoctors: DoctorRow[] = scheduled
+            .map((d, idx) => ({ d, idx }))
+            .filter(({ idx }) => !usedScheduled.has(idx))
+            .map(({ d }) => ({ key: `s:${d.name}`, name: d.name, doctor: d }));
+
+        return { groups, extraDoctors };
     });
+
+    const doctorCountLabel = (n: number) => (n === 1 ? locale.t("doctorOne") : locale.t("doctorCount", { n }));
     // As printed on the ticket: "036".
     const number = (n: number) => String(n).padStart(3, "0");
     const time = (at: number) => new Date(at).toLocaleTimeString(locale.lang === "en" ? "en-GB" : "id-ID", { hour: "2-digit", minute: "2-digit" });
 </script>
+
+{#snippet doctorItem(r: DoctorRow)}
+    {@const s = r.doctor && now ? doctorStatus(r.doctor, now, locale.lang) : null}
+    {@const q = r.queue}
+    {@const left = q ? quotaLeft(q) : undefined}
+    <div class="doctor">
+        <div class="doctor-head">
+            <b>{r.name}</b>
+            {#if r.doctor?.specialty}<span class="specialty">{r.doctor.specialty}</span>{/if}
+        </div>
+        {#if s}<em class="doc-status" class:in={s.practising} class:away={s.onLeave}>{s.text}</em>{/if}
+        {#if q}
+            <div class="queue-meta">
+                {#if q.serving}<span class="pill serving">{locale.t("liveServing", { no: q.serving })}</span>{/if}
+                <span class="queue-counts" class:muted-counts={!q.registered && !q.waiting}
+                    >{locale.t("liveRegistered", { n: q.registered, w: q.waiting })}</span
+                >
+                {#if left !== undefined}
+                    <span class="pill quota" class:full={!left}
+                        >{left ? locale.t("liveQuotaLeft", { n: left }) : locale.t("liveQuotaFull")}</span
+                    >
+                {/if}
+            </div>
+        {/if}
+        {#each r.doctor ? hoursLines(r.doctor.hours, locale.lang) : [] as line}<span class="line">{line}</span>{/each}
+        {#each (r.doctor?.leave ?? []).filter((l) => today && l.to >= today) as l}<span class="line leave"
+                >{l.from === l.to
+                    ? locale.t("leaveDay", { date: shortDate(l.from, locale.lang) })
+                    : locale.t("leaveDates", { from: shortDate(l.from, locale.lang), to: shortDate(l.to, locale.lang) })}</span
+            >{/each}
+    </div>
+{/snippet}
 
 <section class="place-details" aria-label={locale.t("aboutPlace")}>
     {#if status}<p class="badge" class:open={status.open}><i></i>{status.text}</p>{/if}
@@ -74,41 +162,100 @@
                         >{/each}{/if}
             {/each}
         </div>{/if}
-    <!-- Each doctor once: today's status, their queue from SIMRS, then their hours. -->
-    {#if rows.length}<div class="doctors" aria-live="polite">
-            <small>{locale.t(live?.clinics.length ? "doctorsToday" : "doctorSchedule")}</small>
-            {#each live?.clinics ?? [] as c (c.code)}<b class="total"
-                    >{locale.t("liveRegistered", { n: c.registered, w: c.waiting })}{live!.clinics.length > 1 ? ` · ${c.name}` : ""}</b
-                >{/each}
-            {#each rows as r (r.key)}
-                {@const s = r.doctor && now ? doctorStatus(r.doctor, now, locale.lang) : null}
-                {@const q = r.queue}
-                {@const left = q ? quotaLeft(q) : undefined}
-                <div class="doctor">
-                    <b>{r.name}</b>{#if r.doctor?.specialty}<span class="specialty">{r.doctor.specialty}</span>{/if}
-                    {#if s}<em class:in={s.practising} class:away={s.onLeave}>{s.text}</em>{/if}
-                    {#if q}<span class="queue"
-                            >{#if q.serving}<strong>{locale.t("liveServing", { no: q.serving })}</strong> · {/if}{locale.t("liveRegistered", {
-                                n: q.registered,
-                                w: q.waiting,
-                            })}{left === undefined ? "" : ` · ${left ? locale.t("liveQuotaLeft", { n: left }) : locale.t("liveQuotaFull")}`}</span
-                        >{/if}
-                    {#each r.doctor ? hoursLines(r.doctor.hours, locale.lang) : [] as line}<span class="line">{line}</span>{/each}
-                    {#each (r.doctor?.leave ?? []).filter((l) => today && l.to >= today) as l}<span class="line leave"
-                            >{l.from === l.to
-                                ? locale.t("leaveDay", { date: shortDate(l.from, locale.lang) })
-                                : locale.t("leaveDates", { from: shortDate(l.from, locale.lang), to: shortDate(l.to, locale.lang) })}</span
-                        >{/each}
+
+    <!-- Clinics & doctors: grouped by clinic when multiple clinics are linked so each queue & tracker is unmistakable. -->
+    {#if grouped.groups.length || grouped.extraDoctors.length}
+        <div class="doctors" aria-live="polite">
+            {#if grouped.groups.length === 1}
+                {@const g = grouped.groups[0]}
+                <div class="section-head">
+                    <small>{locale.t("doctorsToday")}</small>
+                    {#if g.clinic.waiting > 0}
+                        <span class="pill waiting">{locale.t("cardLiveWaiting", { n: g.clinic.waiting })}</span>
+                    {:else if g.clinic.registered > 0}
+                        <span class="pill neutral">{locale.t("liveRegisteredOnly", { n: g.clinic.registered })}</span>
+                    {:else}
+                        <span class="quiet-label">{locale.t("liveNoQueue")}</span>
+                    {/if}
                 </div>
-            {/each}
-            {#each live?.clinics ?? [] as c (c.code)}<MyNumberForm clinic={c} {place} />{/each}
-        </div>{/if}
+                <div class="doctor-list">
+                    {#each g.doctors as r (r.key)}{@render doctorItem(r)}{/each}
+                </div>
+                <MyNumberForm clinic={g.clinic} {place} />
+            {:else if grouped.groups.length > 1}
+                <div class="section-head">
+                    <small>{locale.t("doctorsToday")}</small>
+                </div>
+                <div class="clinic-groups">
+                    {#each grouped.groups as g (g.clinic.code)}
+                        {@const isExpandable = g.doctors.length > 0}
+                        {@const isOpen = isExpandable && !!expanded[g.clinic.code]}
+                        <div class="clinic-card" class:active={g.active} class:open={isOpen} class:quiet={!g.active && !isExpandable}>
+                            {#if isExpandable}
+                                <button
+                                    type="button"
+                                    class="clinic-head"
+                                    aria-expanded={isOpen}
+                                    onclick={() => toggleClinic(g.clinic.code)}
+                                >
+                                    <span class="clinic-title">
+                                        <b>{g.clinic.name}</b>
+                                        <span class="clinic-sub">
+                                            {#if g.clinic.registered > 0}{locale.t("liveRegisteredOnly", { n: g.clinic.registered })} · {/if}{doctorCountLabel(
+                                                g.doctors.length,
+                                            )}
+                                        </span>
+                                    </span>
+                                    <span class="clinic-right">
+                                        {#if g.clinic.waiting > 0}
+                                            <span class="pill waiting">{locale.t("cardLiveWaiting", { n: g.clinic.waiting })}</span>
+                                        {:else if g.clinic.registered > 0}
+                                            <span class="pill neutral">{locale.t("cardLiveWaiting", { n: 0 })}</span>
+                                        {:else}
+                                            <span class="quiet-label">{locale.t("liveNoQueue")}</span>
+                                        {/if}
+                                        <svg class="chev" class:up={isOpen} viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
+                                            ><path d="m6 9 6 6 6-6" /></svg
+                                        >
+                                    </span>
+                                </button>
+                                {#if isOpen}
+                                    <div class="clinic-body">
+                                        {#each g.doctors as r (r.key)}{@render doctorItem(r)}{/each}
+                                        <MyNumberForm clinic={g.clinic} {place} />
+                                    </div>
+                                {/if}
+                            {:else}
+                                <div class="clinic-head static">
+                                    <span class="clinic-title">
+                                        <b>{g.clinic.name}</b>
+                                    </span>
+                                    <span class="clinic-right">
+                                        <span class="quiet-label">{locale.t("liveNoQueue")}</span>
+                                    </span>
+                                </div>
+                            {/if}
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+
+            {#if grouped.extraDoctors.length}
+                <div class="extra-doctors">
+                    <small>{locale.t(grouped.groups.length ? "otherDoctors" : "doctorSchedule")}</small>
+                    <div class="doctor-list">
+                        {#each grouped.extraDoctors as r (r.key)}{@render doctorItem(r)}{/each}
+                    </div>
+                </div>
+            {/if}
+        </div>
+    {/if}
+
     <!-- When the live figures were last updated. -->
     {#if live}<span class="from"><i></i>{locale.t("liveFrom", { time: time(live.at) })}</span>{/if}
 </section>
 
 <style>
-    /* On the card's own colour: sections and doctors set apart by thin lines, not boxes. */
     .place-details {
         margin-top: 10px;
         font-size: 12.5px;
@@ -166,6 +313,13 @@
     .live small:not(:first-child) {
         margin-top: 10px;
     }
+    .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
     .total {
         font-size: 13.5px;
         font-weight: 600;
@@ -174,48 +328,220 @@
     .total.full {
         color: #9a3b2e;
     }
-    .called,
-    .queue strong {
+    .called {
         font-style: normal;
         font-weight: 600;
         color: #2f6b3a;
+    }
+
+    /* Multi-clinic accordion cards */
+    .clinic-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .clinic-card {
+        border: 1px solid #1b2a2114;
+        border-radius: 11px;
+        background: #fafcf9;
+        overflow: hidden;
+        transition: border-color 120ms ease, background 120ms ease;
+    }
+    .clinic-card.active {
+        border-color: #cde0c6;
+        background: #ffffff;
+    }
+    .clinic-card.open {
+        border-color: #b7d0ae;
+        background: #ffffff;
+    }
+    .clinic-card.quiet {
+        background: #f6f8f5;
+        border-color: #1b2a210d;
+    }
+    .clinic-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        padding: 9px 11px;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+    }
+    .clinic-head:hover {
+        background: #1b2a2106;
+    }
+    .clinic-head.static {
+        cursor: default;
+        padding: 8px 11px;
+    }
+    .clinic-head.static:hover {
+        background: transparent;
+    }
+    .clinic-title {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        gap: 1px;
+    }
+    .clinic-title b {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1f3a2b;
+        line-height: 1.3;
+    }
+    .clinic-card.quiet .clinic-title b {
+        font-weight: 500;
+        color: #5c6d5c;
+    }
+    .clinic-sub {
+        font-size: 11px;
+        color: #6a7a66;
+    }
+    .clinic-right {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+    .chev {
+        fill: none;
+        stroke: #6a7a66;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform 160ms ease;
+        flex-shrink: 0;
+    }
+    .chev.up {
+        transform: rotate(180deg);
+    }
+    .clinic-body {
+        display: flex;
+        flex-direction: column;
+        padding: 2px 11px 10px;
+        border-top: 1px solid #1b2a2110;
+        background: #fbfdfa;
+    }
+    .clinic-body .doctor:first-of-type {
+        border-top: 0;
+        margin-top: 0;
+    }
+    .clinic-body .doctor:last-of-type {
+        border-bottom: 0;
+        padding-bottom: 4px;
+    }
+
+    /* Pills & status indicators */
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        white-space: nowrap;
+    }
+    .pill.waiting {
+        background: #dff0dc;
+        color: #245c30;
+    }
+    .pill.neutral {
+        background: #edf2eb;
+        color: #3d5242;
+    }
+    .pill.serving {
+        background: #2f6b3a;
+        color: #ffffff;
+    }
+    .pill.quota {
+        background: #edf2eb;
+        color: #3d5242;
+        font-weight: 500;
+    }
+    .pill.quota.full {
+        background: #fbe6e3;
+        color: #9a3b2e;
+        font-weight: 600;
+    }
+    .quiet-label {
+        font-size: 11px;
+        color: #889882;
+        white-space: nowrap;
+    }
+
+    /* Doctor rows */
+    .doctor-list {
+        display: flex;
+        flex-direction: column;
     }
     .doctor {
         display: flex;
         flex-direction: column;
-        padding: 10px 0;
-        border-bottom: 1px solid #1b2a2114;
+        gap: 3px;
+        padding: 9px 0;
+        border-bottom: 1px solid #1b2a2112;
     }
-    .doctor:first-of-type {
-        margin-top: 4px;
-        border-top: 1px solid #1b2a2114;
+    .doctor-list .doctor:first-of-type {
+        border-top: 1px solid #1b2a2112;
+    }
+    .doctor-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 2px 6px;
     }
     .doctor b {
         font-weight: 600;
-        font-size: 13.5px;
+        font-size: 13px;
         color: #1f3a2b;
     }
     .specialty,
     .line {
+        font-size: 12px;
         color: #6a7a66;
     }
-    .queue {
+    .queue-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 5px 8px;
+        margin-top: 1px;
+    }
+    .queue-counts {
+        font-size: 12px;
         color: #2f4336;
     }
-    .doctor em {
+    .queue-counts.muted-counts {
+        color: #7b8c70;
+    }
+    .doc-status {
         align-self: flex-start;
-        margin: 2px 0 1px;
         font-style: normal;
         font-weight: 600;
-        font-size: 12px;
+        font-size: 11.5px;
         color: #9a3b2e;
     }
-    .doctor em.in {
+    .doc-status.in {
         color: #2f6b3a;
     }
-    .doctor em.away,
+    .doc-status.away,
     .leave {
         color: #9a6a1e;
+    }
+    .extra-doctors {
+        display: flex;
+        flex-direction: column;
+        margin-top: 10px;
+    }
+    .extra-doctors small {
+        margin-bottom: 4px;
     }
     .from {
         display: flex;
